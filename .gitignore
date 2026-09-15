@@ -1,0 +1,5 @@
+# Local coding-agent configuration
+.agents/
+AGENTS.md
+docs/agents/
+skills-lock.json
