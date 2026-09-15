@@ -20,6 +20,7 @@ class HerdrPseudoterminal {
     this.dimensions = { columns: 120, rows: 40 };
     this.reconnectAttempt = 0;
     this.reconnectAllowed = true;
+    this.resetScreenOnNextFrame = false;
     this.stdoutRemainder = '';
     this.decoder = new StringDecoder('utf8');
     this.writeEmitter = new vscode.EventEmitter();
@@ -117,6 +118,13 @@ class HerdrPseudoterminal {
       if (record.type === 'terminal.frame') {
         const bytes = Buffer.from(record.bytes, 'base64');
         this.reconnectAttempt = 0;
+        if (this.resetScreenOnNextFrame) {
+          // Herdr's full frame repaints a viewport using cursor-addressed ANSI,
+          // but VS Code still retains the old Pseudoterminal screen/scrollback.
+          // Clear that client-local history before installing the fresh frame.
+          this.writeEmitter.fire('\x1b[3J\x1b[2J\x1b[H');
+          this.resetScreenOnNextFrame = false;
+        }
         this.writeEmitter.fire(this.decoder.write(bytes));
         output.debug(`frame seq=${record.seq} ${record.width}x${record.height} full=${record.full} bytes=${bytes.length}`);
       } else if (record.type === 'terminal.closed') {
@@ -140,6 +148,7 @@ class HerdrPseudoterminal {
     // A fresh CLI process asks Herdr for a fresh full frame. This deliberately
     // proves reconnect at the supported CLI boundary rather than replaying cache.
     const delay = Math.min(5000, 500 * 2 ** this.reconnectAttempt++);
+    this.resetScreenOnNextFrame = true;
     this.writeEmitter.fire(`\r\n\x1b[33m[bridge disconnected; reconnecting in ${delay} ms]\x1b[0m\r\n`);
     setTimeout(() => {
       if (!this.closedByUser && !this.child) this.startBridge();

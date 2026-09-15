@@ -19,7 +19,10 @@ Disposable Session: `vscode-bridge-prototype`; disposable Pane: `w1:p1`.
 
 ## Prototype correction surfaced by probing
 
-The first bridge implementation treated every clean CLI exit as reconnectable. The ownership probe showed that Herdr reports control conflicts as a `terminal.closed` protocol record and may still exit with status 0. The prototype now disables automatic reconnect after any protocol-level `terminal.closed`; only unexpected subprocess loss reconnects. This prevents a rejected controller from retrying forever.
+Two corrections surfaced during probing:
+
+1. The first bridge implementation treated every clean CLI exit as reconnectable. The ownership probe showed that Herdr reports control conflicts as a `terminal.closed` protocol record and may still exit with status 0. The prototype now disables automatic reconnect after any protocol-level `terminal.closed`; only unexpected subprocess loss reconnects. This prevents a rejected controller from retrying forever.
+2. The first human reconnect showed stale, cursor-addressed fragments and blank regions. A Herdr `full=true` frame repaints the viewport but does not clear VS Code's existing Pseudoterminal screen/scrollback. The bridge now sends `CSI 3 J`, `CSI 2 J`, and cursor-home immediately before installing the first frame after reconnect. This retry still needs human confirmation.
 
 ## Human checks still required
 
