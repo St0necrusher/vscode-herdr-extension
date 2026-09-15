@@ -24,15 +24,15 @@ Two corrections surfaced during probing:
 1. The first bridge implementation treated every clean CLI exit as reconnectable. The ownership probe showed that Herdr reports control conflicts as a `terminal.closed` protocol record and may still exit with status 0. The prototype now disables automatic reconnect after any protocol-level `terminal.closed`; only unexpected subprocess loss reconnects. This prevents a rejected controller from retrying forever.
 2. The first human reconnect showed stale, cursor-addressed fragments and blank regions. A Herdr `full=true` frame repaints the viewport but does not clear VS Code's existing Pseudoterminal screen/scrollback. The bridge now sends `CSI 3 J`, `CSI 2 J`, and cursor-home immediately before installing the first frame after reconnect. This retry still needs human confirmation.
 
-## Human checks still required
+## Human validation
 
-Run the Extension Development Host and use the walkthrough in `README.md` to judge the actual VS Code surface:
+The Extension Development Host pass confirmed:
 
-- visual fidelity, cursor, line wrapping, and editor-terminal placement;
-- normal typing, Ctrl-C, bracketed paste, mouse, clipboard, and alternate-screen TUIs;
-- resize behaviour while dragging editor groups;
-- visibility/understandability of conflict and takeover;
-- reconnect presentation after killing only the bridge subprocess;
-- non-destructive detach when the editor terminal closes.
+- read-only mode rendered the current Pane and blocked input;
+- control mode accepted normal commands;
+- resize worked while changing the editor terminal size;
+- closing the terminal editor tab released control without closing the Herdr Pane;
+- reconnect status was visible;
+- after adding a client-screen reset, reconnect restored a clean full frame without stale fragments or blank regions.
 
-The wayfinding ticket should remain open until this HITL pass establishes the UX boundary and recommendation.
+Not exercised in this bounded prototype: Ctrl-C, bracketed paste, mouse reporting, clipboard integration, and alternate-screen TUIs. These are residual compatibility checks for implementation hardening, not blockers to selecting the supported CLI bridge boundary.
