@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Herdr terminal control handoff prototype</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0e1117;
+      --panel: #171c24;
+      --panel-2: #202733;
+      --line: #303a49;
+      --text: #e6edf3;
+      --muted: #9da9b7;
+      --accent: #71b7ff;
+      --good: #71d99b;
+      --warn: #ffc66d;
+      --bad: #ff7b72;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1100px, calc(100% - 32px)); margin: 36px auto 64px; }
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { margin-bottom: 8px; font-size: clamp(28px, 4vw, 42px); }
+    h2 { margin-top: 34px; font-size: 21px; }
+    h3 { margin: 0 0 10px; font-size: 16px; }
+    p { color: var(--muted); max-width: 78ch; }
+    code { color: var(--accent); }
+    .question {
+      border-left: 3px solid var(--accent);
+      padding: 4px 0 4px 16px;
+      margin: 20px 0 28px;
+    }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .card, .walkthrough, .history {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px;
+    }
+    .field { margin: 10px 0; }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .value { margin-top: 2px; font-weight: 650; }
+    .status-good { color: var(--good); }
+    .status-warn { color: var(--warn); }
+    .status-bad { color: var(--bad); }
+    .notice {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin-top: 14px;
+      padding: 12px 14px;
+      min-height: 50px;
+    }
+    .controls { display: flex; flex-wrap: wrap; gap: 9px; }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 9px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    button.primary { background: #173d66; border-color: #2c73b9; }
+    button.danger { color: #ffd7d5; }
+    button:disabled { opacity: .42; cursor: not-allowed; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .tabs button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); }
+    .steps { display: grid; gap: 10px; margin-top: 16px; }
+    .step { display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: center; }
+    .step-number {
+      width: 28px; height: 28px; border-radius: 50%; background: var(--panel-2);
+      display: grid; place-items: center; color: var(--muted);
+    }
+    .step.done .step-number { color: var(--good); border: 1px solid var(--good); }
+    .step.current { color: var(--accent); }
+    .history { margin-top: 14px; }
+    .history ol { margin: 8px 0 0; padding-left: 22px; color: var(--muted); }
+    .verdict { background: #121d29; border: 1px solid #284969; border-radius: 10px; padding: 16px 18px; }
+    @media (max-width: 760px) {
+      .grid { grid-template-columns: 1fr; }
+      .step { grid-template-columns: 32px 1fr; }
+      .step button { grid-column: 2; justify-self: start; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Who controls this Herdr Pane?</h1>
+  <p class="question"><strong>Question:</strong> Can VS Code make terminal handoff feel automatic without stealing control from Ghostty or losing what the user typed? This prototype tests a proposed policy: observe by default, acquire on typing only when uncontested, require an explicit takeover on conflict, and release when VS Code stops being the active place of interaction.</p>
+
+  <section class="verdict">
+    <strong>Policy under test</strong>
+    <p>Focus is evidence that VS Code may release control, but not permission to displace another controller. The first typed input may wait briefly while VS Code requests unowned control. If somebody else controls the Pane, that input is discarded and takeover requires a separate explicit action. Reconnect always returns read-only.</p>
+  </section>
+
+  <h2>Current state</h2>
+  <div class="grid" id="state"></div>
+  <div class="notice" id="notice" aria-live="polite"></div>
+
+  <h2>Free play</h2>
+  <p>Try events in any order. Unavailable actions remain visible so the policy's boundaries are obvious.</p>
+  <div class="controls" id="controls"></div>
+
+  <h2>Guided walkthroughs</h2>
+  <div class="walkthrough">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div id="scenario"></div>
+  </div>
+
+  <div class="history">
+    <h3>What just happened</h3>
+    <ol id="history"></ol>
+  </div>
+</main>
+
+<script>
+// Portable policy module. It knows nothing about the page around it.
+const ControlPolicy = (() => {
+  const initialState = () => ({
+    vscodeWindow: "unfocused",
+    vscodeTerminal: "inactive",
+    bridge: "connected",
+    mode: "observer",
+    controller: "none",
+    bufferedInput: "none",
+    release: "not scheduled",
+    notice: "VS Code is observing. The Pane remains available elsewhere.",
+    history: []
+  });
+
+  function transition(previous, action) {
+    const state = { ...previous, history: [...previous.history] };
+    const record = message => {
+      state.history.push(message);
+      state.history = state.history.slice(-8);
+    };
+    const ignore = reason => {
+      state.notice = reason;
+      record(reason);
+      return state;
+    };
+
+    switch (action.type) {
+      case "FOCUS_VSCODE":
+        state.vscodeWindow = "focused";
+        state.notice = "VS Code is focused. Focus alone does not request control.";
+        record(state.notice);
+        return state;
+      case "BLUR_VSCODE":
+        state.vscodeWindow = "unfocused";
+        state.bufferedInput = "none";
+        if (state.mode === "controller") {
+          state.release = "scheduled (short grace)";
+          state.notice = "VS Code lost OS focus. Control will be released after a short grace period.";
+        } else {
+          state.mode = "observer";
+          state.notice = "VS Code is no longer focused and remains read-only.";
+        }
+        record(state.notice);
+        return state;
+      case "ACTIVATE_TERMINAL":
+        if (state.vscodeWindow !== "focused") return ignore("The terminal cannot become interactive while the VS Code window is unfocused.");
+        state.vscodeTerminal = "active";
+        state.release = "not scheduled";
+        state.notice = "The terminal is active, but VS Code still does not take control until input intent.";
+        record(state.notice);
+        return state;
+      case "DEACTIVATE_TERMINAL":
+        state.vscodeTerminal = "inactive";
+        state.bufferedInput = "none";
+        if (state.mode === "controller") {
+          state.release = "scheduled (short grace)";
+          state.notice = "The terminal is no longer active. Control will be released after a short grace period.";
+        } else {
+          state.notice = "The terminal is inactive and read-only.";
+        }
+        record(state.notice);
+        return state;
+      case "TYPE":
+        if (state.bridge !== "connected") return ignore("Input was not accepted because the bridge is disconnected.");
+        if (state.vscodeWindow !== "focused" || state.vscodeTerminal !== "active") return ignore("Input was not accepted because this is not the active VS Code terminal.");
+        if (state.mode === "controller" && state.controller === "vscode") {
+          state.notice = "Input was sent directly to the Herdr Pane.";
+          record(state.notice);
+          return state;
+        }
+        state.mode = "requesting";
+        state.bufferedInput = "one pending input chunk";
+        state.notice = "Input is held briefly while VS Code asks for unowned control. It has not reached the Pane yet.";
+        record(state.notice);
+        return state;
+      case "CONTROL_GRANTED":
+        if (state.mode !== "requesting") return ignore("There is no pending control request to grant.");
+        state.mode = "controller";
+        state.controller = "vscode";
+        state.release = "not scheduled";
+        state.notice = state.bufferedInput === "none"
+          ? "VS Code now controls the Pane."
+          : "VS Code gained unowned control and sent the pending input.";
+        state.bufferedInput = "none";
+        record(state.notice);
+        return state;
+      case "CONTROL_CONFLICT":
+        if (state.mode !== "requesting") return ignore("There is no pending control request to reject.");
+        state.mode = "observer";
+        state.controller = "other client";
+        state.bufferedInput = "none";
+        state.notice = "Ghostty or another client controls this Pane. Pending input was discarded; nothing was sent. Use Take control explicitly.";
+        record(state.notice);
+        return state;
+      case "TAKEOVER":
+        if (state.bridge !== "connected") return ignore("Takeover is unavailable while disconnected.");
+        if (state.vscodeWindow !== "focused" || state.vscodeTerminal !== "active") return ignore("Activate the VS Code terminal before taking control.");
+        state.mode = "controller";
+        state.controller = "vscode";
+        state.bufferedInput = "none";
+        state.release = "not scheduled";
+        state.notice = "You explicitly took control. The previous controller is displaced and should show that it became read-only.";
+        record(state.notice);
+        return state;
+      case "RELEASE_TIMER":
+        if (state.release === "not scheduled") return ignore("No release is scheduled.");
+        state.mode = "observer";
+        state.controller = "none";
+        state.release = "not scheduled";
+        state.bufferedInput = "none";
+        state.notice = "VS Code released control and returned to read-only observation.";
+        record(state.notice);
+        return state;
+      case "RETURN_BEFORE_RELEASE":
+        if (state.release === "not scheduled") return ignore("There is no release grace period to cancel.");
+        state.vscodeWindow = "focused";
+        state.vscodeTerminal = "active";
+        state.release = "not scheduled";
+        state.notice = "You returned during the grace period, so VS Code kept control.";
+        record(state.notice);
+        return state;
+      case "EXTERNAL_TAKEOVER":
+        state.mode = "observer";
+        state.controller = "other client";
+        state.bufferedInput = "none";
+        state.release = "not scheduled";
+        state.notice = "Another client explicitly took control. VS Code immediately became read-only; no automatic fight-back.";
+        record(state.notice);
+        return state;
+      case "BRIDGE_DROPPED":
+        state.bridge = "disconnected";
+        state.mode = "disconnected";
+        state.controller = "unknown";
+        state.bufferedInput = "none";
+        state.release = "not scheduled";
+        state.notice = "The bridge disconnected. Input is disabled and ownership is treated as unknown.";
+        record(state.notice);
+        return state;
+      case "RECONNECTED":
+        state.bridge = "connected";
+        state.mode = "observer";
+        state.controller = "unknown until next request";
+        state.bufferedInput = "none";
+        state.notice = "The bridge reconnected as an observer. It did not silently reclaim control.";
+        record(state.notice);
+        return state;
+      case "RESET":
+        return initialState();
+      default:
+        return ignore("Unknown event.");
+    }
+  }
+
+  return { initialState, transition };
+})();
+
+const actions = [
+  ["Focus VS Code", "FOCUS_VSCODE"],
+  ["Leave VS Code", "BLUR_VSCODE"],
+  ["Activate terminal", "ACTIVATE_TERMINAL"],
+  ["Open another editor", "DEACTIVATE_TERMINAL"],
+  ["Type input", "TYPE"],
+  ["Herdr grants control", "CONTROL_GRANTED"],
+  ["Herdr reports conflict", "CONTROL_CONFLICT"],
+  ["Take control explicitly", "TAKEOVER", "danger"],
+  ["Release grace expires", "RELEASE_TIMER"],
+  ["Return during grace", "RETURN_BEFORE_RELEASE"],
+  ["Ghostty takes over", "EXTERNAL_TAKEOVER"],
+  ["Bridge disconnects", "BRIDGE_DROPPED"],
+  ["Bridge reconnects", "RECONNECTED"],
+  ["Reset", "RESET"]
+];
+
+const scenarios = [
+  {
+    name: "Unowned Pane",
+    description: "Normal path: opening and focusing stays read-only; the first typed input acquires free control and is delivered after Herdr confirms it.",
+    steps: [["Focus VS Code", "FOCUS_VSCODE"], ["Activate terminal", "ACTIVATE_TERMINAL"], ["Type hello", "TYPE"], ["Grant free control", "CONTROL_GRANTED"]]
+  },
+  {
+    name: "Ghostty is typing",
+    description: "Conflict path: VS Code must not steal control merely because it got focus. The first input is discarded on conflict; takeover is a deliberate second action.",
+    setup: ["EXTERNAL_TAKEOVER"],
+    steps: [["Focus VS Code", "FOCUS_VSCODE"], ["Activate terminal", "ACTIVATE_TERMINAL"], ["Try to type", "TYPE"], ["Report conflict", "CONTROL_CONFLICT"], ["Take control deliberately", "TAKEOVER"]]
+  },
+  {
+    name: "Quick app switch",
+    description: "Release path: leaving VS Code schedules release rather than firing it synchronously. A quick return keeps control; staying away releases it.",
+    setup: ["FOCUS_VSCODE", "ACTIVATE_TERMINAL", "TYPE", "CONTROL_GRANTED"],
+    steps: [["Leave VS Code", "BLUR_VSCODE"], ["Return quickly", "RETURN_BEFORE_RELEASE"], ["Leave again", "BLUR_VSCODE"], ["Let grace expire", "RELEASE_TIMER"]]
+  },
+  {
+    name: "Connection loss",
+    description: "Recovery path: if the bridge disappears, VS Code forgets any claim. Reconnect restores the screen in observer mode instead of fighting another client for control.",
+    setup: ["FOCUS_VSCODE", "ACTIVATE_TERMINAL", "TYPE", "CONTROL_GRANTED"],
+    steps: [["Lose bridge", "BRIDGE_DROPPED"], ["Try typing", "TYPE"], ["Reconnect", "RECONNECTED"], ["Type after recovery", "TYPE"]]
+  }
+];
+
+let state = ControlPolicy.initialState();
+let selectedScenario = 0;
+let currentStep = 0;
+
+function dispatch(type) {
+  state = ControlPolicy.transition(state, { type });
+  render();
+}
+
+function statusClass(value) {
+  if (["controller", "connected", "focused", "active", "vscode"].includes(value)) return "status-good";
+  if (["requesting", "other client", "unknown", "unknown until next request", "scheduled (short grace)"].includes(value)) return "status-warn";
+  if (["disconnected"].includes(value)) return "status-bad";
+  return "";
+}
+
+function renderState() {
+  const groups = [
+    ["VS Code signals", [["Window", state.vscodeWindow], ["Terminal surface", state.vscodeTerminal]]],
+    ["Herdr bridge", [["Connection", state.bridge], ["VS Code mode", state.mode]]],
+    ["Safety", [["Known controller", state.controller], ["Buffered input", state.bufferedInput], ["Release", state.release]]]
+  ];
+  document.querySelector("#state").innerHTML = groups.map(([title, fields]) => `
+    <article class="card"><h3>${title}</h3>${fields.map(([label, value]) => `
+      <div class="field"><div class="label">${label}</div><div class="value ${statusClass(value)}">${value}</div></div>`).join("")}</article>`).join("");
+  document.querySelector("#notice").textContent = state.notice;
+  document.querySelector("#history").innerHTML = state.history.length
+    ? [...state.history].reverse().map(item => `<li>${item}</li>`).join("")
+    : "<li>No events yet.</li>";
+}
+
+function renderControls() {
+  document.querySelector("#controls").innerHTML = actions.map(([label, type, style]) =>
+    `<button class="${style || ""}" data-action="${type}">${label}</button>`).join("");
+  document.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => dispatch(button.dataset.action)));
+}
+
+function startScenario(index) {
+  selectedScenario = index;
+  currentStep = 0;
+  state = ControlPolicy.initialState();
+  for (const type of scenarios[index].setup || []) state = ControlPolicy.transition(state, { type });
+  render();
+}
+
+function runScenarioStep(type) {
+  dispatch(type);
+  currentStep += 1;
+  renderScenario();
+}
+
+function renderScenario() {
+  const tabs = document.querySelector("#tabs");
+  tabs.innerHTML = scenarios.map((scenario, index) =>
+    `<button role="tab" aria-selected="${index === selectedScenario}" data-scenario="${index}">${scenario.name}</button>`).join("");
+  tabs.querySelectorAll("[data-scenario]").forEach(button => button.addEventListener("click", () => startScenario(Number(button.dataset.scenario))));
+
+  const scenario = scenarios[selectedScenario];
+  document.querySelector("#scenario").innerHTML = `
+    <h3>${scenario.name}</h3>
+    <p>${scenario.description}</p>
+    <button class="primary" id="restart">Restart this walkthrough</button>
+    <div class="steps">${scenario.steps.map(([label, type], index) => `
+      <div class="step ${index < currentStep ? "done" : ""} ${index === currentStep ? "current" : ""}">
+        <div class="step-number">${index < currentStep ? "✓" : index + 1}</div>
+        <div>${label}</div>
+        <button data-step="${type}" ${index === currentStep ? "" : "disabled"}>Run step</button>
+      </div>`).join("")}</div>`;
+  document.querySelector("#restart").addEventListener("click", () => startScenario(selectedScenario));
+  const next = document.querySelector("[data-step]:not(:disabled)");
+  if (next) next.addEventListener("click", () => runScenarioStep(next.dataset.step));
+}
+
+function render() {
+  renderState();
+  renderControls();
+  renderScenario();
+}
+
+render();
+</script>
+</body>
+</html>
