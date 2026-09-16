@@ -10,7 +10,7 @@ Throwaway prototypes for [Define automatic terminal control handoff](https://git
 - A displaced client remains able to observe the live Pane.
 - Returning to either client should make that client writable again without restarting the Pane.
 
-The last point is the critical experiment: VS Code can release its controller when its window loses focus, but symmetric automatic reacquisition also depends on the Herdr client running in Ghostty.
+The complete VS Code → Ghostty → VS Code round trip passed in the human validation. See [`EVIDENCE.md`](./EVIDENCE.md). VS Code releases its controller when its window loses focus, and the normal Herdr client in Ghostty becomes writable again when focused.
 
 ## Logic walkthrough
 
@@ -40,4 +40,4 @@ Record these outcomes:
 - Did Ghostty become writable again merely from focus, or did it require an explicit reattach/takeover?
 - Did clicking back into VS Code reacquire control?
 
-Do not close the ticket unless the full round trip is either validated or its asymmetry is made an explicit MVP constraint.
+The full round trip was validated on 2026-09-16. The steps remain here as a reproducible manual compatibility check.
