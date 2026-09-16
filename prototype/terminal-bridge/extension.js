@@ -133,8 +133,11 @@ class HerdrPseudoterminal {
     });
     this.child = child;
 
-    child.stdout.on('data', (chunk) => this.consumeStdout(chunk));
+    child.stdout.on('data', (chunk) => {
+      if (this.child === child) this.consumeStdout(chunk);
+    });
     child.stderr.on('data', (chunk) => {
+      if (this.child !== child) return;
       const message = chunk.toString('utf8').trimEnd();
       output.error(message);
       this.writeEmitter.fire(`\r\n\x1b[31m[Herdr bridge error] ${message}\x1b[0m\r\n`);
