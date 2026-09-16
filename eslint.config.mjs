@@ -25,5 +25,23 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ["src/adapters/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/features/**"],
+              allowTypeImports: true,
+              message:
+                "Adapters may depend on feature public interfaces only through type-only imports.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   prettier,
 );

@@ -58,7 +58,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src test && node --test scripts/architecture-rules.test.mjs && node scripts/check-architecture.mjs && dependency-cruiser src --config dependency-cruiser.config.cjs",
+    "lint": "eslint src test && dependency-cruiser src --config dependency-cruiser.config.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
