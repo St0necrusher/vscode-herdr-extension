@@ -1,3 +1,10 @@
+/**
+ * Herdr lifecycle adapter public entry point.
+ *
+ * Inspection uses bounded one-shot CLI calls and maps process/protocol failures
+ * to discovery states. Starting invokes the official headless Herdr server for
+ * the selected Session; this module never owns a daemon or persistence layer.
+ */
 export type {
   ProcessResult,
   ProcessRunner,

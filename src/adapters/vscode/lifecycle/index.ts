@@ -6,11 +6,17 @@ import type {
   LifecycleLogger,
 } from "../../../features/lifecycle/index.js";
 
+/** User-initiated lifecycle commands supplied by the composition root. */
 export interface LifecycleCommandHandlers {
   retry(): Promise<void>;
   start(): Promise<void>;
 }
 
+/**
+ * Owns the compact status item, Herdr log Output channel, configuration listener,
+ * and native recovery commands. `registerCommands` is called once during
+ * composition. `dispose` is idempotent and releases every owned VS Code resource.
+ */
 export interface VsCodeLifecycleAdapter {
   settings: HerdrSettingsPort;
   view: HerdrAvailabilityView;
@@ -19,6 +25,7 @@ export interface VsCodeLifecycleAdapter {
   dispose(): void;
 }
 
+/** Creates an immediately visible checking status and a hidden log channel. */
 export function createVsCodeLifecycleAdapter(): VsCodeLifecycleAdapter {
   const disposables: vscode.Disposable[] = [];
   const output = vscode.window.createOutputChannel("Herdr", { log: true });
@@ -127,80 +134,131 @@ async function openSettings(): Promise<void> {
   );
 }
 
+type ActionId =
+  | "start"
+  | "select-executable"
+  | "open-settings"
+  | "retry"
+  | "show-diagnostics";
+
+type StatusTone = "checking" | "connected" | "failed";
+
+type StatusAction = vscode.QuickPickItem & Readonly<{ id: ActionId }>;
+
+type StatusPresentation = Readonly<{
+  description: string;
+  tone: StatusTone;
+  actions: readonly StatusAction[];
+}>;
+
 async function showStatusActions(
   availability: HerdrAvailability,
   handlers: LifecycleCommandHandlers,
   output: vscode.LogOutputChannel,
 ): Promise<void> {
-  const actions = actionsFor(availability);
-  const selected = await vscode.window.showQuickPick(actions, {
-    title: `Herdr: ${shortDescription(availability)}`,
+  const presentation = statusPresentation(availability);
+  const selected = await vscode.window.showQuickPick(presentation.actions, {
+    title: `Herdr: ${presentation.description}`,
     placeHolder: "Choose an action",
   });
   if (selected === undefined) return;
 
-  switch (selected) {
-    case "Start Herdr":
+  switch (selected.id) {
+    case "start":
       await handlers.start();
       break;
-    case "Select Herdr Executable":
+    case "select-executable":
       await selectExecutable();
       break;
-    case "Open Settings":
+    case "open-settings":
       await openSettings();
       break;
-    case "Retry":
+    case "retry":
       await handlers.retry();
       break;
-    case "Show Diagnostics":
+    case "show-diagnostics":
       output.show(true);
       break;
   }
 }
 
-function actionsFor(availability: HerdrAvailability): string[] {
+function statusPresentation(
+  availability: HerdrAvailability,
+): StatusPresentation {
+  const standardActions = [
+    action("retry", "Retry"),
+    action("open-settings", "Open Settings"),
+    action("show-diagnostics", "Show Diagnostics"),
+  ];
   switch (availability.kind) {
-    case "missing-binary":
-      return [
-        "Select Herdr Executable",
-        "Open Settings",
-        "Retry",
-        "Show Diagnostics",
-      ];
-    case "stopped":
-      return ["Start Herdr", "Retry", "Open Settings", "Show Diagnostics"];
     case "checking":
-      return ["Retry", "Open Settings", "Show Diagnostics"];
+      return {
+        description: "checking",
+        tone: "checking",
+        actions: standardActions,
+      };
+    case "missing-binary":
+      return {
+        description: "executable missing",
+        tone: "failed",
+        actions: [
+          action("select-executable", "Select Herdr Executable"),
+          ...standardActions,
+        ],
+      };
+    case "stopped":
+      return {
+        description: "Session stopped",
+        tone: "failed",
+        actions: [action("start", "Start Herdr"), ...standardActions],
+      };
     case "connected":
+      return {
+        description: "connected",
+        tone: "connected",
+        actions: standardActions,
+      };
     case "incompatible":
+      return {
+        description: "incompatible",
+        tone: "failed",
+        actions: standardActions,
+      };
     case "error":
-      return ["Retry", "Open Settings", "Show Diagnostics"];
+      return {
+        description: "unavailable",
+        tone: "failed",
+        actions: standardActions,
+      };
   }
+}
+
+function action(id: ActionId, label: string): StatusAction {
+  return { id, label };
 }
 
 function renderStatus(
   item: vscode.StatusBarItem,
   availability: HerdrAvailability,
 ): void {
-  const isChecking = availability.kind === "checking";
-  const isConnected = availability.kind === "connected";
-  item.text = `${isChecking ? "$(loading~spin)" : "$(circle-filled)"} Herdr`;
+  const presentation = statusPresentation(availability);
+  item.text = `${presentation.tone === "checking" ? "$(loading~spin)" : "$(circle-filled)"} Herdr`;
   item.color = new vscode.ThemeColor(
-    isConnected
+    presentation.tone === "connected"
       ? "testing.iconPassed"
-      : isChecking
+      : presentation.tone === "checking"
         ? "testing.iconQueued"
         : "testing.iconFailed",
   );
   item.tooltip = new vscode.MarkdownString(formatTooltip(availability));
   item.accessibilityInformation = {
-    label: `Herdr: ${shortDescription(availability)}`,
+    label: `Herdr: ${presentation.description}`,
   };
 }
 
 function formatTooltip(availability: HerdrAvailability): string {
   const lines = [
-    `**Herdr — ${shortDescription(availability)}**`,
+    `**Herdr — ${statusPresentation(availability).description}**`,
     "",
     availability.kind === "checking"
       ? "Discovering Herdr."
@@ -229,21 +287,4 @@ function formatTooltip(availability: HerdrAvailability): string {
 
 function formatDiagnostics(availability: HerdrAvailability): string {
   return `[${availability.kind}] ${formatTooltip(availability).replaceAll("`", "")}`;
-}
-
-function shortDescription(availability: HerdrAvailability): string {
-  switch (availability.kind) {
-    case "checking":
-      return "checking";
-    case "missing-binary":
-      return "executable missing";
-    case "stopped":
-      return "Session stopped";
-    case "connected":
-      return "connected";
-    case "incompatible":
-      return "incompatible";
-    case "error":
-      return "unavailable";
-  }
 }

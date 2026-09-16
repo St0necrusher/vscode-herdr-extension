@@ -2,11 +2,20 @@ import { execFile, spawn } from "node:child_process";
 
 export type ProcessResult = Readonly<{ stdout: string; stderr: string }>;
 
+/**
+ * Minimal process seam used by the Herdr adapter. `run` captures UTF-8 output
+ * and rejects on non-zero exit, timeout, or spawn failure. `spawnDetached`
+ * resolves after spawn and transfers no process ownership to the extension.
+ */
 export interface ProcessRunner {
   run(executable: string, args: readonly string[]): Promise<ProcessResult>;
   spawnDetached(executable: string, args: readonly string[]): Promise<void>;
 }
 
+/**
+ * Creates the production runner. One-shot commands time out after five seconds;
+ * detached servers inherit no stdio and are unreferenced after spawning.
+ */
 export function createNodeProcessRunner(): ProcessRunner {
   return {
     run(executable, args) {

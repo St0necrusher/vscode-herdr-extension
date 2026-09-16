@@ -39,11 +39,7 @@ export function createHerdrLifecycleAdapter(dependencies: {
         sessions = parseSessionList(response.stdout);
       } catch (error) {
         if (isMissingExecutable(error)) {
-          return {
-            kind: "missing-binary",
-            settings,
-            detail: `Herdr executable was not found: ${settings.executable}`,
-          };
+          return missingBinaryAvailability(settings);
         }
         return errorAvailability(settings, error);
       }
@@ -54,11 +50,7 @@ export function createHerdrLifecycleAdapter(dependencies: {
           : candidate.name === settings.session,
       );
       if (session?.running !== true) {
-        return {
-          kind: "stopped",
-          settings,
-          detail: `The ${formatSession(settings.session)} Herdr Session is stopped.`,
-        };
+        return stoppedAvailability(settings);
       }
 
       try {
@@ -69,11 +61,7 @@ export function createHerdrLifecycleAdapter(dependencies: {
         return availabilityFromStatus(settings, parseStatus(response.stdout));
       } catch (error) {
         if (isMissingExecutable(error)) {
-          return {
-            kind: "missing-binary",
-            settings,
-            detail: `Herdr executable was not found: ${settings.executable}`,
-          };
+          return missingBinaryAvailability(settings);
         }
         return errorAvailability(settings, error);
       }
@@ -107,11 +95,7 @@ function availabilityFromStatus(
 ): HerdrDiscoveryResult {
   const server = status.server;
   if (server?.running !== true) {
-    return {
-      kind: "stopped",
-      settings,
-      detail: `The ${formatSession(settings.session)} Herdr Session is stopped.`,
-    };
+    return stoppedAvailability(settings);
   }
 
   const version = server.version ?? status.client?.version;
@@ -158,6 +142,24 @@ function serverArgs(settings: HerdrSettings): string[] {
 
 function formatSession(session: string): string {
   return session === "default" ? "default" : `"${session}"`;
+}
+
+function missingBinaryAvailability(
+  settings: HerdrSettings,
+): HerdrDiscoveryResult {
+  return {
+    kind: "missing-binary",
+    settings,
+    detail: `Herdr executable was not found: ${settings.executable}`,
+  };
+}
+
+function stoppedAvailability(settings: HerdrSettings): HerdrDiscoveryResult {
+  return {
+    kind: "stopped",
+    settings,
+    detail: `The ${formatSession(settings.session)} Herdr Session is stopped.`,
+  };
 }
 
 function errorAvailability(
