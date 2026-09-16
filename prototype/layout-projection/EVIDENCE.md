@@ -20,21 +20,23 @@ Environment: macOS, VS Code desktop, public extension API, Herdr 0.9.0 boundary
 
 ## Human Extension Host checks
 
-Pending. Follow `README.md` and record:
+Validated by the user in a VS Code Extension Development Host:
 
 | Case | Result | Notes |
 |---|---|---|
-| Single Pane with dirty file | Pending | |
-| Right split into empty adjacent column | Pending | |
-| Right split into occupied adjacent column | Pending | |
-| Down split via `newGroupBelow` | Pending | |
-| Mixed tree and non-50/50 ratios | Pending | |
-| Repeated action/reuse | Pending | |
-| Partial observer failure | Pending | |
-| Close surface; Herdr Pane survives | Pending | |
+| Single Pane with dirty untitled file | Passed | Unsaved contents and dirty tab remained intact. |
+| Right split | Passed | Direction was reproduced by `newGroupRight`. |
+| Down split via `newGroupBelow` | Passed | Second terminal appeared below as expected. |
+| Mixed right/down tree | Passed | One terminal appeared left with two stacked on the right. |
+| Non-50/50 ratios | Expected limitation | Direction/nesting worked; Herdr ratios were not applied. |
+| Close surfaces between fixtures | Passed | Prototype surfaces could be cleared without losing the unsaved file. |
+| Partial observer failure | Not run | Implementation hardening case; not needed for the layout feasibility decision. |
+| Real Pane survival | Covered by #2/#3 | The earlier bridge/handoff prototypes already proved non-destructive observer/controller detach. |
 
-## Provisional boundary
+## Decision boundary
 
-The first human pass showed that a column-only approximation is usable, then correctly challenged the assumption that down-splits cannot be automated because VS Code supports them interactively. The revised experiment recursively invokes `newGroupRight`/`newGroupBelow` from a concrete Pane anchor. It checks whether direction and nesting can be preserved without closing, moving, replacing, or dirtying/cleaning existing file editors.
+The first human pass showed that a column-only approximation was usable, then correctly challenged the assumption that down-splits could not be automated because VS Code supports them interactively. The revised prototype recursively invoked feature-detected `newGroupRight`/`newGroupBelow` commands from concrete Pane anchors. Direction and nesting worked, including the mixed tree, without closing, moving, replacing, or cleaning the user's unsaved editor.
 
-Even if this pass succeeds, the action remains **best-effort opening of Herdr Tab Panes**, not faithful synchronization: Herdr ratios cannot be applied, workbench commands are imperative and focus-sensitive, group creation can fail, and there is no transaction/rollback API. Exact ratio fidelity remains in Herdr's own UI or would require a custom webview-owned layout surface.
+The MVP may therefore project Herdr's BSP direction and nesting through these built-in commands, with a bounded adapter and explicit verification after each split. The action remains **best-effort opening of Herdr Tab Panes**, not faithful synchronization: Herdr ratios cannot be applied, commands are imperative and focus-sensitive, group creation can fail, and there is no transaction/rollback API. On failure, keep the successfully opened observers, report the partial result, and never rearrange or close user editors to force fidelity.
+
+This direction-aware projection is deliberately replaceable. If implementation or later asynchronous/live layout changes expose focus races, instability, or unacceptable editor disruption, fall back to the simpler deterministic policy: preserve Pane leaf order and open every Pane in adjacent VS Code columns while ignoring direction, nesting, and ratios. That fallback is an accepted product trade-off, not a blocker. Exact ratios remain in Herdr's own UI or would require a custom webview-owned layout surface.

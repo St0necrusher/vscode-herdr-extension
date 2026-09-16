@@ -84,6 +84,7 @@ A viable MVP action may be **additive and directional, but still best-effort**:
 - recursively create right/below groups using feature-detected built-in commands;
 - preserve split direction and nesting, but ignore ratios;
 - stop safely if a group command is unavailable or VS Code refuses another group;
+- keep the projection policy replaceable: if focus races or future asynchronous/live changes make directional commands unreliable, flatten Pane leaf order into adjacent columns and ignore direction/nesting;
 - never rearrange or close existing file tabs to force fidelity;
 - keep Take Control separate from opening the layout;
 - close only extension-owned client surfaces, never Herdr-owned Panes.
