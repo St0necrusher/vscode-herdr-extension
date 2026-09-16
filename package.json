@@ -1,0 +1,55 @@
+{
+  "name": "herdr-terminal-bridge-prototype",
+  "displayName": "Herdr Terminal Bridge Prototype",
+  "description": "THROWAWAY prototype for projecting an existing Herdr Pane into a native VS Code terminal editor.",
+  "version": "0.0.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "main": "./prototype/terminal-bridge/extension.js",
+  "activationEvents": [
+    "onCommand:herdrPrototype.openObserver",
+    "onCommand:herdrPrototype.openController",
+    "onCommand:herdrPrototype.openAutomaticHandoff",
+    "onCommand:herdrPrototype.takeControl"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "herdrPrototype.openObserver",
+        "title": "Herdr Prototype: Open Pane Read-only"
+      },
+      {
+        "command": "herdrPrototype.openController",
+        "title": "Herdr Prototype: Open Pane with Control"
+      },
+      {
+        "command": "herdrPrototype.openAutomaticHandoff",
+        "title": "Herdr Prototype: Open Pane with Automatic Focus Handoff"
+      },
+      {
+        "command": "herdrPrototype.takeControl",
+        "title": "Herdr Prototype: Take Control of Pane"
+      }
+    ],
+    "configuration": {
+      "title": "Herdr Terminal Bridge Prototype",
+      "properties": {
+        "herdrPrototype.binary": {
+          "type": "string",
+          "default": "herdr",
+          "description": "Path to the Herdr 0.9.0 executable."
+        },
+        "herdrPrototype.session": {
+          "type": "string",
+          "default": "vscode-bridge-prototype",
+          "description": "Named Herdr Session used by the prototype. Leave empty for the default Session."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check:prototype": "node --check prototype/terminal-bridge/extension.js"
+  }
+}
