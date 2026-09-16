@@ -1,40 +1,40 @@
 {
-  "name": "herdr-terminal-bridge-prototype",
-  "displayName": "Herdr Terminal Bridge Prototype",
-  "description": "THROWAWAY prototype for projecting an existing Herdr Pane into a native VS Code terminal editor.",
+  "name": "herdr-layout-projection-prototype",
+  "displayName": "Herdr Layout Projection Prototype",
+  "description": "THROWAWAY prototype for projecting a Herdr Tab into native VS Code editor groups.",
   "version": "0.0.0",
   "private": true,
   "engines": {
     "vscode": "^1.100.0"
   },
-  "main": "./prototype/terminal-bridge/extension.js",
+  "main": "./prototype/layout-projection/extension.js",
   "activationEvents": [
-    "onCommand:herdrPrototype.openObserver",
-    "onCommand:herdrPrototype.openController",
-    "onCommand:herdrPrototype.openAutomaticHandoff",
-    "onCommand:herdrPrototype.takeControl"
+    "onCommand:herdrPrototype.openLayoutFixture",
+    "onCommand:herdrPrototype.openRealLayout",
+    "onCommand:herdrPrototype.auditEditorState",
+    "onCommand:herdrPrototype.closeLayoutSurfaces"
   ],
   "contributes": {
     "commands": [
       {
-        "command": "herdrPrototype.openObserver",
-        "title": "Herdr Prototype: Open Pane Read-only"
+        "command": "herdrPrototype.openLayoutFixture",
+        "title": "Herdr Prototype: Open Layout Fixture"
       },
       {
-        "command": "herdrPrototype.openController",
-        "title": "Herdr Prototype: Open Pane with Control"
+        "command": "herdrPrototype.openRealLayout",
+        "title": "Herdr Prototype: Open Real Panes as Layout"
       },
       {
-        "command": "herdrPrototype.openAutomaticHandoff",
-        "title": "Herdr Prototype: Open Pane with Automatic Focus Handoff"
+        "command": "herdrPrototype.auditEditorState",
+        "title": "Herdr Prototype: Audit Editor State"
       },
       {
-        "command": "herdrPrototype.takeControl",
-        "title": "Herdr Prototype: Take Control of Pane"
+        "command": "herdrPrototype.closeLayoutSurfaces",
+        "title": "Herdr Prototype: Close Layout Surfaces"
       }
     ],
     "configuration": {
-      "title": "Herdr Terminal Bridge Prototype",
+      "title": "Herdr Layout Projection Prototype",
       "properties": {
         "herdrPrototype.binary": {
           "type": "string",
@@ -44,12 +44,12 @@
         "herdrPrototype.session": {
           "type": "string",
           "default": "vscode-bridge-prototype",
-          "description": "Named Herdr Session used by the prototype. Leave empty for the default Session."
+          "description": "Named Herdr Session used by the real-Pane experiment. Leave empty for the default Session."
         }
       }
     }
   },
   "scripts": {
-    "check:prototype": "node --check prototype/terminal-bridge/extension.js"
+    "check:prototype": "node --check prototype/layout-projection/extension.js"
   }
 }
