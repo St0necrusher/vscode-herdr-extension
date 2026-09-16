@@ -23,7 +23,9 @@ The complete round trip passed against the same disposable Pane:
 
 The current screen remained visible through the native VS Code terminal bridge. The Pane and process were not recreated.
 
-A longer rapid-switching pass then exposed brief bridge-mode/reconnect messages flashing inside the VS Code terminal. These were emitted by the throwaway prototype itself before each expected observer/controller stream replacement; they were not Pane output and did not appear in Ghostty. The prototype was corrected to keep expected handoff diagnostics in the VS Code Output channel and reserve terminal-visible messages for unexpected failures. This correction requires one short human recheck.
+A longer rapid-switching pass exposed brief bridge-mode/reconnect messages flashing inside the VS Code terminal. These were emitted by the throwaway prototype itself before each expected observer/controller stream replacement; they were not Pane output and did not appear in Ghostty. Two corrections were validated: expected handoff diagnostics moved to the VS Code Output channel, and late `terminal.closed: detached` records from intentionally replaced child streams are ignored. Repeated switching is now visually clean.
+
+The final human pass also confirmed live mirrored rendering: text typed in the controlling VS Code terminal appeared immediately in the observing Ghostty Pane before submission. This demonstrates that control ownership and screen observation remain independent as intended.
 
 ## Boundary
 
