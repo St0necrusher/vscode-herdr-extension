@@ -126,7 +126,6 @@ class HerdrPseudoterminal {
     this.stdoutRemainder = '';
     this.decoder = new StringDecoder('utf8');
     output.info(`spawn ${this.binary} ${args.join(' ')}`);
-    this.writeEmitter.fire(`\x1b[2m[Herdr ${this.mode}${this.takeover ? ' with explicit takeover' : ''}: ${this.target}]\x1b[0m\r\n`);
 
     const child = spawn(this.binary, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -182,7 +181,9 @@ class HerdrPseudoterminal {
         this.protocolCloseReason = record.reason ?? 'no reason';
         this.reconnectAllowed = false;
         output.info(`stream closed: ${this.protocolCloseReason}`);
-        this.writeEmitter.fire(`\r\n\x1b[33m[Herdr closed the stream: ${this.protocolCloseReason}]\x1b[0m\r\n`);
+        if (!/taken over/i.test(this.protocolCloseReason)) {
+          this.writeEmitter.fire(`\r\n\x1b[33m[Herdr closed the stream: ${this.protocolCloseReason}]\x1b[0m\r\n`);
+        }
       } else {
         output.warn(`unknown record: ${line}`);
       }

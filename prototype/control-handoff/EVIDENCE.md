@@ -23,6 +23,8 @@ The complete round trip passed against the same disposable Pane:
 
 The current screen remained visible through the native VS Code terminal bridge. The Pane and process were not recreated.
 
+A longer rapid-switching pass then exposed brief bridge-mode/reconnect messages flashing inside the VS Code terminal. These were emitted by the throwaway prototype itself before each expected observer/controller stream replacement; they were not Pane output and did not appear in Ghostty. The prototype was corrected to keep expected handoff diagnostics in the VS Code Output channel and reserve terminal-visible messages for unexpected failures. This correction requires one short human recheck.
+
 ## Boundary
 
 The prototype used VS Code's public window/active-terminal events and Herdr's documented `terminal session observe|control` CLI. Automatic takeover is tied to the concrete extension terminal becoming active, not merely extension activation. Window blur is the reliable cross-application release signal. A short grace period prevents a transient focus change from immediately churning the controller.
