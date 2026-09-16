@@ -26,7 +26,7 @@ const fixtures = [
   },
   {
     label: 'Down split',
-    description: 'Unsupported row split; leaves fall back to tabs in one group',
+    description: 'Direction is approximated as ordered adjacent columns',
     tree: {
       type: 'split', direction: 'down', ratio: 0.5,
       first: { type: 'pane', label: 'coding agent' },
@@ -35,7 +35,7 @@ const fixtures = [
   },
   {
     label: 'Mixed tree + ratios',
-    description: 'Right branch plus nested down split; ratios cannot be imposed',
+    description: 'All leaves become ordered columns; nesting and ratios are ignored',
     tree: {
       type: 'split', direction: 'right', ratio: 0.62,
       first: { type: 'pane', label: 'coding agent' },
@@ -151,18 +151,15 @@ class HerdrObserverPseudoterminal {
   }
 }
 
-function assignColumns(node, column, leaves) {
+function assignColumns(node, firstColumn, leaves) {
   if (node.type === 'pane') {
-    leaves.push({ ...node, column });
-    return column;
+    leaves.push({ ...node, column: firstColumn + leaves.length });
+    return;
   }
-  if (node.direction === 'down') {
-    assignColumns(node.first, column, leaves);
-    assignColumns(node.second, column, leaves);
-    return column;
-  }
-  const afterFirst = assignColumns(node.first, column, leaves);
-  return assignColumns(node.second, afterFirst + 1, leaves);
+  // VS Code's public API cannot choose a row split, nesting, or ratio.
+  // Preserve only Herdr's leaf order and map every Pane to the next column.
+  assignColumns(node.first, firstColumn, leaves);
+  assignColumns(node.second, firstColumn, leaves);
 }
 
 function describeInput(input) {
@@ -268,8 +265,8 @@ async function projectLayout(fixture, targets) {
   assignColumns(fixture.tree, baseColumn, leaves);
 
   if (containsDownSplit(fixture.tree)) {
-    void vscode.window.showWarningMessage(
-      'VS Code has no public API for creating a down-split editor group. Down-split leaves will open as tabs in the same column.',
+    void vscode.window.showInformationMessage(
+      'VS Code cannot preserve Herdr split direction through its public API. Panes will open as ordered editor columns.',
     );
   }
   if (containsNonHalfRatio(fixture.tree)) {
@@ -296,6 +293,9 @@ async function projectLayout(fixture, targets) {
       ? new HerdrObserverPseudoterminal({ binary, session, target })
       : new MockPanePseudoterminal(leaf.label);
     const viewColumn = Math.min(leaf.column, vscode.ViewColumn.Nine);
+    if (leaf.column > vscode.ViewColumn.Nine) {
+      output.warn(`${identity} exceeds VS Code ViewColumn.Nine and will share the ninth column as a tab`);
+    }
     const terminal = vscode.window.createTerminal({
       name: target ? `Herdr ${target} (read-only)` : `Fixture: ${leaf.label}`,
       pty,

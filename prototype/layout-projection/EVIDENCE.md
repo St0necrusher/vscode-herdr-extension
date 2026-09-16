@@ -34,6 +34,6 @@ Pending. Follow `README.md` and record:
 
 ## Provisional boundary
 
-The implementation evidence already rules out an exact, public-API-only projection of arbitrary Herdr BSP geometry. The remaining human pass checks the narrower claim that additive terminal-tab placement does not close, move, replace, or dirty/clean existing file editors unexpectedly.
+The implementation evidence rules out an exact, public-API-only projection of arbitrary Herdr BSP geometry. The first human pass confirmed that this fidelity loss is not an MVP blocker. The agreed approximation is to preserve Pane leaf order while mapping every Herdr split to another adjacent VS Code editor column; direction, nesting, and ratios are ignored. The remaining pass checks that this revised approximation does not close, move, replace, or dirty/clean existing file editors unexpectedly.
 
-If that pass succeeds, the MVP should describe the action as **best-effort opening of Herdr Tab Panes**, not faithful layout synchronization. Right splits may map to columns; down splits collapse into tabs; ratios are ignored. Exact layout remains in Herdr's own UI or would require a custom webview-owned layout surface.
+If that pass succeeds, the MVP should describe the action as **best-effort opening of Herdr Tab Panes**, not faithful layout synchronization. Leaves beyond `ViewColumn.Nine` share the ninth column as tabs. Exact layout remains in Herdr's own UI or would require a custom webview-owned layout surface.

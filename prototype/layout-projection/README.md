@@ -50,13 +50,13 @@ npm run check:prototype
 ### 3. Down split
 
 - Open **Down split**.
-- Expected: VS Code shows a warning and both Pane surfaces become tabs in one editor group.
-- This is an intentional failure case: the public API has no operation for creating a down-split editor group.
+- Expected: VS Code explains that direction cannot be preserved and opens both Pane surfaces as ordered adjacent columns.
+- This validates the agreed MVP approximation: every Herdr split becomes another VS Code column.
 
 ### 4. Mixed tree and ratios
 
 - Open **Mixed tree + ratios**.
-- Expected: the top-level right split becomes adjacent columns; the nested down-split leaves become tabs in the second column. The `0.62` and `0.7` ratios are not applied.
+- Expected: all three Pane leaves become ordered adjacent columns. Herdr direction, nesting, and the `0.62`/`0.7` ratios are not applied.
 - Confirm no existing file tab closes, moves, or loses its dirty state.
 
 ### 5. Repeated action and ownership
@@ -79,9 +79,9 @@ A safe MVP action can instead be **additive and best-effort**:
 
 - open existing Panes as read-only terminal editor tabs;
 - preserve all file editors;
-- map right splits to columns where practical;
-- collapse down splits into tabs in a column;
-- ignore ratios;
+- flatten every Herdr split into ordered adjacent VS Code columns;
+- ignore split direction, nesting, and ratios;
+- place leaves beyond `ViewColumn.Nine` as tabs in the ninth column;
 - never rearrange or close editor groups to force fidelity;
 - keep Take Control separate from opening the layout;
 - close only extension-owned client surfaces, never Herdr-owned Panes.
