@@ -1,0 +1,8 @@
+dist
+node_modules
+.vscode-test
+package-lock.json
+.agents
+docs
+README.md
+CONTEXT.md

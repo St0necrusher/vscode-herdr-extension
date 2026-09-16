@@ -3,3 +3,9 @@
 AGENTS.md
 docs/agents/
 skills-lock.json
+node_modules/
+dist/
+.vscode-test/
+coverage/
+*.vsix
+.pi/

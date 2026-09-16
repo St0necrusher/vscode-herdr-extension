@@ -1,0 +1,11 @@
+.agents/**
+.github/**
+docs/**
+test/**
+src/**/*.test.ts
+.vscode-test/**
+*.config.*
+tsconfig.json
+AGENTS.md
+CONTEXT.md
+skills-lock.json
