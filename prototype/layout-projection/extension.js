@@ -26,7 +26,7 @@ const fixtures = [
   },
   {
     label: 'Down split',
-    description: 'Direction is approximated as ordered adjacent columns',
+    description: 'Uses the built-in New Group Below command',
     tree: {
       type: 'split', direction: 'down', ratio: 0.5,
       first: { type: 'pane', label: 'coding agent' },
@@ -35,7 +35,7 @@ const fixtures = [
   },
   {
     label: 'Mixed tree + ratios',
-    description: 'All leaves become ordered columns; nesting and ratios are ignored',
+    description: 'Recreates right/down nesting; ratios remain unsupported',
     tree: {
       type: 'split', direction: 'right', ratio: 0.62,
       first: { type: 'pane', label: 'coding agent' },
@@ -151,17 +151,6 @@ class HerdrObserverPseudoterminal {
   }
 }
 
-function assignColumns(node, firstColumn, leaves) {
-  if (node.type === 'pane') {
-    leaves.push({ ...node, column: firstColumn + leaves.length });
-    return;
-  }
-  // VS Code's public API cannot choose a row split, nesting, or ratio.
-  // Preserve only Herdr's leaf order and map every Pane to the next column.
-  assignColumns(node.first, firstColumn, leaves);
-  assignColumns(node.second, firstColumn, leaves);
-}
-
 function describeInput(input) {
   if (input instanceof vscode.TabInputText) return { type: 'text', uri: input.uri.toString() };
   if (input instanceof vscode.TabInputTextDiff) {
@@ -214,10 +203,6 @@ function reportFileEditorPreservation(before, after) {
   void vscode.window.showErrorMessage('Layout projection changed existing file-editor placement or state. See the prototype Output channel.');
 }
 
-function containsDownSplit(node) {
-  return node.type === 'split' && (node.direction === 'down' || containsDownSplit(node.first) || containsDownSplit(node.second));
-}
-
 function containsNonHalfRatio(node) {
   return node.type === 'split' && (node.ratio !== 0.5 || containsNonHalfRatio(node.first) || containsNonHalfRatio(node.second));
 }
@@ -256,61 +241,122 @@ async function openRealLayout() {
   await projectLayout(fixture, value.split(',').map((item) => item.trim()));
 }
 
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function bindTargets(node, targets, cursor = { index: 0 }) {
+  if (node.type === 'pane') {
+    return { ...node, target: targets?.[cursor.index++] };
+  }
+  return {
+    ...node,
+    first: bindTargets(node.first, targets, cursor),
+    second: bindTargets(node.second, targets, cursor),
+  };
+}
+
+function terminalIdentity(fixture, session, node) {
+  return node.target ? `${session}:${node.target}` : `fixture:${fixture.label}:${node.label}`;
+}
+
+async function createPaneSurface(fixture, node, binary, session) {
+  const identity = terminalIdentity(fixture, session, node);
+  const pty = node.target
+    ? new HerdrObserverPseudoterminal({ binary, session, target: node.target })
+    : new MockPanePseudoterminal(node.label);
+  const viewColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
+  const terminal = vscode.window.createTerminal({
+    name: node.target ? `Herdr ${node.target} (read-only)` : `Fixture: ${node.label}`,
+    pty,
+    location: { viewColumn, preserveFocus: false },
+    isTransient: true,
+  });
+  ownedTerminals.set(identity, terminal);
+  terminal.show(false);
+  output.info(`opened ${identity} in active viewColumn=${viewColumn}`);
+  await delay(150);
+  return terminal;
+}
+
+async function createAdjacentGroup(direction) {
+  const command = direction === 'down'
+    ? 'workbench.action.newGroupBelow'
+    : 'workbench.action.newGroupRight';
+  const available = await vscode.commands.getCommands(true);
+  if (!available.includes(command)) {
+    throw new Error(`Required built-in command is unavailable: ${command}`);
+  }
+
+  const beforeCount = vscode.window.tabGroups.all.length;
+  const beforeColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
+  output.info(`execute ${command} from viewColumn=${beforeColumn}`);
+  await vscode.commands.executeCommand(command);
+  await delay(150);
+
+  const afterCount = vscode.window.tabGroups.all.length;
+  const afterColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
+  if (afterCount <= beforeCount) {
+    throw new Error(`${command} did not create an editor group (before=${beforeCount}, after=${afterCount})`);
+  }
+  output.info(`${command} created active viewColumn=${afterColumn}`);
+}
+
+async function projectNode(fixture, node, binary, session) {
+  if (node.type === 'pane') return createPaneSurface(fixture, node, binary, session);
+
+  const firstAnchor = await projectNode(fixture, node.first, binary, session);
+  firstAnchor.show(false);
+  await delay(100);
+  await createAdjacentGroup(node.direction);
+  await projectNode(fixture, node.second, binary, session);
+  return firstAnchor;
+}
+
 async function projectLayout(fixture, targets) {
   const before = snapshotEditorState();
   logSnapshot(`BEFORE ${fixture.label}`, before);
 
-  const baseColumn = vscode.window.tabGroups.activeTabGroup.viewColumn ?? vscode.ViewColumn.One;
-  const leaves = [];
-  assignColumns(fixture.tree, baseColumn, leaves);
-
-  if (containsDownSplit(fixture.tree)) {
-    void vscode.window.showInformationMessage(
-      'VS Code cannot preserve Herdr split direction through its public API. Panes will open as ordered editor columns.',
-    );
-  }
   if (containsNonHalfRatio(fixture.tree)) {
-    output.warn('Herdr split ratios are recorded but cannot be applied through the public VS Code API.');
+    output.warn('Herdr split ratios are recorded but cannot be applied through VS Code commands.');
   }
 
   const config = vscode.workspace.getConfiguration('herdrPrototype');
   const session = config.get('session', '').trim();
   const binary = config.get('binary', 'herdr').trim() || 'herdr';
-  const opened = [];
+  const tree = bindTargets(fixture.tree, targets);
+  const identities = [];
+  const collectIdentities = (node) => {
+    if (node.type === 'pane') identities.push(terminalIdentity(fixture, session, node));
+    else {
+      collectIdentities(node.first);
+      collectIdentities(node.second);
+    }
+  };
+  collectIdentities(tree);
 
-  for (const [index, leaf] of leaves.entries()) {
-    const target = targets?.[index];
-    const identity = target ? `${session}:${target}` : `fixture:${fixture.label}:${leaf.label}`;
+  for (const identity of identities) {
     const existing = ownedTerminals.get(identity);
     if (existing && !vscode.window.terminals.includes(existing)) ownedTerminals.delete(identity);
-    if (ownedTerminals.has(identity)) {
-      output.info(`reuse existing surface ${identity}; public API cannot move it to column ${leaf.column}`);
-      opened.push(ownedTerminals.get(identity));
-      continue;
-    }
-
-    const pty = target
-      ? new HerdrObserverPseudoterminal({ binary, session, target })
-      : new MockPanePseudoterminal(leaf.label);
-    const viewColumn = Math.min(leaf.column, vscode.ViewColumn.Nine);
-    if (leaf.column > vscode.ViewColumn.Nine) {
-      output.warn(`${identity} exceeds VS Code ViewColumn.Nine and will share the ninth column as a tab`);
-    }
-    const terminal = vscode.window.createTerminal({
-      name: target ? `Herdr ${target} (read-only)` : `Fixture: ${leaf.label}`,
-      pty,
-      location: { viewColumn, preserveFocus: true },
-      isTransient: true,
-    });
-    ownedTerminals.set(identity, terminal);
-    opened.push(terminal);
-    output.info(`opened ${identity} in requested viewColumn=${viewColumn}`);
+  }
+  const existing = identities.map((identity) => ownedTerminals.get(identity)).filter(Boolean);
+  if (existing.length > 0) {
+    existing[0].show(false);
+    void vscode.window.showInformationMessage(
+      'This fixture already has open surfaces. Close Layout Surfaces before rebuilding its editor-group topology.',
+    );
+    return;
   }
 
-  // The action intentionally focuses its first Pane but does not close, move, or
-  // replace any existing file editor. All other creation requests preserve focus.
-  opened[0]?.show(false);
-  await new Promise((resolve) => setTimeout(resolve, 750));
+  try {
+    const firstAnchor = await projectNode(fixture, tree, binary, session);
+    firstAnchor.show(false);
+  } catch (error) {
+    output.error(`projection failed: ${error.message}`);
+    void vscode.window.showErrorMessage(`Layout projection failed: ${error.message}`);
+  }
+
+  await delay(750);
   const after = snapshotEditorState();
   logSnapshot(`AFTER ${fixture.label}`, after);
   reportFileEditorPreservation(before, after);

@@ -44,25 +44,25 @@ npm run check:prototype
 
 - Start with one editor group containing files.
 - Open **Right split**.
-- Expected: the first terminal joins the active group and the second requests the adjacent editor column. Existing files are not closed or moved.
-- Repeat with an already-occupied second group. The terminal should join it rather than replacing its files.
+- Expected: the first terminal joins the active group. The prototype invokes `workbench.action.newGroupRight`, then opens the second terminal in the newly active group.
+- Repeat with an existing editor grid. Check whether VS Code only resizes the grid or unexpectedly relocates existing file tabs.
 
 ### 3. Down split
 
 - Open **Down split**.
-- Expected: VS Code explains that direction cannot be preserved and opens both Pane surfaces as ordered adjacent columns.
-- This validates the agreed MVP approximation: every Herdr split becomes another VS Code column.
+- Expected: the first terminal joins the active group. The prototype invokes `workbench.action.newGroupBelow`, then opens the second terminal in the new group below it.
+- Confirm the unsaved file remains open with unchanged contents and dirty state.
 
 ### 4. Mixed tree and ratios
 
 - Open **Mixed tree + ratios**.
-- Expected: all three Pane leaves become ordered adjacent columns. Herdr direction, nesting, and the `0.62`/`0.7` ratios are not applied.
+- Expected: the prototype creates the top-level group to the right, then a nested group below it. Herdr's direction and nesting should be visible; the `0.62`/`0.7` ratios are not applied.
 - Confirm no existing file tab closes, moves, or loses its dirty state.
 
 ### 5. Repeated action and ownership
 
 - Run the same fixture twice.
-- Expected: existing prototype surfaces are reused rather than duplicated. The Output channel records that public API cannot move a reused terminal to a newly requested group.
+- Expected: the second action focuses an existing prototype surface and asks you to close the surfaces before rebuilding topology. It must not create duplicate groups or observers.
 - Close one prototype terminal directly, or run **Close Layout Surfaces**.
 - With real Panes, confirm the same Pane remains alive in Herdr/Ghostty.
 
@@ -73,15 +73,17 @@ npm run check:prototype
 
 ## What the prototype is expected to establish
 
-The supported VS Code API can add transient terminal tabs to editor columns. It cannot express arbitrary Herdr `right`/`down` nesting, split ratios, a dedicated extension-owned editor grid, or transactional save/restore of the user's editor layout. Therefore exact BSP projection is not a supportable MVP promise.
+The typed VS Code API can add transient terminal tabs to existing editor columns but cannot create or resize editor groups. VS Code also exposes built-in workbench commands used by first-party features: `workbench.action.newGroupRight` and `workbench.action.newGroupBelow`. The prototype feature-detects and invokes those commands to reproduce Herdr's split direction and nesting.
 
-A safe MVP action can instead be **additive and best-effort**:
+This command-driven boundary still cannot apply Herdr split ratios, reserve an extension-owned editor grid, or transactionally restore the user's previous layout. Its focus and placement effects must therefore be validated rather than inferred from types.
+
+A viable MVP action may be **additive and directional, but still best-effort**:
 
 - open existing Panes as read-only terminal editor tabs;
 - preserve all file editors;
-- flatten every Herdr split into ordered adjacent VS Code columns;
-- ignore split direction, nesting, and ratios;
-- place leaves beyond `ViewColumn.Nine` as tabs in the ninth column;
-- never rearrange or close editor groups to force fidelity;
+- recursively create right/below groups using feature-detected built-in commands;
+- preserve split direction and nesting, but ignore ratios;
+- stop safely if a group command is unavailable or VS Code refuses another group;
+- never rearrange or close existing file tabs to force fidelity;
 - keep Take Control separate from opening the layout;
 - close only extension-owned client surfaces, never Herdr-owned Panes.
