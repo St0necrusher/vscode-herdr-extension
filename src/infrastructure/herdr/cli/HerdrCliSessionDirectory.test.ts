@@ -61,6 +61,21 @@ describe("Herdr CLI Session directory", () => {
     });
   });
 
+  it("maps a process failure to an error with its diagnostic", async () => {
+    const failure = Object.assign(new Error("Herdr failed"), {
+      stderr: "Session discovery failed",
+    });
+    const { runner } = createRunner([failure]);
+
+    await expect(
+      new HerdrCliSessionDirectory(runner).discover(defaults),
+    ).resolves.toEqual({
+      kind: "error",
+      configuration: defaults,
+      diagnostic: "Session discovery failed",
+    });
+  });
+
   it("maps a compatible connected Herdr Session", async () => {
     const { runner } = createRunner([
       sessionList(true),

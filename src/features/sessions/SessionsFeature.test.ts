@@ -201,8 +201,13 @@ describe("Sessions feature", () => {
     const harness = createHarness(discover);
     await harness.feature.initialize();
 
-    expect(harness.rendered.at(-1)?.availableActions).toContain(
-      "select-executable",
+    expect(harness.rendered.at(-1)?.availableActions).toEqual(
+      expect.arrayContaining([
+        "select-executable",
+        "open-settings",
+        "retry",
+        "show-diagnostics",
+      ]),
     );
 
     await harness.feature.retry();
