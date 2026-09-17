@@ -72,6 +72,14 @@ export default tseslint.config(
         { allowNumber: true },
       ],
       "import-x/no-cycle": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "PrivateIdentifier",
+          message:
+            "Use the TypeScript private modifier instead of JavaScript # private identifiers.",
+        },
+      ],
       "boundaries/no-unknown-files": "error",
       "boundaries/no-unknown-dependencies": "error",
       "boundaries/dependencies": [

@@ -19,14 +19,14 @@ const standardActions: readonly HerdrStatusAction[] = [
 ];
 
 export class HerdrStatusController implements HerdrStatusOperations {
-  readonly #stateSource: HerdrSessionCatalogStateSource;
-  readonly #catalog: HerdrSessionCatalogOperations;
-  readonly #view: HerdrStatusView;
-  readonly #configurationActions: HerdrConfigurationActions;
-  readonly #logger: HerdrLogger;
-  readonly #subscription: { dispose(): void };
-  #disposed = false;
-  #revision = 0;
+  private readonly stateSource: HerdrSessionCatalogStateSource;
+  private readonly catalog: HerdrSessionCatalogOperations;
+  private readonly view: HerdrStatusView;
+  private readonly configurationActions: HerdrConfigurationActions;
+  private readonly logger: HerdrLogger;
+  private readonly subscription: { dispose(): void };
+  private disposed = false;
+  private revision = 0;
 
   constructor(
     stateSource: HerdrSessionCatalogStateSource,
@@ -35,55 +35,53 @@ export class HerdrStatusController implements HerdrStatusOperations {
     configurationActions: HerdrConfigurationActions,
     logger: HerdrLogger,
   ) {
-    this.#stateSource = stateSource;
-    this.#catalog = catalog;
-    this.#view = view;
-    this.#configurationActions = configurationActions;
-    this.#logger = logger;
-    this.#subscription = stateSource.onDidChange((state) =>
-      this.#render(state),
-    );
-    this.#render(stateSource.getState());
+    this.stateSource = stateSource;
+    this.catalog = catalog;
+    this.view = view;
+    this.configurationActions = configurationActions;
+    this.logger = logger;
+    this.subscription = stateSource.onDidChange((state) => this.render(state));
+    this.render(stateSource.getState());
   }
 
   async showActions(): Promise<void> {
-    if (this.#disposed) return;
-    const requestRevision = this.#revision;
-    const action = await this.#view.chooseAction(
-      statusModel(this.#stateSource.getState()),
+    if (this.disposed) return;
+    const requestRevision = this.revision;
+    const action = await this.view.chooseAction(
+      statusModel(this.stateSource.getState()),
     );
-    if (requestRevision !== this.#revision || action === undefined) return;
-    await this.#perform(action);
+    if (requestRevision !== this.revision || action === undefined) return;
+    await this.perform(action);
   }
 
   dispose(): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
-    this.#revision += 1;
-    this.#subscription.dispose();
+    if (this.disposed) return;
+    this.disposed = true;
+    this.revision += 1;
+    this.subscription.dispose();
   }
 
-  #render(state: HerdrSessionCatalogState): void {
-    if (this.#disposed) return;
-    this.#view.render(statusModel(state));
+  private render(state: HerdrSessionCatalogState): void {
+    if (this.disposed) return;
+    this.view.render(statusModel(state));
   }
 
-  async #perform(action: HerdrStatusAction): Promise<void> {
+  private async perform(action: HerdrStatusAction): Promise<void> {
     switch (action) {
       case "start":
-        await this.#catalog.start();
+        await this.catalog.start();
         break;
       case "select-executable":
-        await this.#configurationActions.selectExecutable();
+        await this.configurationActions.selectExecutable();
         break;
       case "open-settings":
-        await this.#configurationActions.openSettings();
+        await this.configurationActions.openSettings();
         break;
       case "retry":
-        await this.#catalog.retry();
+        await this.catalog.retry();
         break;
       case "show-diagnostics":
-        this.#logger.show();
+        this.logger.show();
         break;
     }
   }

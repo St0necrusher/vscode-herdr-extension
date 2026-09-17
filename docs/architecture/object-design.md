@@ -101,6 +101,8 @@ For example, a live `HerdrSessionConnection` can be a rich object because it own
 
 Each mutable state has one owner. Split a service when a distinct state owner, lifecycle, responsibility, or independent consumer appears. File size alone does not create an object or module boundary.
 
+Class-private fields and methods use TypeScript's `private` modifier. Do not use JavaScript `#` private identifiers. ESLint enforces this consistently for production and test code.
+
 ## Functions and transformations
 
 A standalone function is appropriate when the operation is a coherent, stateless concept with a clear owner.

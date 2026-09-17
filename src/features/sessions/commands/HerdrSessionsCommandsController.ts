@@ -8,7 +8,7 @@ import type {
 } from "../capabilities/index.js";
 
 export class HerdrSessionsCommandsController {
-  readonly #registration: { dispose(): void };
+  private readonly registration: { dispose(): void };
 
   constructor(
     registry: HerdrCommandRegistry,
@@ -16,7 +16,7 @@ export class HerdrSessionsCommandsController {
     status: HerdrStatusOperations,
     configurationActions: HerdrConfigurationActions,
   ) {
-    this.#registration = registry.register({
+    this.registration = registry.register({
       showStatusActions: () => status.showActions(),
       retryDiscovery: () => catalog.retry(),
       start: () => catalog.start(),
@@ -26,6 +26,6 @@ export class HerdrSessionsCommandsController {
   }
 
   dispose(): void {
-    this.#registration.dispose();
+    this.registration.dispose();
   }
 }

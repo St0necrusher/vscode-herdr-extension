@@ -2,23 +2,25 @@ import * as vscode from "vscode";
 import type { HerdrLogger } from "#capabilities/runtime";
 
 export class VsCodeHerdrLogger implements HerdrLogger {
-  readonly #output = vscode.window.createOutputChannel("Herdr", { log: true });
+  private readonly output = vscode.window.createOutputChannel("Herdr", {
+    log: true,
+  });
 
   info(message: string): void {
-    this.#output.info(message);
+    this.output.info(message);
   }
 
   error(message: string, error?: unknown): void {
     const detail =
       error instanceof Error ? (error.stack ?? error.message) : error;
-    this.#output.error(message, detail);
+    this.output.error(message, detail);
   }
 
   show(): void {
-    this.#output.show(true);
+    this.output.show(true);
   }
 
   dispose(): void {
-    this.#output.dispose();
+    this.output.dispose();
   }
 }

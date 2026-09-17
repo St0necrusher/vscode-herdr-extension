@@ -25,10 +25,10 @@ interface StatusRecord {
 }
 
 export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
-  readonly #runner: ProcessRunner;
+  private readonly runner: ProcessRunner;
 
   constructor(runner: ProcessRunner) {
-    this.#runner = runner;
+    this.runner = runner;
   }
 
   async discover(
@@ -36,7 +36,7 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
   ): Promise<HerdrSessionDiscovery> {
     let sessions: SessionRecord[];
     try {
-      const response = await this.#runner.run(configuration.executable, [
+      const response = await this.runner.run(configuration.executable, [
         "session",
         "list",
         "--json",
@@ -56,7 +56,7 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
     if (session?.running !== true) return stopped(configuration);
 
     try {
-      const response = await this.#runner.run(
+      const response = await this.runner.run(
         configuration.executable,
         statusArgs(configuration),
       );
@@ -69,7 +69,7 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
   }
 
   start(configuration: HerdrConfiguration): Promise<void> {
-    return this.#runner.spawnDetached(
+    return this.runner.spawnDetached(
       configuration.executable,
       serverArgs(configuration),
     );

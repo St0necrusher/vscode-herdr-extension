@@ -21,53 +21,53 @@ export type SessionsFeatureDependencies = Readonly<{
 }>;
 
 export class SessionsFeature {
-  readonly #catalog: HerdrSessionsService;
-  readonly #status: HerdrStatusController;
-  readonly #commands: HerdrSessionsCommandsController;
-  #disposed = false;
+  private readonly catalog: HerdrSessionsService;
+  private readonly status: HerdrStatusController;
+  private readonly commands: HerdrSessionsCommandsController;
+  private disposed = false;
 
   constructor(dependencies: SessionsFeatureDependencies) {
-    this.#catalog = new HerdrSessionsService(
+    this.catalog = new HerdrSessionsService(
       dependencies.directory,
       dependencies.configuration,
       dependencies.logger,
     );
-    this.#status = new HerdrStatusController(
-      this.#catalog,
-      this.#catalog,
+    this.status = new HerdrStatusController(
+      this.catalog,
+      this.catalog,
       dependencies.statusView,
       dependencies.configurationActions,
       dependencies.logger,
     );
-    this.#commands = new HerdrSessionsCommandsController(
+    this.commands = new HerdrSessionsCommandsController(
       dependencies.commands,
-      this.#catalog,
-      this.#status,
+      this.catalog,
+      this.status,
       dependencies.configurationActions,
     );
   }
 
   initialize(): Promise<void> {
-    return this.#catalog.initialize();
+    return this.catalog.initialize();
   }
 
   retry(): Promise<void> {
-    return this.#catalog.retry();
+    return this.catalog.retry();
   }
 
   start(): Promise<void> {
-    return this.#catalog.start();
+    return this.catalog.start();
   }
 
   getCatalogState(): HerdrSessionCatalogState {
-    return this.#catalog.getState();
+    return this.catalog.getState();
   }
 
   dispose(): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
-    this.#commands.dispose();
-    this.#status.dispose();
-    this.#catalog.dispose();
+    if (this.disposed) return;
+    this.disposed = true;
+    this.commands.dispose();
+    this.status.dispose();
+    this.catalog.dispose();
   }
 }

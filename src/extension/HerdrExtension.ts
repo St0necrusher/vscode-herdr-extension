@@ -12,28 +12,28 @@ import {
 } from "#infrastructure/vscode";
 
 export class HerdrExtension implements vscode.Disposable {
-  readonly #logger: VsCodeHerdrLogger;
-  readonly #statusView: VsCodeHerdrStatusView;
-  readonly #sessions: SessionsFeature;
-  #disposed = false;
+  private readonly logger: VsCodeHerdrLogger;
+  private readonly statusView: VsCodeHerdrStatusView;
+  private readonly sessions: SessionsFeature;
+  private disposed = false;
 
   constructor() {
-    this.#logger = new VsCodeHerdrLogger();
-    this.#statusView = new VsCodeHerdrStatusView(this.#logger);
+    this.logger = new VsCodeHerdrLogger();
+    this.statusView = new VsCodeHerdrStatusView(this.logger);
     const configuration = new VsCodeHerdrConfiguration();
-    this.#sessions = new SessionsFeature({
+    this.sessions = new SessionsFeature({
       directory: new HerdrCliSessionDirectory(new NodeProcessRunner()),
       configuration,
-      statusView: this.#statusView,
+      statusView: this.statusView,
       configurationActions: configuration,
       commands: new VsCodeHerdrCommandRegistry(),
-      logger: this.#logger,
+      logger: this.logger,
     });
   }
 
   async initialize(): Promise<void> {
     try {
-      await this.#sessions.initialize();
+      await this.sessions.initialize();
     } catch (error) {
       this.dispose();
       throw error;
@@ -41,10 +41,10 @@ export class HerdrExtension implements vscode.Disposable {
   }
 
   dispose(): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
-    this.#sessions.dispose();
-    this.#statusView.dispose();
-    this.#logger.dispose();
+    if (this.disposed) return;
+    this.disposed = true;
+    this.sessions.dispose();
+    this.statusView.dispose();
+    this.logger.dispose();
   }
 }

@@ -32,6 +32,7 @@ Automated checks cover:
 - sibling feature and sibling infrastructure isolation;
 - public entry points and private-file imports;
 - native `#capabilities`, `#features`, and `#infrastructure` aliases for top-level module imports;
+- TypeScript `private` members instead of JavaScript `#` private identifiers;
 - forbidden cycles;
 - forbidden cross-owner imports;
 - source and test imports where the same boundary applies.

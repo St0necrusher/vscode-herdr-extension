@@ -18,36 +18,36 @@ type StatusPresentation = Readonly<{
 }>;
 
 export class VsCodeHerdrStatusView implements HerdrStatusView {
-  readonly #logger: HerdrLogger;
-  readonly #status = vscode.window.createStatusBarItem(
+  private readonly logger: HerdrLogger;
+  private readonly status = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     50,
   );
 
   constructor(logger: HerdrLogger) {
-    this.#logger = logger;
-    this.#status.name = "Herdr status";
-    this.#status.command = "herdr.showStatusActions";
-    this.#status.show();
+    this.logger = logger;
+    this.status.name = "Herdr status";
+    this.status.command = "herdr.showStatusActions";
+    this.status.show();
   }
 
   render(status: HerdrStatusModel): void {
     const presentation = statusPresentation(status);
-    this.#status.text = `${presentation.tone === "checking" ? "$(loading~spin)" : "$(circle-filled)"} Herdr`;
-    this.#status.color = new vscode.ThemeColor(
+    this.status.text = `${presentation.tone === "checking" ? "$(loading~spin)" : "$(circle-filled)"} Herdr`;
+    this.status.color = new vscode.ThemeColor(
       presentation.tone === "connected"
         ? "testing.iconPassed"
         : presentation.tone === "checking"
           ? "testing.iconQueued"
           : "testing.iconFailed",
     );
-    this.#status.tooltip = new vscode.MarkdownString(
+    this.status.tooltip = new vscode.MarkdownString(
       formatTooltip(status, presentation),
     );
-    this.#status.accessibilityInformation = {
+    this.status.accessibilityInformation = {
       label: `Herdr: ${presentation.description}`,
     };
-    this.#logger.info(formatDiagnostics(status));
+    this.logger.info(formatDiagnostics(status));
   }
 
   async chooseAction(
@@ -62,7 +62,7 @@ export class VsCodeHerdrStatusView implements HerdrStatusView {
   }
 
   dispose(): void {
-    this.#status.dispose();
+    this.status.dispose();
   }
 }
 
