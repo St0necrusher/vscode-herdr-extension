@@ -183,6 +183,24 @@ export default tseslint.config(
               from: { element: { type: "extension-test" } },
               allow: { to: { element: { type: "extension" } } },
             },
+            {
+              disallow: { to: { element: { type: "capability" } } },
+              dependency: { source: "!#capabilities/*" },
+              message:
+                "Top-level capability boundaries must use a #capabilities package import alias.",
+            },
+            {
+              disallow: { to: { element: { type: "feature" } } },
+              dependency: { source: "!#features/*" },
+              message:
+                "Top-level feature boundaries must use a #features package import alias.",
+            },
+            {
+              disallow: { to: { element: { type: "infrastructure" } } },
+              dependency: { source: "!#infrastructure/*" },
+              message:
+                "Top-level infrastructure boundaries must use a #infrastructure package import alias.",
+            },
           ],
         },
       ],

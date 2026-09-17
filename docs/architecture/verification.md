@@ -31,6 +31,7 @@ Automated checks cover:
 - feature-to-infrastructure isolation;
 - sibling feature and sibling infrastructure isolation;
 - public entry points and private-file imports;
+- native `#capabilities`, `#features`, and `#infrastructure` aliases for top-level module imports;
 - forbidden cycles;
 - forbidden cross-owner imports;
 - source and test imports where the same boundary applies.

@@ -7,7 +7,7 @@ import type {
   HerdrSessionDiscovery,
   HerdrStatusAction,
   HerdrStatusModel,
-} from "../../capabilities/sessions/index.js";
+} from "#capabilities/sessions";
 import { SessionsFeature } from "./index.js";
 
 const defaults: HerdrConfiguration = {

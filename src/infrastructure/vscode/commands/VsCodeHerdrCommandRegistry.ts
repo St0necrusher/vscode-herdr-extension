@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type {
   HerdrCommandHandlers,
   HerdrCommandRegistry,
-} from "../../../capabilities/sessions/index.js";
+} from "#capabilities/sessions";
 
 export class VsCodeHerdrCommandRegistry implements HerdrCommandRegistry {
   register(handlers: HerdrCommandHandlers): { dispose(): void } {

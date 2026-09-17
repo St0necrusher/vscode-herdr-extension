@@ -1,11 +1,11 @@
-import type { HerdrLogger } from "../../../capabilities/runtime/index.js";
+import type { HerdrLogger } from "#capabilities/runtime";
 import type {
   HerdrConfigurationActions,
   HerdrSessionCatalogState,
   HerdrStatusAction,
   HerdrStatusModel,
   HerdrStatusView,
-} from "../../../capabilities/sessions/index.js";
+} from "#capabilities/sessions";
 import type {
   HerdrSessionCatalogOperations,
   HerdrSessionCatalogStateSource,

@@ -1,4 +1,4 @@
-import type { HerdrSessionCatalogState } from "../../../capabilities/sessions/index.js";
+import type { HerdrSessionCatalogState } from "#capabilities/sessions";
 
 export interface HerdrSessionCatalogStateSource {
   getState(): HerdrSessionCatalogState;

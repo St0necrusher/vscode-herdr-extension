@@ -2,7 +2,7 @@ import type {
   HerdrConfiguration,
   HerdrSessionDirectory,
   HerdrSessionDiscovery,
-} from "../../../capabilities/sessions/index.js";
+} from "#capabilities/sessions";
 import type { ProcessRunner } from "./ProcessRunner.js";
 
 interface SessionRecord {

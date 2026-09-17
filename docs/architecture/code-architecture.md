@@ -201,6 +201,22 @@ A local export does not automatically become a repository export. Parent modules
 
 Cross-module imports use the target module's public entry point. Files inside one module may import each other directly.
 
+Imports that cross a top-level owner or top-level module boundary use the repository's Node package-import aliases:
+
+```ts
+import type { HerdrLogger } from "#capabilities/runtime";
+import { SessionsFeature } from "#features/sessions";
+import { HerdrCliSessionDirectory } from "#infrastructure/herdr";
+```
+
+These aliases identify repository-level public surfaces. They do not expose child modules or private files. Imports within one module, including a parent composition module importing the public entry point of a child it owns, remain relative and use runtime `.js` specifiers:
+
+```ts
+import { HerdrSessionsService } from "./catalog/index.js";
+```
+
+Define aliases through the native Node `imports` field in `package.json`, with source mappings for TypeScript and compiled mappings for runtime. Do not add TypeScript-only path aliases that require a separate rewrite step. ESLint enforces the matching alias whenever an import targets a top-level capability, feature, or infrastructure module.
+
 Do not create `internal/` directories. Ownership and exports define visibility. Create subdirectories for semantic responsibilities, not for a generic public/private split.
 
 ## Shared implementation

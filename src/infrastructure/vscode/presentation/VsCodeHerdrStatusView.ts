@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
-import type { HerdrLogger } from "../../../capabilities/runtime/index.js";
+import type { HerdrLogger } from "#capabilities/runtime";
 import type {
   HerdrStatusAction,
   HerdrStatusModel,
   HerdrStatusView,
-} from "../../../capabilities/sessions/index.js";
+} from "#capabilities/sessions";
 
 type StatusTone = "checking" | "connected" | "failed";
 

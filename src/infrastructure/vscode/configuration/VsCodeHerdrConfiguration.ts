@@ -3,7 +3,7 @@ import type {
   HerdrConfiguration,
   HerdrConfigurationActions,
   HerdrConfigurationSource,
-} from "../../../capabilities/sessions/index.js";
+} from "#capabilities/sessions";
 
 export class VsCodeHerdrConfiguration
   implements HerdrConfigurationSource, HerdrConfigurationActions

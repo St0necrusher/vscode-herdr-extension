@@ -13,6 +13,20 @@
     "Other"
   ],
   "main": "./dist/src/extension/activate.js",
+  "imports": {
+    "#capabilities/*": {
+      "types": "./src/capabilities/*/index.ts",
+      "default": "./dist/src/capabilities/*/index.js"
+    },
+    "#features/*": {
+      "types": "./src/features/*/index.ts",
+      "default": "./dist/src/features/*/index.js"
+    },
+    "#infrastructure/*": {
+      "types": "./src/infrastructure/*/index.ts",
+      "default": "./dist/src/infrastructure/*/index.js"
+    }
+  },
   "activationEvents": [
     "onStartupFinished"
   ],

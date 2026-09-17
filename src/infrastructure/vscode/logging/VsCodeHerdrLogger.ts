@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { HerdrLogger } from "../../../capabilities/runtime/index.js";
+import type { HerdrLogger } from "#capabilities/runtime";
 
 export class VsCodeHerdrLogger implements HerdrLogger {
   readonly #output = vscode.window.createOutputChannel("Herdr", { log: true });
