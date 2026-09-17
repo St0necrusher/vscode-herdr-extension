@@ -34,7 +34,7 @@ Capability types use domain vocabulary and do not expose implementation types. C
 
 Pass external dependencies and long-lived collaborators through constructors. The nearest composition owner selects the concrete implementation.
 
-A long-lived object receives its socket provider, process runner, persistence store, clock, randomness source, logger, views, commands, and sibling capabilities. It does not construct or look them up itself.
+A host-neutral long-lived object receives its socket provider, process runner, persistence store, clock, randomness source, logger, and sibling capabilities. It does not construct or look them up itself. A concrete feature host child may use the VS Code API directly and owns the VS Code resources it creates. Do not inject a mirror of the entire VS Code API merely to preserve a universal adapter pattern. Inject view/command capabilities where a current policy or controlled test seam benefits from them.
 
 Use an injected factory when a service creates dynamic resources such as connections or bridge processes:
 
@@ -53,7 +53,7 @@ Manual constructor injection is the default. Runtime lookup, decorators, reflect
 The nearest owner composes its children:
 
 - `HerdrExtension` composes top-level infrastructure and features;
-- a parent feature composes its child services and controllers;
+- a parent feature composes its host-neutral services and any useful controllers; its separate host composition entry composes those children with its owned `vscode/` presentation;
 - a parent infrastructure module composes its child mechanisms.
 
 A composition owner may import the concrete classes it owns. It injects capability interfaces between siblings so sibling implementations remain isolated.
@@ -101,6 +101,8 @@ For example, a live `HerdrSessionConnection` can be a rich object because it own
 
 Each mutable state has one owner. Split a service when a distinct state owner, lifecycle, responsibility, or independent consumer appears. File size alone does not create an object or module boundary.
 
+An observable state owner exposes current readonly state and disposable subscriptions. Apply complete transitions before notification. A service that already owns the projection is the store; do not wrap it in another state-holding class just for naming. Keep unrelated lifecycles, such as open terminal surfaces, out of a navigation Session projection. Do not duplicate derivable domain state in presenters.
+
 Class-private fields and methods use TypeScript's `private` modifier. Do not use JavaScript `#` private identifiers. ESLint enforces this consistently for production and test code.
 
 ## Functions and transformations
@@ -109,7 +111,7 @@ A standalone function is appropriate when the operation is a coherent, stateless
 
 Keep a small transformation private to its owning class or module. Extract a named function or class when the concept becomes independently understandable or reusable.
 
-Place parsing and mapping beside the protocol, feature, or view that owns the transformation. A protocol client converts wire data into capability data; a feature converts capability state into a host-neutral model; a concrete view converts that model into host presentation.
+Place parsing and mapping beside the protocol, feature, or view that owns the transformation. A protocol client converts wire data into capability data; a state owner applies domain transitions; a feature host child derives presentation. A separate view model/controller is optional and justified by current transformation, policy, or substitution needs, not by a mandatory layer sequence.
 
 Use semantic names for extracted concepts. Do not create generic `utils`, `helpers`, `common`, `parsers`, or `mappers` dumping grounds.
 

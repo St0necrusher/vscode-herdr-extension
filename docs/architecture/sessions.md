@@ -1,219 +1,127 @@
 # Herdr Sessions architecture
 
-Read this reference before changing Herdr Session discovery, startup, selection, connection, bootstrap, reconnect, status, commands, or Sessions View behavior. Apply the ownership rules in [`code-architecture.md`](code-architecture.md) and the object rules in [`object-design.md`](object-design.md).
+Read this reference before changing Herdr Session discovery, startup, selection, connection, bootstrap, reconnect, status, commands, or Sessions View behavior. Apply [`code-architecture.md`](code-architecture.md) and [`object-design.md`](object-design.md).
 
-## Scope
+Migration status: [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23) moves the existing #22 presentation and command registration into feature-owned host code before #11. The target below is accepted; source and ESLint have not yet been migrated. Do not create future modules before their behavior exists.
 
-Tickets #10–#12 belong to one top-level Sessions feature. The current product scope has one Herdr Session active in navigation Views.
+## Scope and invariants
 
-A Herdr Session remains a server-owned runtime namespace with its own socket, Spaces, Herdr Tabs, Panes, processes, and agents. Closing an extension connection does not stop that Herdr Session or its resources.
+Tickets #10–#12 belong to the Sessions feature. One Herdr Session is active in navigation Views. Herdr remains the sole owner of Sessions, Spaces, Herdr Tabs, Panes, processes, and Agents.
 
-Keep connection creation and ownership explicit so a later requirement can add concurrent active connections without replacing infrastructure contracts. Do not implement multi-Session connection management before that requirement exists.
+Selecting a Session changes local navigation and the navigation connection. It does not stop server resources or close already-open terminal editors. Those surfaces have an independent lifecycle and retain their Session/terminal identity. Do not implement their later-ticket behavior in Sessions bootstrap.
 
-## Feature ownership
+Local navigation selection is not server focus. Server focus events update observed data; they do not automatically select a different Space or rearrange/focus VS Code editors. Explicit Agent/terminal navigation follows the accepted product policy. Opening a Herdr Tab applies its current layout once, best-effort; live updates do not continuously rearrange editors.
 
-The Sessions feature owns these children:
+## Ownership
 
-```text
-features/
-  sessions/
-    SessionsFeature.ts
-    capabilities/
-    catalog/
-    active-session/
-    status/
-    sessions-view/
-    commands/
-    shared/              # created only for proven sibling sharing
-    index.ts
-```
-
-| Child module | Responsibility |
+| Owner | Responsibility |
 | --- | --- |
-| `catalog/` | Discover known Herdr Sessions, report executable availability, react to configuration, refresh state, and explicitly start a Herdr Session. |
-| `active-session/` | Own the selected Herdr Session, connection, bootstrap, local snapshot, ordered events, stale state, reconnect, selection persistence, and connection disposal. |
-| `status/` | Combine catalog and active Herdr Session state into a host-neutral status model and determine available status operations. |
-| `sessions-view/` | Combine catalog and active Herdr Session state into a host-neutral Sessions View model and handle selection through an operations capability. |
-| `commands/` | Bind command capabilities to catalog and active Herdr Session operations. |
+| `catalog/` | Discover known Sessions, report executable/availability state, refresh configuration, and explicitly start a Session. |
+| `active-session/` | Selected Session, persistence, connection generation, bootstrap, one observable projection, authority/freshness, and connection disposal; reconnect policy in #12. |
+| `status/`, `commands/` when useful | Host-neutral status/action policy and operation routing where these have substantive behavior or a useful controlled seam. |
+| `vscode/` | Sessions-specific Status Bar, TreeProvider, concrete command registration, copy, icons, accessibility, and VS Code resources. |
 
-Create a child when its behavior exists. Split a child further only when a distinct responsibility, state owner, lifecycle, or independent consumer appears.
+A separate `sessions-view/` controller/model is not mandatory. A provider may read narrow state sources and invoke operations directly. Do not add a wrapper store around the active-session service or copy domain records into each View.
 
-## Local composition
+Catalog, active projection, local navigation, and terminal surface state are distinct responsibilities, not a requirement for four new classes. Selected Session remains in the active service; extract further navigation ownership only when actual behavior warrants it.
 
-`SessionsFeature` is the local composition owner. It constructs its children and injects only local capability interfaces between siblings:
+## Composition and public entries
 
-```text
-SessionsFeature
-├── HerdrSessionsService
-├── ActiveHerdrSessionService
-├── HerdrStatusController
-├── HerdrSessionsViewController
-└── HerdrSessionsCommandsController
-```
-
-Sibling implementations remain isolated:
+The feature root is the common composition owner of its children. Its host-neutral entry remains loadable without VS Code. A separate host entry composes host and host-neutral children:
 
 ```text
-features/sessions/active-session -X-> features/sessions/catalog
-features/sessions/status         -X-> features/sessions/active-session
-```
-
-They use local state-source and operation capabilities instead:
-
-```text
-features/sessions/active-session -> features/sessions/capabilities
-features/sessions/status         -> features/sessions/capabilities
-features/sessions/sessions-view  -> features/sessions/capabilities
-features/sessions/commands       -> features/sessions/capabilities
-```
-
-`SessionsFeature` exposes only the lifecycle and operations required outside the feature.
-
-## Top-level Session capabilities
-
-Top-level Session capabilities connect the Sessions feature to infrastructure. They include the required equivalents of:
-
-- Herdr Session descriptors and identifiers;
-- Herdr configuration source;
-- Herdr Session discovery and explicit startup;
-- Herdr Session connection and connection factory;
-- selection persistence;
-- host-neutral status model and status view;
-- host-neutral Sessions View model, host view, and selection input;
-- command registration;
-- controlled clock, randomness, logging, and disposal.
-
-Keep wire messages, CLI responses, Node sockets, and VS Code objects out of these contracts.
-
-## Infrastructure
-
-The intended concrete infrastructure is:
-
-```text
-infrastructure/
-  herdr/
-    cli/
-      HerdrCliSessionDirectory.ts
-      NodeProcessRunner.ts
-    socket/
-      JsonSocketHerdrSessionConnection.ts
-      JsonSocketHerdrSessionConnectionFactory.ts
-      NodeSocketFactory.ts
-    protocol/
-      # Herdr wire DTOs and protocol errors
-
+features/sessions/
+  index.ts                    # host-neutral public surface
+  SessionsFeature.ts          # host-neutral composition/operations
+  vscode.ts                   # deliberate host composition export
+  VsCodeSessionsFeature.ts    # root-level owner of host composition
+  capabilities/
+  catalog/
+  active-session/             # introduced in #11
+  status/                    # retain while it carries useful policy
+  commands/                  # retain while it carries useful policy
   vscode/
-    configuration/
-    persistence/
-    presentation/
-    commands/
-    logging/
-
-  system/
-    time/
-    randomness/
+    index.ts
+    # Session-specific status, tree, command implementations
 ```
 
-Representative providers include:
+These are target responsibilities; exact class/file names may be refined without changing the graph. The host composition owner can construct host children and supply their capabilities to host-neutral composition. It does not import the VS Code API itself; concrete API calls stay in the host child. Sibling children communicate through parent-local capabilities, not sibling implementations.
 
-- `HerdrCliSessionDirectory` for Herdr Session discovery and startup;
-- `JsonSocketHerdrSessionConnection` for request correlation, errors, subscription, snapshot bootstrap, ordered events, and socket closure;
-- `VsCodeSessionSelectionStore` for window/workspace selection persistence;
-- `VsCodeHerdrStatusView` and `VsCodeHerdrSessionsView` for host presentation;
-- `SystemClock` and `SystemRandomSource` for replaceable reconnect timing.
+`HerdrExtension` creates shared infrastructure, injects external capabilities into the feature host entry, and disposes the feature owner. The feature owner disposes its children. Do not also retain top-level disposal of a resource whose ownership moved into the feature.
 
-Protocol DTOs remain inside Herdr infrastructure. Herdr infrastructure maps CLI and protocol results to structured states, values, and normalized diagnostics. VS Code types and ready-to-render presentation remain inside VS Code infrastructure.
+## Capabilities and infrastructure
 
-## Runtime responsibilities
+Keep each contract at the nearest owner of all consumers/providers. Top-level Session capabilities describe external seams such as discovery, connection/factory, normalized snapshot/events, configuration, and persistence. Status/view/command contracts consumed only inside Sessions can be local. Move them only after checking actual consumers; do not add a matching interface for every concrete class.
 
-### Herdr Session catalog
+Herdr infrastructure owns CLI/process/socket mechanisms, request correlation, protocol mapping, and normalized failures. Node sockets, JSON envelopes, CLI flags, and protocol DTOs do not enter features.
 
-The catalog service owns:
+Shared VS Code logging/configuration facilities may remain under `infrastructure/vscode/`. Feature-specific presentation and command registration belong under `features/sessions/vscode/`. A Session-specific persistence adapter may also live in that host child when introduced; the active service receives only its host-neutral persistence capability.
 
-- initial discovery;
-- known Herdr Sessions;
-- missing executable and discovery errors;
-- running, stopped, and incompatible metadata;
-- configuration-change refresh;
-- explicit startup;
-- cancellation or invalidation of stale discovery results.
+The feature host child may use VS Code directly but may not import Herdr infrastructure implementations. Extension composition provides those through capabilities.
 
-### Active Herdr Session
+## Observable state and operations
 
-The active Herdr Session service owns:
+The catalog owns discovery/availability, not socket authority. The current #10/#22 baseline still reports CLI-derived `connected`; #23 preserves that behavior. #11 separates catalog availability from validated active connection authority.
 
-- loading and saving the selected Herdr Session;
-- choosing the specified fallback when saved selection is unavailable;
-- one current connection generation;
-- bootstrap state;
-- the last local snapshot;
-- ordered live events;
-- authoritative versus stale state;
-- mutation gating;
-- reconnect timing and jitter;
-- manual retry;
-- incompatibility gating;
-- cancellation, connection disposal, and late-result rejection.
+The active-session service owns:
 
-Keep this state inside the service as readonly observable data until a distinct state owner or independent consumer justifies another object. Do not create a separate projection class only to hold data.
+- selected Session, saved choice and specified fallback;
+- one current navigation connection generation;
+- bootstrap state, local snapshot and ordered live events;
+- authoritative versus non-authoritative state;
+- mutation gating and manual retry;
+- incompatibility, cancellation and late-result rejection;
+- in #12, stale retention and reconnect timing/jitter.
 
-### Herdr Session connection
+Expose current readonly state and disposable typed subscriptions. Apply complete transitions before notifying observers. Bootstrap cannot publish a partially authoritative `connected` state. Isolate presentation subscriber failures from state processing; observers handle asynchronous effects and stale completions explicitly.
 
-The Herdr Session connection owns the wire sequence:
+```text
+normalized snapshot/events → active state transition → subscribers
+user intent → operation → Herdr request → event/fresh snapshot → state
+```
 
-1. open the selected Herdr Session socket;
-2. validate ping, version, and capabilities;
-3. subscribe and wait for acknowledgement;
-4. buffer incoming events;
-5. request a fresh snapshot;
-6. deliver the snapshot;
-7. deliver buffered events in server order;
-8. deliver subsequent live events;
-9. report incompatibility or disconnection;
-10. close its socket on disposal.
+Do not promise command completion means the projection already reflects the change. Keep necessary operation pending/error state with its actual owner. Derive display values instead of storing domain replicas. No global event bus or state-management library is required.
 
-The feature receives capability data and connection callbacks. It does not know request framing, response IDs, JSON field names, or Node socket behavior.
+## Connection bootstrap
 
-## Presentation
+The connection owns transport topology, ping/metadata validation, subscription acknowledgement, buffering, snapshot acquisition, ordered delivery, and cleanup. A logical connection may own multiple physical sockets. The feature must not depend on their number.
 
-Apply the host-neutral model boundary from [`code-architecture.md`](code-architecture.md).
+The current public Socket API recommends subscribing on a separate connection, awaiting acknowledgement, buffering events during snapshot acquisition, installing the snapshot, and replaying the buffered stream in order. Verify that contract against the targeted Herdr version before relying on it. Do not substitute a single-socket topology without version-specific support/evidence.
 
-The status controller reads catalog and active Herdr Session state through local capabilities, produces a host-neutral status model, and determines the available semantic action identifiers. It does not call Herdr infrastructure directly. `VsCodeHerdrStatusView` converts that model into Status Bar text, action labels, colors, icons, tooltips, diagnostics, and accessibility text.
+Buffering must be ready before subscription can deliver events. Snapshot installation precedes event delivery to the consumer; all consumer callbacks are serialized. A real server guarantee must justify the snapshot/event boundary: idempotence alone does not make an older update safe to replay over a newer snapshot. A controlled server test proves client sequencing, not the real server's guarantee.
 
-The Sessions View controller reads the same state, produces a host-neutral Sessions View model, and invokes active Herdr Session operations through a local capability when the user selects a Herdr Session. `VsCodeHerdrSessionsView` owns VS Code tree labels, descriptions, icons, layout, and command binding.
+Dispose all owned transports, reject pending work, clear buffers/subscriptions, and prevent late callbacks. Intentional client disposal never stops a Herdr Session.
 
-The commands controller binds host commands to catalog and active Herdr Session operation capabilities. Concrete VS Code command identifiers and registrations remain in VS Code infrastructure; contributed titles remain in the VS Code extension manifest.
+## Presentation and effects
+
+Status and the Sessions TreeProvider consume catalog/active state and operations. Host code owns copy, icons, TreeItems, command IDs, and concrete registrations; manifest titles remain in `package.json`.
+
+Retain the existing host-neutral status controller/model where it protects useful behavior/tests. Do not require every future View to reproduce it. Keep substantive policy independent of VS Code and avoid injecting a mirror of the complete VS Code API.
+
+State rendering, one-time notifications, focus/handoff, and layout opening are separate kinds of behavior. Bootstrap must not manufacture historical notifications or focus actions. Terminal output frames and screen history do not belong to the Session domain projection.
 
 ## Initialization and disposal
 
-The intended initialization order is:
+Initialize dependent resources in order:
 
 ```text
 register presentation and commands
-→ initialize Herdr Session catalog
-→ load active Herdr Session selection
-→ connect and bootstrap the active Herdr Session
+→ discover catalog
+→ resolve local selection
+→ connect and bootstrap if running
 ```
 
-The intended disposal order is:
+Dispose subscribers and host input handlers before their state sources; dispose active connection before catalog and injected infrastructure. Register ownership before asynchronous initialization so partial failure can clean up. Every disposal is idempotent and invalidates in-flight work.
 
-```text
-controllers
-→ active Herdr Session
-→ Herdr Session catalog
-→ infrastructure resources
-```
-
-The active Herdr Session service cancels retry timers, invalidates its current generation, closes its connection, removes subscriptions, and ignores late callbacks during disposal or selection change.
+Selection rotation disposes only the previous navigation connection. Extension shutdown also disposes independent terminal surfaces through their own owner, without stopping server resources.
 
 ## Completion criteria
 
-A Sessions change is architecturally complete when:
-
-- each state and live resource has one owner;
-- sibling children communicate only through local capabilities;
-- Herdr and VS Code infrastructure cross the feature boundary only through top-level capabilities;
-- bootstrap ordering and event delivery remain owned by the connection implementation;
-- reconnect and authoritative/stale state remain owned by the active Herdr Session service;
-- initialization and disposal order are explicit;
-- extension disposal never stops server-owned Herdr work.
+- Each mutable state and live resource has one owner.
+- Sibling implementations communicate through parent-local capabilities.
+- Host-neutral feature entries do not load VS Code transitively.
+- Feature host children do not import external infrastructure implementations.
+- The connection owns wire sequencing; the active service owns projection/authority and later reconnect policy.
+- Host-specific effects obey accepted product policy, not arbitrary server event reactions.
+- Initialization, disposal, and stale-result rejection are explicit.
+- Code, import aliases, and generic architecture lint agree with the accepted target; #23 remains open until its migration is verified.

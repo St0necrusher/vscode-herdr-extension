@@ -2,6 +2,8 @@
 
 Status: accepted by the owner. This document supersedes the adapter-centric layout originally accepted in [Define the extension module architecture](https://github.com/St0necrusher/vscode-herdr-extension/issues/8).
 
+Migration status: the owner has accepted feature-owned VS Code presentation and observable Herdr state. [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23) migrates the existing #22 source, aliases, and ESLint guardrails before #11. These documents describe the target; they do not claim that the migration has run. Until #23 completes, existing infrastructure presentation is a recorded legacy exception, not a pattern for new code. New source edges must be enabled and verified in the same implementation change as their guardrails.
+
 Read this document before planning, implementing, reviewing, or moving source or test code. Apply it when choosing ownership, placement, dependencies, sharing, imports, or public surfaces. A change is complete only when its ownership and dependency graph agree with these rules.
 
 Use the domain language from [`CONTEXT.md`](../../CONTEXT.md). Herdr is the product domain, not an interchangeable backend. Names such as **Herdr Session**, **Space**, **Herdr Tab**, and **Pane** belong in feature code and capability contracts. Node, VS Code, CLI, and wire-protocol details are implementation details.
@@ -118,7 +120,7 @@ Herdr vocabulary is valid in a capability because Herdr is the domain. Concrete 
 
 ## Features
 
-A **feature** owns user-visible behavior or a coherent application workflow. Feature code contains smart services, controllers, handlers, local state, and orchestration. It depends on capabilities and receives concrete providers through dependency injection.
+A **feature** owns user-visible behavior or a coherent application workflow. Feature code contains smart services, controllers, handlers, local state, and orchestration. Its state and policy depend on capabilities and receive concrete providers through dependency injection. Feature-specific VS Code presentation and command binding belong to an explicitly named `vscode/` child, not automatically to infrastructure.
 
 A top-level feature can own smaller feature modules. Sibling feature modules do not import each other's implementations. They communicate through capabilities owned by their nearest common parent.
 
@@ -126,21 +128,30 @@ A parent feature composes its children. Child features do not use a global event
 
 Create a child module when it has a coherent responsibility, state owner, lifecycle, or independent consumer. Do not create empty directories to predict future structure.
 
-## Host-neutral models and host presentation
+## Host-neutral state and feature-owned host presentation
 
 External infrastructure converts mechanism data into host-neutral capability data: domain states, identifiers, values, and normalized diagnostics. Herdr infrastructure reports what happened; it does not author ready-to-render status copy, action labels, tooltips, or other host presentation.
 
-Features combine capability state into host-neutral models and determine the operations available in each state. These models use domain vocabulary, readonly data, and discriminated unions. They carry semantic action identifiers and diagnostic data rather than host labels or formatting.
+Feature state owners, synchronization, and independently meaningful product policy remain host-neutral. They publish readonly state and expose narrow operations. Presentation reads that state and derives what it needs; do not require an intermediate controller, view model, and view interface for every View. Retain those seams when they carry substantive policy, useful transformations, or a current substitution/testing need.
 
-Host presentation infrastructure converts host-neutral models into the concrete host experience. VS Code presentation owns user-visible copy, action labels, layout, icons, colors, Markdown, accessibility text, and VS Code objects.
+Feature-specific VS Code presentation lives in `features/<feature>/vscode/`. It owns copy, labels, layout, icons, Markdown, accessibility, VS Code objects, and concrete command registration. It consumes state/operation capabilities, not Herdr infrastructure implementations. Cross-feature host facilities such as logging may remain in `infrastructure/vscode/` when their ownership warrants it.
+
+Only feature `vscode/` children, VS Code infrastructure, and extension composition may import `vscode`. Capability, state, and policy modules remain host-neutral. The host-neutral feature entry must not transitively import or re-export host code. This applies to type imports as well as runtime imports.
 
 Operational logging is separate from host presentation. The owner of an operation may describe the operation or failure through a logging capability; concrete logging infrastructure selects the sink. Log wording is not a presentation model.
 
-Apply this sequence at every external and presentation boundary:
+The dataflow is:
 
 ```text
-external mechanism → capability data → feature-owned host-neutral model → host presentation
+external mechanism → normalized capability data → observable feature state
+                                                   ↓
+                                      feature-owned host presentation
+user intent → narrow operation → external mechanism
 ```
+
+One owner applies complete state transitions before publication. Expose current-state reading and disposable typed subscriptions; do not introduce a global asynchronous event bus. Request completion is distinct from observing the resulting server state. Subscriber failures must not corrupt authoritative state processing, and asynchronous effects must handle errors and stale completions.
+
+Rendering current state is not permission to replay one-time effects. Notification, focus, and editor-layout operations follow their explicit product policies; snapshot installation must not manufacture historical UI actions. No state-management library or generic backend is required.
 
 ## Infrastructure
 
@@ -153,7 +164,7 @@ infrastructure/
   system/
 ```
 
-Infrastructure classes implement top-level capabilities. Protocol DTOs remain inside Herdr infrastructure and are converted to host-neutral capability data before delivery to a feature. VS Code types remain inside VS Code infrastructure and are constructed from host-neutral models by the concrete view implementation.
+Infrastructure classes implement top-level capabilities. Protocol DTOs remain inside Herdr infrastructure and are converted to host-neutral capability data before delivery to a feature. Feature-specific host presentation belongs to its feature; host infrastructure contains facilities whose cross-feature or external-mechanism responsibility justifies that owner. VS Code types never enter capability or host-neutral state/policy modules.
 
 Keep low-level contracts local when no feature consumes them. For example, a `SocketFactory` used only by Herdr socket infrastructure stays under that infrastructure owner. Promote it only when another independent owner requires the same capability.
 
@@ -169,7 +180,7 @@ extension/
   HerdrExtension.ts
 ```
 
-`activate.ts` creates `HerdrExtension`, registers it for disposal, and initializes it. `HerdrExtension` explicitly creates top-level infrastructure and features.
+`activate.ts` creates `HerdrExtension`, registers it for disposal, and initializes it. `HerdrExtension` explicitly creates top-level infrastructure and feature host composition entries. A feature-level composition owner constructs its owned host children and host-neutral children, then injects capabilities between them. Host composition lives at the feature root (for example `VsCodeSessionsFeature.ts`, exported by `vscode.ts`) so it is their common parent, not a sibling implementation reaching into another child. It delegates concrete VS Code API calls to `vscode/` children; host imports themselves remain restricted to the allowed locations. It owns and disposes what it creates; the extension disposes the feature owner, not its children again.
 
 The top-level graph remains readable. A parent feature may own the construction of its children, but its local graph remains explicit in one discoverable composition class. See [`object-design.md`](object-design.md) for injection and lifecycle rules.
 
@@ -209,7 +220,7 @@ import { SessionsFeature } from "#features/sessions";
 import { HerdrCliSessionDirectory } from "#infrastructure/herdr";
 ```
 
-These aliases identify repository-level public surfaces. They do not expose child modules or private files. Imports within one module, including a parent composition module importing the public entry point of a child it owns, remain relative and use runtime `.js` specifiers:
+These aliases identify repository-level public surfaces. They do not expose private files or arbitrary child modules. A feature may additionally expose a deliberate host composition entry, for example `#features/sessions/vscode` mapped to feature-root `vscode.ts`; only outer composition consumers use that entry. The ordinary `index.ts` remains host-neutral and must not re-export it. Define both source and runtime mappings in `package.json`; do not use a wildcard that makes every child public. Imports within one module, including a parent composition module importing the public entry point of a child it owns, remain relative and use runtime `.js` specifiers:
 
 ```ts
 import { HerdrSessionsService } from "./catalog/index.js";
@@ -248,11 +259,11 @@ At the repository root, classify a shared concept by responsibility instead of c
 
 Before adding or moving code, answer these questions in order:
 
-1. **Behavior or mechanism?** User behavior and application state belong to a feature. External-system and runtime mechanisms belong to infrastructure.
+1. **Behavior or mechanism?** User behavior, application state, and feature-specific host presentation belong to a feature. External-system mechanisms and cross-feature runtime facilities belong to infrastructure.
 2. **Who owns it?** Place it under its only owner. A parent owns the lifecycle and composition of its children.
 3. **Who consumes it?** Keep one-consumer implementation local. Put proven sibling implementation under their nearest common owner.
 4. **Does a boundary need a contract?** Put a cross-boundary interface or data shape in the nearest `capabilities/` scope.
-5. **Which representation crosses it?** External mechanisms provide capability data, features provide host-neutral models, and host views own ready-to-render presentation.
+5. **Which representation crosses it?** External mechanisms provide capability data; state/policy expose host-neutral values and operations; host children own ready-to-render presentation. Add intermediate models only when useful.
 6. **Is it independent?** Promote a child only when it gains an independent owner, lifecycle, or user responsibility.
 7. **What is public?** Export only the surface required by the parent or outside consumer.
 8. **Who creates and disposes it?** The nearest composition owner constructs it, injects its dependencies, initializes it, and disposes it.
@@ -270,4 +281,4 @@ Treat a required forbidden edge as ownership feedback. Resolve it in this order:
 5. raise cross-owner composition to their nearest common composition owner;
 6. promote the concept to an independently owned feature or infrastructure module when its responsibility and lifecycle justify it.
 
-If the accepted graph still cannot express the requirement, make an explicit architecture decision. Update this document and the automated guardrails together before relying on the new edge.
+If the accepted graph still cannot express the requirement, make an explicit architecture decision. Documentation may record an accepted target before migration only with an explicit tracking issue and legacy exceptions. Update automated guardrails with the source migration before relying on any new edge; do not call that migration complete while rules and code disagree.
