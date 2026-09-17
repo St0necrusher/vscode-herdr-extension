@@ -107,7 +107,7 @@ A standalone function is appropriate when the operation is a coherent, stateless
 
 Keep a small transformation private to its owning class or module. Extract a named function or class when the concept becomes independently understandable or reusable.
 
-Place parsing and mapping beside the protocol, view, or feature that owns the transformation. A protocol client converts wire data; a concrete view converts presentation data; a feature service applies feature state transitions.
+Place parsing and mapping beside the protocol, feature, or view that owns the transformation. A protocol client converts wire data into capability data; a feature converts capability state into a host-neutral model; a concrete view converts that model into host presentation.
 
 Use semantic names for extracted concepts. Do not create generic `utils`, `helpers`, `common`, `parsers`, or `mappers` dumping grounds.
 

@@ -126,6 +126,22 @@ A parent feature composes its children. Child features do not use a global event
 
 Create a child module when it has a coherent responsibility, state owner, lifecycle, or independent consumer. Do not create empty directories to predict future structure.
 
+## Host-neutral models and host presentation
+
+External infrastructure converts mechanism data into host-neutral capability data: domain states, identifiers, values, and normalized diagnostics. Herdr infrastructure reports what happened; it does not author ready-to-render status copy, action labels, tooltips, or other host presentation.
+
+Features combine capability state into host-neutral models and determine the operations available in each state. These models use domain vocabulary, readonly data, and discriminated unions. They carry semantic action identifiers and diagnostic data rather than host labels or formatting.
+
+Host presentation infrastructure converts host-neutral models into the concrete host experience. VS Code presentation owns user-visible copy, action labels, layout, icons, colors, Markdown, accessibility text, and VS Code objects.
+
+Operational logging is separate from host presentation. The owner of an operation may describe the operation or failure through a logging capability; concrete logging infrastructure selects the sink. Log wording is not a presentation model.
+
+Apply this sequence at every external and presentation boundary:
+
+```text
+external mechanism → capability data → feature-owned host-neutral model → host presentation
+```
+
 ## Infrastructure
 
 `infrastructure/` contains concrete mechanisms for external systems and runtime facilities. Organize it first by the external owner or mechanism, then by a coherent responsibility:
@@ -137,7 +153,7 @@ infrastructure/
   system/
 ```
 
-Infrastructure classes implement top-level capabilities. Protocol DTOs remain inside Herdr infrastructure and are converted to capability data before delivery to a feature. VS Code types remain inside VS Code infrastructure and are constructed from feature presentation data by the concrete view implementation.
+Infrastructure classes implement top-level capabilities. Protocol DTOs remain inside Herdr infrastructure and are converted to host-neutral capability data before delivery to a feature. VS Code types remain inside VS Code infrastructure and are constructed from host-neutral models by the concrete view implementation.
 
 Keep low-level contracts local when no feature consumes them. For example, a `SocketFactory` used only by Herdr socket infrastructure stays under that infrastructure owner. Promote it only when another independent owner requires the same capability.
 
@@ -220,9 +236,10 @@ Before adding or moving code, answer these questions in order:
 2. **Who owns it?** Place it under its only owner. A parent owns the lifecycle and composition of its children.
 3. **Who consumes it?** Keep one-consumer implementation local. Put proven sibling implementation under their nearest common owner.
 4. **Does a boundary need a contract?** Put a cross-boundary interface or data shape in the nearest `capabilities/` scope.
-5. **Is it independent?** Promote a child only when it gains an independent owner, lifecycle, or user responsibility.
-6. **What is public?** Export only the surface required by the parent or outside consumer.
-7. **Who creates and disposes it?** The nearest composition owner constructs it, injects its dependencies, initializes it, and disposes it.
+5. **Which representation crosses it?** External mechanisms provide capability data, features provide host-neutral models, and host views own ready-to-render presentation.
+6. **Is it independent?** Promote a child only when it gains an independent owner, lifecycle, or user responsibility.
+7. **What is public?** Export only the surface required by the parent or outside consumer.
+8. **Who creates and disposes it?** The nearest composition owner constructs it, injects its dependencies, initializes it, and disposes it.
 
 If these answers do not produce one clear location, stop and raise the ownership ambiguity before implementing. Do not resolve ambiguity by creating `core`, `common`, `utils`, `helpers`, a global event bus, or a service locator.
 

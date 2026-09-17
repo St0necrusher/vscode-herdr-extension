@@ -1,8 +1,10 @@
 import type * as vscode from "vscode";
-import { composeExtension } from "./compose.js";
+import { HerdrExtension } from "./HerdrExtension.js";
 
 export async function activate(
   context: vscode.ExtensionContext,
 ): Promise<void> {
-  context.subscriptions.push(await composeExtension());
+  const extension = new HerdrExtension();
+  context.subscriptions.push(extension);
+  await extension.initialize();
 }

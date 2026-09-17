@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createHerdrLifecycleAdapter, type ProcessRunner } from "./index.js";
+import { HerdrCliSessionDirectory, type ProcessRunner } from "./index.js";
 
 function result(value: unknown) {
   return { stdout: JSON.stringify(value), stderr: "" };
@@ -10,13 +10,12 @@ function createRunner(outputs: (ReturnType<typeof result> | Error)[]) {
     const output = outputs.shift();
     if (output instanceof Error) return Promise.reject(output);
     if (output === undefined)
-      return Promise.reject(new Error("No fake process result"));
+      return Promise.reject(new Error("No process result"));
     return Promise.resolve(output);
   });
   const spawnDetached = vi.fn(() => Promise.resolve());
   return {
     runner: { run, spawnDetached } satisfies ProcessRunner,
-    run,
     spawnDetached,
   };
 }
@@ -36,38 +35,38 @@ function sessionList(running: boolean) {
   });
 }
 
-describe("Herdr lifecycle adapter", () => {
-  it("distinguishes a missing executable", async () => {
+describe("Herdr CLI Session directory", () => {
+  it("maps a missing executable", async () => {
     const missing = Object.assign(new Error("spawn herdr ENOENT"), {
       code: "ENOENT",
     });
     const { runner } = createRunner([missing]);
-    const adapter = createHerdrLifecycleAdapter({ runner });
 
-    await expect(adapter.inspect(defaults)).resolves.toMatchObject({
-      kind: "missing-binary",
-      settings: defaults,
+    await expect(
+      new HerdrCliSessionDirectory(runner).discover(defaults),
+    ).resolves.toMatchObject({
+      kind: "missing-executable",
+      configuration: defaults,
     });
   });
 
-  it("distinguishes a stopped default Session", async () => {
+  it("maps a stopped Herdr Session", async () => {
     const { runner } = createRunner([sessionList(false)]);
-    const adapter = createHerdrLifecycleAdapter({ runner });
 
-    await expect(adapter.inspect(defaults)).resolves.toEqual({
+    await expect(
+      new HerdrCliSessionDirectory(runner).discover(defaults),
+    ).resolves.toEqual({
       kind: "stopped",
-      settings: defaults,
-      detail: "The default Herdr Session is stopped.",
+      configuration: defaults,
     });
   });
 
-  it("reports a compatible running Session with diagnostics", async () => {
+  it("maps a compatible connected Herdr Session", async () => {
     const { runner } = createRunner([
       sessionList(true),
       result({
         client: { version: "0.9.0", protocol: 22 },
         server: {
-          status: "running",
           running: true,
           version: "0.9.0",
           protocol: 22,
@@ -77,23 +76,22 @@ describe("Herdr lifecycle adapter", () => {
         },
       }),
     ]);
-    const adapter = createHerdrLifecycleAdapter({ runner });
 
-    await expect(adapter.inspect(defaults)).resolves.toEqual({
+    await expect(
+      new HerdrCliSessionDirectory(runner).discover(defaults),
+    ).resolves.toEqual({
       kind: "connected",
-      settings: defaults,
-      detail: "Connected to the default Herdr Session.",
+      configuration: defaults,
       version: "0.9.0",
       protocol: 22,
       endpoint: "/tmp/herdr.sock",
     });
   });
 
-  it("blocks an incompatible running Session", async () => {
+  it("maps an incompatible running Herdr Session", async () => {
     const { runner } = createRunner([
       sessionList(true),
       result({
-        client: { version: "0.9.0", protocol: 22 },
         server: {
           running: true,
           version: "1.0.0",
@@ -104,9 +102,10 @@ describe("Herdr lifecycle adapter", () => {
         },
       }),
     ]);
-    const adapter = createHerdrLifecycleAdapter({ runner });
 
-    await expect(adapter.inspect(defaults)).resolves.toMatchObject({
+    await expect(
+      new HerdrCliSessionDirectory(runner).discover(defaults),
+    ).resolves.toMatchObject({
       kind: "incompatible",
       version: "1.0.0",
       protocol: 23,
@@ -114,11 +113,11 @@ describe("Herdr lifecycle adapter", () => {
     });
   });
 
-  it("starts the selected Session through the official headless server command", async () => {
+  it("starts the selected Herdr Session with the supported command", async () => {
     const { runner, spawnDetached } = createRunner([]);
-    const adapter = createHerdrLifecycleAdapter({ runner });
+    const directory = new HerdrCliSessionDirectory(runner);
 
-    await adapter.start({
+    await directory.start({
       executable: "/usr/local/bin/herdr",
       session: "work",
     });

@@ -32,8 +32,8 @@ features/
 | --- | --- |
 | `catalog/` | Discover known Herdr Sessions, report executable availability, react to configuration, refresh state, and explicitly start a Herdr Session. |
 | `active-session/` | Own the selected Herdr Session, connection, bootstrap, local snapshot, ordered events, stale state, reconnect, selection persistence, and connection disposal. |
-| `status/` | Combine catalog and active Herdr Session state into the status presentation capability. |
-| `sessions-view/` | Combine catalog and active Herdr Session state into the Sessions View presentation and handle selection through an operations capability. |
+| `status/` | Combine catalog and active Herdr Session state into a host-neutral status model and determine available status operations. |
+| `sessions-view/` | Combine catalog and active Herdr Session state into a host-neutral Sessions View model and handle selection through an operations capability. |
 | `commands/` | Bind command capabilities to catalog and active Herdr Session operations. |
 
 Create a child when its behavior exists. Split a child further only when a distinct responsibility, state owner, lifecycle, or independent consumer appears.
@@ -78,8 +78,8 @@ Top-level Session capabilities connect the Sessions feature to infrastructure. T
 - Herdr Session discovery and explicit startup;
 - Herdr Session connection and connection factory;
 - selection persistence;
-- status presentation;
-- Sessions View presentation and selection input;
+- host-neutral status model and status view;
+- host-neutral Sessions View model, host view, and selection input;
 - command registration;
 - controlled clock, randomness, logging, and disposal.
 
@@ -122,7 +122,7 @@ Representative providers include:
 - `VsCodeHerdrStatusView` and `VsCodeHerdrSessionsView` for host presentation;
 - `SystemClock` and `SystemRandomSource` for replaceable reconnect timing.
 
-Protocol DTOs remain inside Herdr infrastructure. VS Code types remain inside VS Code infrastructure.
+Protocol DTOs remain inside Herdr infrastructure. Herdr infrastructure maps CLI and protocol results to structured states, values, and normalized diagnostics. VS Code types and ready-to-render presentation remain inside VS Code infrastructure.
 
 ## Runtime responsibilities
 
@@ -176,11 +176,13 @@ The feature receives capability data and connection callbacks. It does not know 
 
 ## Presentation
 
-The status controller reads catalog and active Herdr Session state through local capabilities and produces a status presentation. It does not call Herdr infrastructure directly.
+Apply the host-neutral model boundary from [`code-architecture.md`](code-architecture.md).
 
-The Sessions View controller reads the same state, produces View presentation, and invokes active Herdr Session operations through a local capability when the user selects a Herdr Session.
+The status controller reads catalog and active Herdr Session state through local capabilities, produces a host-neutral status model, and determines the available semantic action identifiers. It does not call Herdr infrastructure directly. `VsCodeHerdrStatusView` converts that model into Status Bar text, action labels, colors, icons, tooltips, diagnostics, and accessibility text.
 
-The commands controller binds host commands to catalog and active Herdr Session operation capabilities. Concrete VS Code command identifiers and registrations remain in VS Code infrastructure.
+The Sessions View controller reads the same state, produces a host-neutral Sessions View model, and invokes active Herdr Session operations through a local capability when the user selects a Herdr Session. `VsCodeHerdrSessionsView` owns VS Code tree labels, descriptions, icons, layout, and command binding.
+
+The commands controller binds host commands to catalog and active Herdr Session operation capabilities. Concrete VS Code command identifiers and registrations remain in VS Code infrastructure; contributed titles remain in the VS Code extension manifest.
 
 ## Initialization and disposal
 

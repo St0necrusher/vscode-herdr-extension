@@ -1,6 +1,16 @@
 import eslint from "@eslint/js";
+import boundaries from "eslint-plugin-boundaries";
 import prettier from "eslint-config-prettier";
+import { createTypeScriptImportResolver } from "eslint-import-resolver-typescript";
+import { importX } from "eslint-plugin-import-x";
 import tseslint from "typescript-eslint";
+
+const element = (type, pattern, capture) => ({
+  type,
+  pattern,
+  capture,
+  partialMatch: false,
+});
 
 export default tseslint.config(
   {
@@ -10,33 +20,168 @@ export default tseslint.config(
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   {
+    plugins: {
+      boundaries,
+      "import-x": importX,
+    },
     languageOptions: {
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    settings: {
+      "import/resolver": {
+        typescript: { project: "./tsconfig.json" },
+      },
+      "import-x/resolver-next": [
+        createTypeScriptImportResolver({ project: "./tsconfig.json" }),
+      ],
+      "import-x/extensions": [
+        ".ts",
+        ".tsx",
+        ".cts",
+        ".mts",
+        ".js",
+        ".jsx",
+        ".cjs",
+        ".mjs",
+      ],
+      "import-x/parsers": {
+        "@typescript-eslint/parser": [".ts", ".tsx", ".cts", ".mts"],
+      },
+      "boundaries/elements": [
+        element("feature-child", "src/features/*/*", ["feature", "module"]),
+        element("infrastructure-child", "src/infrastructure/*/*", [
+          "owner",
+          "module",
+        ]),
+        element("capability", "src/capabilities/*", ["module"]),
+        element("feature", "src/features/*", ["feature"]),
+        element("infrastructure", "src/infrastructure/*", ["owner"]),
+        element("extension", "src/extension"),
+        element("extension-test", "test/extension"),
+      ],
+    },
     rules: {
+      ...boundaries.configs.recommended.rules,
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-confusing-void-expression": "off",
       "@typescript-eslint/restrict-template-expressions": [
         "error",
         { allowNumber: true },
       ],
-    },
-  },
-  {
-    files: ["src/adapters/**/*.ts"],
-    rules: {
-      "no-restricted-imports": [
+      "import-x/no-cycle": "error",
+      "boundaries/no-unknown-files": "error",
+      "boundaries/no-unknown-dependencies": "error",
+      "boundaries/dependencies": [
         "error",
         {
-          patterns: [
+          default: "disallow",
+          policies: [
             {
-              group: ["**/features/**"],
-              allowTypeImports: true,
-              message:
-                "Adapters may depend on feature public interfaces only through type-only imports.",
+              from: { element: { type: "capability" } },
+              allow: {
+                to: {
+                  element: {
+                    type: "capability",
+                    fileInternalPath: "index.ts",
+                  },
+                },
+              },
+            },
+            {
+              from: { element: { type: "feature" } },
+              allow: {
+                to: [
+                  {
+                    element: {
+                      type: "capability",
+                      fileInternalPath: "index.ts",
+                    },
+                  },
+                  {
+                    element: {
+                      type: "feature-child",
+                      captured: {
+                        feature: "{{ from.element.captured.feature }}",
+                      },
+                      fileInternalPath: "index.ts",
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              from: { element: { type: "feature-child" } },
+              allow: {
+                to: [
+                  {
+                    element: {
+                      type: "capability",
+                      fileInternalPath: "index.ts",
+                    },
+                  },
+                  {
+                    element: {
+                      type: "feature-child",
+                      captured: {
+                        feature: "{{ from.element.captured.feature }}",
+                        module: "capabilities",
+                      },
+                      fileInternalPath: "index.ts",
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              from: { element: { type: "infrastructure" } },
+              allow: {
+                to: [
+                  {
+                    element: {
+                      type: "capability",
+                      fileInternalPath: "index.ts",
+                    },
+                  },
+                  {
+                    element: {
+                      type: "infrastructure-child",
+                      captured: {
+                        owner: "{{ from.element.captured.owner }}",
+                      },
+                      fileInternalPath: "index.ts",
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              from: { element: { type: "infrastructure-child" } },
+              allow: {
+                to: {
+                  element: {
+                    type: "capability",
+                    fileInternalPath: "index.ts",
+                  },
+                },
+              },
+            },
+            {
+              from: { element: { type: "extension" } },
+              allow: {
+                to: {
+                  element: {
+                    type: ["capability", "feature", "infrastructure"],
+                    fileInternalPath: "index.ts",
+                  },
+                },
+              },
+            },
+            {
+              from: { element: { type: "extension-test" } },
+              allow: { to: { element: { type: "extension" } } },
             },
           ],
         },
