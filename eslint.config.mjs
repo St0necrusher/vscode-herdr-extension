@@ -214,5 +214,128 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ["src/**/*.ts"],
+    ignores: ["src/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "vscode",
+              message:
+                "VS Code imports are limited to feature vscode children, VS Code infrastructure, and extension composition.",
+            },
+          ],
+          patterns: [
+            {
+              regex: String.raw`\.test\.[cm]?[jt]sx?$`,
+              message: "Production code must not import test files.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/features/*/*.ts"],
+    ignores: [
+      "src/features/*/index.ts",
+      "src/features/*/VsCode*Feature.ts",
+      "src/features/**/*.test.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "vscode",
+              message:
+                "Host-neutral feature state and policy must not use the VS Code API.",
+            },
+          ],
+          patterns: [
+            {
+              group: ["./vscode.js", "./vscode/*", "./VsCode*"],
+              message:
+                "Host-neutral feature state and policy must not load host implementations.",
+            },
+            {
+              regex: String.raw`\.test\.[cm]?[jt]sx?$`,
+              message: "Production code must not import test files.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/features/*/VsCode*Feature.ts", "src/features/*/index.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "vscode",
+              message:
+                "The feature host composition entry must delegate direct VS Code API use to its vscode child.",
+            },
+          ],
+          patterns: [
+            {
+              regex: String.raw`\.test\.[cm]?[jt]sx?$`,
+              message: "Production code must not import test files.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/**/*.test.ts", "test/**/*.test.ts"],
+    rules: {
+      "boundaries/dependencies": "off",
+    },
+  },
+  {
+    files: ["src/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "vscode",
+              message:
+                "Host-neutral tests must not load VS Code; use Extension Host tests for host integration.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      "src/features/*/vscode/**/*.ts",
+      "src/infrastructure/vscode/**/*.ts",
+      "src/extension/**/*.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: String.raw`\.test\.[cm]?[jt]sx?$`,
+              message: "Production code must not import test files.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   prettier,
 );

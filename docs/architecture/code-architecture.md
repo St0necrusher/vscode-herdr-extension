@@ -2,8 +2,6 @@
 
 Status: accepted by the owner. This document supersedes the adapter-centric layout originally accepted in [Define the extension module architecture](https://github.com/St0necrusher/vscode-herdr-extension/issues/8).
 
-Migration status: the owner has accepted feature-owned VS Code presentation and observable Herdr state. [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23) migrates the existing #22 source, aliases, and ESLint guardrails before #11. These documents describe the target; they do not claim that the migration has run. Until #23 completes, existing infrastructure presentation is a recorded legacy exception, not a pattern for new code. New source edges must be enabled and verified in the same implementation change as their guardrails.
-
 Read this document before planning, implementing, reviewing, or moving source or test code. Apply it when choosing ownership, placement, dependencies, sharing, imports, or public surfaces. A change is complete only when its ownership and dependency graph agree with these rules.
 
 Use the domain language from [`CONTEXT.md`](../../CONTEXT.md). Herdr is the product domain, not an interchangeable backend. Names such as **Herdr Session**, **Space**, **Herdr Tab**, and **Pane** belong in feature code and capability contracts. Node, VS Code, CLI, and wire-protocol details are implementation details.
@@ -136,7 +134,7 @@ Feature state owners, synchronization, and independently meaningful product poli
 
 Feature-specific VS Code presentation lives in `features/<feature>/vscode/`. It owns copy, labels, layout, icons, Markdown, accessibility, VS Code objects, and concrete command registration. It consumes state/operation capabilities, not Herdr infrastructure implementations. Cross-feature host facilities such as logging may remain in `infrastructure/vscode/` when their ownership warrants it.
 
-Only feature `vscode/` children, VS Code infrastructure, and extension composition may import `vscode`. Capability, state, and policy modules remain host-neutral. The host-neutral feature entry must not transitively import or re-export host code. This applies to type imports as well as runtime imports.
+Only feature `vscode/` children, VS Code infrastructure, and extension composition may import `vscode`. Capability, state, and policy modules remain host-neutral. Host-neutral state/policy implementation modules must not transitively load host code. A feature's ordinary `index.ts` may export its concrete host composition: public entries serve production consumers, not test-only import needs. The restriction on direct `vscode` imports applies to type imports as well as runtime imports.
 
 Operational logging is separate from host presentation. The owner of an operation may describe the operation or failure through a logging capability; concrete logging infrastructure selects the sink. Log wording is not a presentation model.
 
@@ -180,7 +178,7 @@ extension/
   HerdrExtension.ts
 ```
 
-`activate.ts` creates `HerdrExtension`, registers it for disposal, and initializes it. `HerdrExtension` explicitly creates top-level infrastructure and feature host composition entries. A feature-level composition owner constructs its owned host children and host-neutral children, then injects capabilities between them. Host composition lives at the feature root (for example `VsCodeSessionsFeature.ts`, exported by `vscode.ts`) so it is their common parent, not a sibling implementation reaching into another child. It delegates concrete VS Code API calls to `vscode/` children; host imports themselves remain restricted to the allowed locations. It owns and disposes what it creates; the extension disposes the feature owner, not its children again.
+`activate.ts` creates `HerdrExtension`, registers it for disposal, and initializes it. `HerdrExtension` explicitly creates top-level infrastructure and feature host composition entries. A feature-level composition owner constructs its owned host children and host-neutral children, then injects capabilities between them. Host composition lives at the feature root (for example `VsCodeSessionsFeature.ts`, exported by `index.ts`) so it is their common parent, not a sibling implementation reaching into another child. It delegates concrete VS Code API calls to `vscode/` children; host imports themselves remain restricted to the allowed locations. It owns and disposes what it creates; the extension disposes the feature owner, not its children again.
 
 The top-level graph remains readable. A parent feature may own the construction of its children, but its local graph remains explicit in one discoverable composition class. See [`object-design.md`](object-design.md) for injection and lifecycle rules.
 
@@ -210,7 +208,7 @@ The project uses three visibility levels:
 
 A local export does not automatically become a repository export. Parent modules re-export only the surface required outside their ownership tree.
 
-Cross-module imports use the target module's public entry point. Files inside one module may import each other directly.
+Production cross-module imports use the target module's public entry point. Files inside one module may import each other directly. Tests may directly import the implementation under test without going through a public entry or package alias; see `verification.md`. Do not add production exports solely for tests.
 
 Imports that cross a top-level owner or top-level module boundary use the repository's Node package-import aliases:
 
@@ -220,7 +218,7 @@ import { SessionsFeature } from "#features/sessions";
 import { HerdrCliSessionDirectory } from "#infrastructure/herdr";
 ```
 
-These aliases identify repository-level public surfaces. They do not expose private files or arbitrary child modules. A feature may additionally expose a deliberate host composition entry, for example `#features/sessions/vscode` mapped to feature-root `vscode.ts`; only outer composition consumers use that entry. The ordinary `index.ts` remains host-neutral and must not re-export it. Define both source and runtime mappings in `package.json`; do not use a wildcard that makes every child public. Imports within one module, including a parent composition module importing the public entry point of a child it owns, remain relative and use runtime `.js` specifiers:
+These aliases identify repository-level public surfaces. They do not expose private files or arbitrary child modules. The ordinary feature entry should export what its actual production consumers need; for Sessions, `#features/sessions` exports `VsCodeSessionsFeature`. No separate `vscode.ts` or host-neutral public entry is required for tests. Add another entry only for a real production consumer. Define source and runtime mappings in `package.json`; do not expose arbitrary children through a wildcard. Imports within one module, including a parent composition module importing the public entry point of a child it owns, remain relative and use runtime `.js` specifiers:
 
 ```ts
 import { HerdrSessionsService } from "./catalog/index.js";

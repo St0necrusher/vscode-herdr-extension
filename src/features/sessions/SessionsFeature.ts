@@ -1,12 +1,14 @@
 import type { HerdrLogger } from "#capabilities/runtime";
 import type {
-  HerdrCommandRegistry,
   HerdrConfigurationActions,
   HerdrConfigurationSource,
   HerdrSessionCatalogState,
   HerdrSessionDirectory,
-  HerdrStatusView,
 } from "#capabilities/sessions";
+import type {
+  HerdrCommandRegistry,
+  HerdrStatusView,
+} from "./capabilities/index.js";
 import { HerdrSessionsService } from "./catalog/index.js";
 import { HerdrSessionsCommandsController } from "./commands/index.js";
 import { HerdrStatusController } from "./status/index.js";

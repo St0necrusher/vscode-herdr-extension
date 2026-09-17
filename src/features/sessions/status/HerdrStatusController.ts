@@ -2,14 +2,14 @@ import type { HerdrLogger } from "#capabilities/runtime";
 import type {
   HerdrConfigurationActions,
   HerdrSessionCatalogState,
-  HerdrStatusAction,
-  HerdrStatusModel,
-  HerdrStatusView,
 } from "#capabilities/sessions";
 import type {
   HerdrSessionCatalogOperations,
   HerdrSessionCatalogStateSource,
+  HerdrStatusAction,
+  HerdrStatusModel,
   HerdrStatusOperations,
+  HerdrStatusView,
 } from "../capabilities/index.js";
 
 const standardActions: readonly HerdrStatusAction[] = [

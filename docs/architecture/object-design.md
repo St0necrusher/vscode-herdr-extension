@@ -53,7 +53,7 @@ Manual constructor injection is the default. Runtime lookup, decorators, reflect
 The nearest owner composes its children:
 
 - `HerdrExtension` composes top-level infrastructure and features;
-- a parent feature composes its host-neutral services and any useful controllers; its separate host composition entry composes those children with its owned `vscode/` presentation;
+- a parent feature composes its host-neutral services and any useful controllers with its owned `vscode/` presentation; its ordinary public entry may export that composition owner;
 - a parent infrastructure module composes its child mechanisms.
 
 A composition owner may import the concrete classes it owns. It injects capability interfaces between siblings so sibling implementations remain isolated.

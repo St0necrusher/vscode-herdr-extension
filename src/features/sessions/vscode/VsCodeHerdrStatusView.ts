@@ -4,7 +4,7 @@ import type {
   HerdrStatusAction,
   HerdrStatusModel,
   HerdrStatusView,
-} from "#capabilities/sessions";
+} from "../capabilities/index.js";
 
 type StatusTone = "checking" | "connected" | "failed";
 

@@ -2,22 +2,20 @@
 
 Read this reference before changing tests, import enforcement, ESLint architecture rules, or the validation baseline. Apply the ownership rules in [`code-architecture.md`](code-architecture.md).
 
-Migration: [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23) updates the current source and lint to the accepted feature-host boundaries. Until then, the existing presentation infrastructure is a tracked legacy exception, not proof of target compliance.
-
 ## Tests
 
-Test observable behavior through stable feature and capability surfaces. Use the highest stable seam that proves the behavior at the narrowest practical test level.
+Test observable behavior at the narrowest practical level. A stable behavioral seam does not have to be a repository-public export.
 
-A behavioral test survives changes to private classes, child-module boundaries, file placement, dependency wiring, and internal algorithms while observable behavior remains unchanged. A production-only refactor does not require changes to its behavioral assertions. If a refactor forces a behavioral test to change, verify that an accepted public capability changed; otherwise move the test to a more stable seam.
+Tests may directly import the implementation under test, bypassing production entry points and package aliases. Do not add production exports, barrel files, or separate host-neutral public entries solely for tests. A refactor may require updating a test's import path or setup without changing its behavioral assertions; that alone is not evidence of a bad test. Avoid coupling assertions to private fields, child composition, or incidental algorithms.
 
 - Place fast Vitest tests beside the owning feature or infrastructure module.
 - Test Herdr Session discovery, startup policy, bootstrap ordering, buffered events, state transitions, reconnect, selection, errors, and disposal through controlled capability implementations.
 - Put controlled Herdr CLI, socket, process, and protocol integration tests under `test/integration/` when they cross real infrastructure boundaries.
-- Keep host-neutral public entries loadable in Vitest without loading or globally mocking `vscode`. Separate host entry points from state/policy exports.
+- Keep host-neutral state/policy implementation modules loadable in Vitest without loading or globally mocking `vscode`. Tests may import these files directly even when the feature's public entry exports host composition.
 - Put a small `@vscode/test-cli` and `@vscode/test-electron` suite under `test/extension/` for activation, registrations, Views, commands, disposal, and critical VS Code integration.
 - Keep the normal suite and CI independent of an installed Herdr instance. Isolate tests that intentionally require a real Herdr installation.
 
-Tests follow production boundaries. A module's own focused test may exercise its public child-module surface when that module has an independently meaningful contract. End-to-end feature behavior is tested through the top-level feature surface so internal child composition can change without test rewrites. Test-specific access remains local and is not re-exported as production surface.
+Production import visibility is not a test-access policy. Colocated tests may directly import their module's implementation; integration tests may directly import implementations they intentionally exercise. These exceptions do not allow production code to import tests or bypass its own boundaries. Do not manually assemble another module's private children merely to assert their wiring; prefer its meaningful behavior. Keep test helpers out of production exports.
 
 A controlled implementation used in a test satisfies the same capability consumed in production. Tests do not require a production service to construct its own fake dependency.
 
@@ -33,14 +31,14 @@ Automated checks cover:
 - capability independence from implementations;
 - feature-to-infrastructure implementation isolation;
 - VS Code imports restricted to feature `vscode/` children, host infrastructure, and extension composition, including type imports;
-- host-neutral feature entries independent of host entry exports and their transitive dependencies;
+- host-neutral state/policy modules independent of host implementations and their transitive dependencies;
 - sibling feature and sibling infrastructure isolation;
-- public entry points and private-file imports;
-- native `#capabilities`, `#features`, and `#infrastructure` aliases for top-level module imports;
+- production public entry points and private-file imports, with direct access to the implementation under test allowed in tests;
+- native `#capabilities`, `#features`, and `#infrastructure` aliases for production top-level module imports; tests may use direct relative imports;
 - TypeScript `private` members instead of JavaScript `#` private identifiers;
 - forbidden cycles;
 - forbidden cross-owner imports;
-- source and test imports where the same boundary applies.
+- explicit test overrides for entry-point, alias, and owner-direction restrictions on imports of the implementation under test; retain applicable correctness, cycle, and production-to-test prohibition checks. Test exceptions must not weaken checks on production files.
 
 Use maintained ESLint rules or plugins when they express the policy. Do not add a custom architecture checker or a per-module rule list when one generic ownership rule can express the invariant.
 
@@ -57,11 +55,11 @@ infrastructure -> capabilities
 extension      -> capabilities + features + infrastructure
 ```
 
-A parent composition module may import concrete child entry points that it owns. Sibling child implementations do not import each other. Feature-root host composition may construct its host and host-neutral children without importing the VS Code API itself; concrete API use stays in its `vscode/` children. Extension composition uses the deliberate feature host alias. Host-neutral consumers use the ordinary feature entry.
+A parent composition module may import concrete child entry points that it owns. Sibling child implementations do not import each other. Feature-root host composition may construct its host and host-neutral children without importing the VS Code API itself; concrete API use stays in its `vscode/` children. Extension composition uses the ordinary feature alias, which may export host composition. Tests load host-neutral implementation files directly. Additional public entries require actual production consumers.
 
-Representative checks must accept a feature `vscode/` child importing `vscode` and injected local capabilities, and extension composition importing the host entry. Reject `vscode` imports in catalog/state/capabilities, host exports from the host-neutral barrel, concrete Herdr infrastructure imports from feature host code, arbitrary child entry exposure, sibling implementation imports, and cycles. Check source and runtime host alias resolution. Record evidence rather than assuming a passing check of the current tree exercises forbidden cases.
+Representative checks must accept feature `vscode/` children importing `vscode`, extension composition importing a feature's host composition from its ordinary public entry, and tests directly importing the implementation under test. Reject `vscode` imports in production catalog/state/capabilities, concrete Herdr infrastructure imports from feature host code, production private-entry bypasses, production sibling implementation imports, production imports of tests, and cycles. Check source and runtime feature alias resolution. Record evidence rather than assuming a passing check of the current tree exercises forbidden cases.
 
-Cross-module imports use public entry points. Files inside one module may import each other directly. A local child entry point is visible to its parent without becoming a repository-wide export.
+Production cross-module imports use public entry points. Files inside one module may import each other directly. Tests use the direct-import exception above. A local child entry point is visible to its parent without becoming a repository-wide export.
 
 ## Validation baseline
 

@@ -1,32 +1,26 @@
 import type * as vscode from "vscode";
-import { SessionsFeature } from "#features/sessions";
+import { VsCodeSessionsFeature } from "#features/sessions";
 import {
   HerdrCliSessionDirectory,
   NodeProcessRunner,
 } from "#infrastructure/herdr";
 import {
-  VsCodeHerdrCommandRegistry,
   VsCodeHerdrConfiguration,
   VsCodeHerdrLogger,
-  VsCodeHerdrStatusView,
 } from "#infrastructure/vscode";
 
 export class HerdrExtension implements vscode.Disposable {
   private readonly logger: VsCodeHerdrLogger;
-  private readonly statusView: VsCodeHerdrStatusView;
-  private readonly sessions: SessionsFeature;
+  private readonly sessions: VsCodeSessionsFeature;
   private disposed = false;
 
   constructor() {
     this.logger = new VsCodeHerdrLogger();
-    this.statusView = new VsCodeHerdrStatusView(this.logger);
     const configuration = new VsCodeHerdrConfiguration();
-    this.sessions = new SessionsFeature({
+    this.sessions = new VsCodeSessionsFeature({
       directory: new HerdrCliSessionDirectory(new NodeProcessRunner()),
       configuration,
-      statusView: this.statusView,
       configurationActions: configuration,
-      commands: new VsCodeHerdrCommandRegistry(),
       logger: this.logger,
     });
   }
@@ -44,7 +38,6 @@ export class HerdrExtension implements vscode.Disposable {
     if (this.disposed) return;
     this.disposed = true;
     this.sessions.dispose();
-    this.statusView.dispose();
     this.logger.dispose();
   }
 }

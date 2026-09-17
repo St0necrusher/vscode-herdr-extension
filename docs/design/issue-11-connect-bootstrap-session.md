@@ -3,10 +3,10 @@
 Status: **revised for accepted architecture; implementation design still under review; no implementation has started**  
 Issue: [#11 — Connect and bootstrap one Herdr Session](https://github.com/St0necrusher/vscode-herdr-extension/issues/11)  
 Parent: [#9 — Implement the Herdr-native VS Code MVP](https://github.com/St0necrusher/vscode-herdr-extension/issues/9)  
-Blocked-by status: #10 and #22 are complete; [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23) must migrate feature-owned host presentation and guardrails before #11. Version-specific bootstrap evidence remains an implementation-design gate (§10.1).  
+Blocked-by status: #10 and #22 are complete; [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23) provides the feature-owned host presentation and guardrail baseline required before #11. Version-specific bootstrap evidence remains an implementation-design gate (§10.1).
 Reference runtime: local Herdr 0.9.0, protocol 22, endpoint generation 1.
 
-This revision preserves the product scope and decisions in #1–#9. The architecture direction is accepted; exact #11 API/selection details and bootstrap guarantees remain subject to the review checklist. Paths below describe the target after #23, not a claim that its source migration has happened.
+This revision preserves the product scope and decisions in #1–#9. The architecture direction is accepted; exact #11 API/selection details and bootstrap guarantees remain subject to the review checklist. Paths below use the feature-owned host baseline implemented for #23.
 
 ## 1. Purpose
 
@@ -82,9 +82,9 @@ The implemented #10/#22 source has:
 - behavioral feature tests, CLI tests, and Extension Host activation coverage;
 - no active-session service, socket bootstrap, selection persistence, or Sessions TreeProvider.
 
-#23 moves Session-specific host code under `features/sessions/vscode/`, introduces a separate feature-root host composition entry, and updates aliases/lint while preserving behavior. Its host-neutral entry remains loadable without VS Code. Existing useful status/controller test seams can remain; new Views need not copy them.
+#23 places Session-specific host code under `features/sessions/vscode/` and composes it in `VsCodeSessionsFeature`. The accepted follow-up exports that owner from the ordinary `features/sessions/index.ts` through `#features/sessions`; source/aliases/lint must be aligned before #23 completes. Host-neutral implementations remain directly importable by tests without VS Code, without a separate public entry. Existing useful status/controller test seams can remain; new Views need not copy them.
 
-This design builds on that target. Confirm exact filenames after #23, without reopening product decisions. #11 then separates catalog availability from actual connection authority and adds only its assigned behavior.
+This design builds on that baseline. #11 separates catalog availability from actual connection authority and adds only its assigned behavior.
 
 ## 5. Design decisions
 
@@ -194,7 +194,7 @@ For #11, a post-bootstrap socket closure transitions the active Session to disco
 HerdrExtension
 ├── Herdr CLI and socket infrastructure
 ├── shared VS Code configuration/logging facilities
-└── Sessions host composition (feature-root host entry, introduced in #23)
+└── VsCodeSessionsFeature (exported by features/sessions/index.ts)
     ├── host-neutral SessionsFeature
     │   ├── HerdrSessionsService
     │   ├── ActiveHerdrSessionService
@@ -207,7 +207,7 @@ HerdrExtension
 
 Composition passes host-neutral capabilities between children. Host presentation may receive active operations and state sources directly; siblings never import each other's implementations. Catalog and active state may have distinct narrow interfaces implemented by the same owner where appropriate.
 
-Host-neutral `features/sessions/index.ts` must not load `vscode`. A deliberate feature-root host entry such as `vscode.ts` exports the host composition owner; the extension imports it through its supported native package alias. The root composition owner constructs its host and host-neutral children without directly using the VS Code API. API calls stay in `vscode/` children.
+The ordinary `features/sessions/index.ts` exports `VsCodeSessionsFeature`; the extension imports it through `#features/sessions`. Host-neutral state/policy implementations must not load `vscode`; tests may import these files directly without going through the feature barrel. Do not create test-only production exports or an additional `vscode.ts` entry. The root composition owner constructs its host and host-neutral children without directly using the VS Code API. API calls stay in `vscode/` children.
 
 Forbidden edges remain:
 
@@ -216,7 +216,7 @@ active-session -X-> catalog implementation
 host presenter -X-> active-session implementation
 feature code   -X-> Herdr infrastructure implementation
 state/policy   -X-> vscode
-pure entry     -X-> host entry
+state/policy   -X-> host implementation
 ```
 
 External infrastructure remains injected from the extension root. Feature-owned host resources are disposed by the feature owner, not a second time by `HerdrExtension`. This graph does not introduce terminal/notification/layout features in #11.
@@ -371,7 +371,7 @@ The feature-local capabilities expose current catalog/active state, disposable t
 
 The Sessions provider derives row identity, selected flag, availability, connection state, and bounded diagnostics from these sources. Labels, icons, TreeItems, and formatting remain private to the feature's `vscode/` child. No top-level `HerdrSessionsViewModel`/`HerdrSessionsView` contract or separate `HerdrSessionsViewController` is required by this design.
 
-Existing status view capabilities may remain where useful. A changed public testing seam must be justified rather than replaced for new file placement alone.
+Existing status view capabilities may remain where useful. Keep behavioral assertions stable; direct test imports and import-path updates are allowed without creating production exports.
 
 ## 8. State models
 
@@ -638,7 +638,7 @@ The status tooltip continues to show Session, executable, version, protocol, end
 
 ### 14.1 Construction
 
-`HerdrExtension` receives `ExtensionContext`, constructs external Herdr providers and shared host facilities, and injects capabilities into the feature's separate host composition entry. It passes the necessary host context to that entry without exposing VS Code types to the host-neutral feature surface.
+`HerdrExtension` receives `ExtensionContext`, constructs external Herdr providers and shared host facilities, and injects capabilities into the feature's ordinary public composition entry. It passes the necessary host context to that entry without exposing VS Code types to the host-neutral feature surface.
 
 The feature-root host composition owner creates Session-specific persistence, Views, and command registration children and supplies their host-neutral contracts where needed. It constructs or delegates host-neutral catalog/active composition explicitly. Register ownership before asynchronous initialization.
 
@@ -679,7 +679,7 @@ Navigation Session switching disposes only the previous navigation connection. I
 
 Extend `src/features/sessions/SessionsFeature.test.ts` and, only where a child has an independently meaningful interface, add colocated child tests.
 
-Test host-neutral behavior through public feature/capability surfaces, without importing the host entry or globally mocking `vscode`:
+Test observable host-neutral behavior by directly importing the implementation under test or using useful capability seams. Do not require a public feature export or globally mock `vscode`:
 
 - first use selects the default Session;
 - valid saved selection wins;
@@ -769,7 +769,7 @@ The controlled Unix-socket integration tests should run under `npm test` or a cl
 
 ### 17.1 Existing owners expected to change
 
-Paths below are the post-#23 target; confirm exact exports/files after that refactor without redoing its ownership migration in #11.
+Paths below use the #23 exports and files; do not redo their ownership migration in #11.
 
 | Owner/path | Change | Risk |
 | --- | --- | --- |
@@ -778,12 +778,12 @@ Paths below are the post-#23 target; confirm exact exports/files after that refa
 | `src/features/sessions/catalog/` | All-Session discovery; remove CLI-derived authority | High |
 | `src/features/sessions/status/` and `commands/` where retained | Actual active authority, selected-Session operations | High/medium |
 | `src/features/sessions/SessionsFeature.ts` | Host-neutral active/catalog composition | High |
-| Feature-root Sessions host entry/composition | Construct persistence/provider, inject capabilities, own lifecycle | High |
+| `src/features/sessions/index.ts`, `VsCodeSessionsFeature.ts` | Export composition, construct persistence/provider, inject capabilities, own lifecycle | High |
 | `src/features/sessions/vscode/` | Adapt existing status/commands and add Sessions provider | Medium |
 | `src/infrastructure/herdr/cli/` | All Sessions, resolution, explicit selected start | High |
 | `src/infrastructure/herdr/index.ts` | Export connection factory | Medium |
 | `src/extension/HerdrExtension.ts`, `activate.ts` | Pass host context and external connection providers | High |
-| `package.json` | View container/contributions; reuse #23 host alias | Medium |
+| `package.json` | View container/contributions; reuse `#features/sessions` | Medium |
 | Existing feature/CLI tests and `test/extension/` | Verify changed observable semantics and lifecycle | Medium |
 
 Do not reintroduce status/presentation exports in `infrastructure/vscode` after #23 moves them. Shared logging/configuration need no unrelated migration.
@@ -880,7 +880,7 @@ Resolve or verify the remaining implementation-design choices:
 - [ ] Confirm the proposed precedence between persisted selection and the existing `herdr.session` setting in D7 against the accepted selection contract.
 - [ ] Verify the initial supported protocol policy for the target runtime.
 - [ ] Map the records/events needed for a coherent typed projection without speculative future-only fields.
-- [ ] #23 has completed the host ownership/alias/lint migration; host-neutral imports still load without VS Code.
+- [ ] #23 has completed the host ownership/alias/lint migration; direct imports of host-neutral implementations still load without VS Code.
 - [ ] Target-version evidence establishes transport topology and snapshot/event reconciliation; no unsupported single-socket or idempotence-only guarantee remains.
 - [ ] The listed blast radius is acceptable before source implementation begins.
 

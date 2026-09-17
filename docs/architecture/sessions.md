@@ -2,7 +2,7 @@
 
 Read this reference before changing Herdr Session discovery, startup, selection, connection, bootstrap, reconnect, status, commands, or Sessions View behavior. Apply [`code-architecture.md`](code-architecture.md) and [`object-design.md`](object-design.md).
 
-Migration status: [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23) moves the existing #22 presentation and command registration into feature-owned host code before #11. The target below is accepted; source and ESLint have not yet been migrated. Do not create future modules before their behavior exists.
+Session-specific presentation and command registration are feature-owned. Do not create future modules before their behavior exists.
 
 ## Scope and invariants
 
@@ -27,13 +27,12 @@ Catalog, active projection, local navigation, and terminal surface state are dis
 
 ## Composition and public entries
 
-The feature root is the common composition owner of its children. Its host-neutral entry remains loadable without VS Code. A separate host entry composes host and host-neutral children:
+The feature root is the common composition owner of its children. Its ordinary public entry exports the host composition used by the extension. Host-neutral implementation remains directly importable by tests without loading VS Code:
 
 ```text
 features/sessions/
-  index.ts                    # host-neutral public surface
-  SessionsFeature.ts          # host-neutral composition/operations
-  vscode.ts                   # deliberate host composition export
+  index.ts                    # exports VsCodeSessionsFeature
+  SessionsFeature.ts          # host-neutral implementation; tests import directly
   VsCodeSessionsFeature.ts    # root-level owner of host composition
   capabilities/
   catalog/
@@ -47,7 +46,7 @@ features/sessions/
 
 These are target responsibilities; exact class/file names may be refined without changing the graph. The host composition owner can construct host children and supply their capabilities to host-neutral composition. It does not import the VS Code API itself; concrete API calls stay in the host child. Sibling children communicate through parent-local capabilities, not sibling implementations.
 
-`HerdrExtension` creates shared infrastructure, injects external capabilities into the feature host entry, and disposes the feature owner. The feature owner disposes its children. Do not also retain top-level disposal of a resource whose ownership moved into the feature.
+`HerdrExtension` creates shared infrastructure, imports `VsCodeSessionsFeature` from `#features/sessions`, injects external capabilities, and disposes the feature owner. Do not export `SessionsFeature` or add `vscode.ts` solely for tests. The feature owner disposes its children. Do not also retain top-level disposal of a resource whose ownership moved into the feature.
 
 ## Capabilities and infrastructure
 
@@ -119,9 +118,9 @@ Selection rotation disposes only the previous navigation connection. Extension s
 
 - Each mutable state and live resource has one owner.
 - Sibling implementations communicate through parent-local capabilities.
-- Host-neutral feature entries do not load VS Code transitively.
+- Host-neutral state/policy implementation modules do not load VS Code transitively; tests can import them directly without a production export.
 - Feature host children do not import external infrastructure implementations.
 - The connection owns wire sequencing; the active service owns projection/authority and later reconnect policy.
 - Host-specific effects obey accepted product policy, not arbitrary server event reactions.
 - Initialization, disposal, and stale-result rejection are explicit.
-- Code, import aliases, and generic architecture lint agree with the accepted target; #23 remains open until its migration is verified.
+- Code, import aliases, and generic architecture lint agree with the accepted architecture.

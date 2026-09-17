@@ -1,14 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
-  HerdrCommandHandlers,
-  HerdrCommandRegistry,
   HerdrConfiguration,
   HerdrConfigurationSource,
   HerdrSessionDiscovery,
+} from "#capabilities/sessions";
+import type {
+  HerdrCommandHandlers,
+  HerdrCommandRegistry,
   HerdrStatusAction,
   HerdrStatusModel,
-} from "#capabilities/sessions";
-import { SessionsFeature } from "./index.js";
+} from "./capabilities/index.js";
+import { SessionsFeature } from "./SessionsFeature.js";
 
 const defaults: HerdrConfiguration = {
   executable: "herdr",

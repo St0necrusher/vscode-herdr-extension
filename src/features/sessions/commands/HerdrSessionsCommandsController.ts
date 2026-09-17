@@ -1,8 +1,6 @@
+import type { HerdrConfigurationActions } from "#capabilities/sessions";
 import type {
   HerdrCommandRegistry,
-  HerdrConfigurationActions,
-} from "#capabilities/sessions";
-import type {
   HerdrSessionCatalogOperations,
   HerdrStatusOperations,
 } from "../capabilities/index.js";

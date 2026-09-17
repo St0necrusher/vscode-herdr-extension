@@ -1,8 +1,8 @@
 # Accepted direction: reactive Herdr state and feature-owned VS Code presentation
 
-Status: **architecture direction accepted by the owner; implementation pending [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23)**.
+Status: **architecture direction accepted by the owner and implemented by [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23)**.
 
-This decision tunes implementation structure without reopening product decisions in #1–#9. Canonical architecture documents have been updated to this target; source and ESLint migration remain assigned to #23. This document records rationale and scope, not permission to skip that migration or expand #11.
+This decision tunes implementation structure without reopening product decisions in #1–#9. Canonical architecture documents, source, aliases, and ESLint guardrails follow this direction. This document records rationale and scope, not permission to expand #11.
 
 ## 1. Accepted direction
 
@@ -69,7 +69,7 @@ User intent
 
 ## 5. Accepted changes to architecture rules
 
-These replacements are now reflected in the canonical documents. The old source layout remains a tracked migration exception until #23 completes.
+These replacements are reflected in the canonical documents and source layout.
 
 | Previous rule | Accepted rule |
 | --- | --- |
@@ -82,11 +82,11 @@ Retain capability independence, public entry points, sibling isolation, package-
 
 Enforce host placement generically: `vscode` imports are allowed in feature `vscode/` children, existing host infrastructure, and extension composition. They remain forbidden in capability modules and host-neutral state/policy modules. Do not replace the current guardrails with an unrestricted feature-wide exception.
 
-Pure feature entry points must not transitively load `vscode` merely because host code is colocated. Expose a deliberate host composition entry separately from the host-neutral public surface, with matching Node package imports where needed. Ordinary Vitest tests must be able to load the latter without mocking the entire VS Code module.
+Host-neutral state/policy implementation modules must not transitively load `vscode`. The ordinary feature entry may export host composition for its real production consumer. Tests import host-neutral implementations directly, bypassing public entries and aliases where needed. Do not create exports or additional barrel files solely for tests. A direct class import or changed import path does not itself make a behavioral test implementation-coupled.
 
 Shared logging/configuration facilities need not move simply to make the directory tree symmetrical. Ownership and actual consumers decide placement. Move single-feature contracts out of top-level capabilities only after their remaining consumers have been checked.
 
-Canonical amendments recorded now; their enforcement ships with #23:
+Canonical amendments and their enforcement:
 
 - `docs/architecture/code-architecture.md`: feature host children, presentation, composition, and public entry rules.
 - `docs/architecture/object-design.md`: optional presentation intermediates; retain lifecycle and real-boundary DI.
@@ -102,7 +102,7 @@ Use the existing discovery/status/commands slice to establish the boundary befor
 
 - Move `VsCodeHerdrStatusView` from `src/infrastructure/vscode/presentation/` into the Sessions feature's host child.
 - Move Session-specific VS Code command registration from `src/infrastructure/vscode/commands/` into the same feature owner.
-- Add an explicit Sessions host composition entry; update `HerdrExtension` to use it and transfer resource ownership without double disposal.
+- Export `VsCodeSessionsFeature` from the ordinary Sessions `index.ts`; update `HerdrExtension` to use `#features/sessions` and transfer resource ownership without double disposal. Remove the redundant `vscode.ts` entry/alias and the test-only public export of `SessionsFeature`.
 - Keep the catalog and substantive status/action policy independently importable and testable without VS Code.
 - Preserve the existing controller/view seam where it still carries real behavior or a useful controlled test boundary. Do not merge it solely to reduce class count. New Views are not required to copy it.
 - Update exports, aliases, canonical rules, and architecture lint together. Remove only files/contracts made obsolete by these moves.
@@ -116,9 +116,9 @@ Preserve current visible status semantics during this refactor, including the ba
 ### Exit criteria
 
 1. Existing discovery, explicit start, status actions, configuration refresh, command IDs, and disposal behave unchanged.
-2. State/policy tests load without VS Code; host code is feature-owned with explicit resource ownership.
+2. State/policy tests directly load host-neutral implementation without VS Code; host code is feature-owned with explicit resource ownership.
 3. Generic lint allows the intended host child and rejects VS Code in state/capability code and concrete Herdr infrastructure imports from features.
-4. Existing behavioral assertions remain intact. Any changed public test seam is explicitly justified; do not rewrite tests merely to match new private classes.
+4. Existing behavioral assertions remain intact. Test import paths/setup may change to access the implementation directly; do not change assertions merely to match private composition. Production exports are not required for test access.
 5. The validation baseline passes or blockers are recorded. No #11 behavior is bundled into this refactor.
 
 The earlier `/impl` rule separates test authoring from production implementation. If execution uses that workflow, test additions/changes and guardrail verification fixtures need an explicitly approved testing phase; they are not silently included in a production-only pass. Existing tests can still run throughout.
@@ -127,7 +127,7 @@ Repository commands: `npm run typecheck`, `npm run lint`, `npm run format:check`
 
 ## 7. Work that belongs inside #11
 
-`docs/design/issue-11-connect-bootstrap-session.md` has been revised to this target now. Confirm actual filenames and composition after #23; the bootstrap evidence gate remains unresolved:
+`docs/design/issue-11-connect-bootstrap-session.md` uses `VsCodeSessionsFeature` exported through the ordinary `features/sessions/index.ts`. This entry-point simplification is the accepted follow-up to the initial #23 implementation; source/aliases/lint still need to be aligned. The bootstrap evidence gate remains unresolved:
 
 | Sections | Amendment |
 | --- | --- |
@@ -143,12 +143,12 @@ The current public [Socket API documentation](https://herdr.dev/docs/socket-api/
 
 ## 8. Recommended sequence and approval boundary
 
-1. Architecture direction approved: feature-owned host code and separate host entry points.
-2. Implement the bounded #23 migration; canonical rules are updated, while code, aliases, and automated guardrails must change together.
+1. Architecture direction approved: feature-owned host code, host-neutral implementation, and ordinary public entries shaped by production consumers rather than tests.
+2. Keep the bounded #23 migration behavior-preserving across code, aliases, and automated guardrails.
 3. Validate the existing baseline without product changes.
-4. Confirm the already revised #11 design against the completed refactor and resolve its version-specific bootstrap uncertainty.
+4. Resolve #11's version-specific bootstrap uncertainty.
 5. Implement #11, adding only the state and behavior it requires.
 
 If doing the refactor inside #11 instead, keep it as a distinct first, behavior-preserving slice with the same exit criteria. Do not intertwine file movement, import-policy changes, and new socket state transitions in one unreviewable change.
 
-Documentation update only: canonical architecture and the #11 design now reflect the accepted target. #23 tracks the pending source/guardrail migration and blocks #11. No production/test code, lint configuration, or package mapping has been changed by this documentation update.
+The feature-owned host boundary is accepted. The owner subsequently simplified entry-point and test-import rules: update source, package mappings, tests, and ESLint to the ordinary Sessions entry before claiming full alignment. This follow-up changes no product behavior.
