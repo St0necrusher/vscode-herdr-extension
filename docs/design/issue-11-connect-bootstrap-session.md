@@ -1,12 +1,12 @@
 # Design: connect and bootstrap one Herdr Session (#11)
 
-Status: **revised for accepted architecture; implementation design still under review; no implementation has started**  
+Status: **accepted implementation design; no implementation has started**
 Issue: [#11 — Connect and bootstrap one Herdr Session](https://github.com/St0necrusher/vscode-herdr-extension/issues/11)  
 Parent: [#9 — Implement the Herdr-native VS Code MVP](https://github.com/St0necrusher/vscode-herdr-extension/issues/9)  
-Blocked-by status: #10 and #22 are complete; [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23) provides the feature-owned host presentation and guardrail baseline required before #11. Version-specific bootstrap evidence remains an implementation-design gate (§10.1).
-Reference runtime: local Herdr 0.9.0, protocol 22, endpoint generation 1.
+Blocked-by status: #10, #22, and #23 are complete. Research #24 is resolved by the owner decision recorded in `docs/research/issue-24-herdr-switcher-audit.md`.
+Reference runtime: Herdr 0.9.1, protocol 22, endpoint generation 1.
 
-This revision preserves the product scope and decisions in #1–#9. The architecture direction is accepted; exact #11 API/selection details and bootstrap guarantees remain subject to the review checklist. Paths below use the feature-owned host baseline implemented for #23.
+This revision preserves the product scope and decisions in #1–#9. It accepts subscribe-first full-snapshot reconciliation without a universal loss-free event guarantee. Paths below use the feature-owned host baseline implemented for #23.
 
 ## 1. Purpose
 
@@ -15,7 +15,7 @@ Issue #11 turns the discovery-only Sessions feature delivered by #10 into a clie
 1. discover every known local Herdr Session;
 2. choose and persist one active navigation Session per VS Code workspace/window;
 3. validate and connect to that Session through the public JSON Socket API;
-4. establish an authoritative projection without an event gap;
+4. establish a current local projection through subscribe-first, coalesced full-snapshot reconciliation;
 5. show known Sessions and connection state in a native VS Code View;
 6. allow non-destructive Session switching; and
 7. release every socket, subscription, View, and callback on replacement or disposal.
@@ -32,7 +32,7 @@ This design follows, in descending order of authority:
 4. `docs/architecture/verification.md`;
 5. issue #11 and the still-applicable product decisions in #9;
 6. `CONTEXT.md`; and
-7. the Herdr 0.9.0 schema and findings recorded in `docs/research/herdr-capabilities-and-integration.md`.
+7. the Herdr 0.9.0/0.9.1 schemas and findings recorded in `docs/research/herdr-capabilities-and-integration.md`, `docs/research/issue-11-bootstrap-gate.md`, and `docs/research/issue-24-herdr-switcher-audit.md`.
 
 The design uses the domain terms **Herdr Session**, **Space**, **Herdr Tab**, and **Pane**. Socket paths, NDJSON, request IDs, Node sockets, VS Code `Memento`, and Tree APIs are implementation details.
 
@@ -43,12 +43,12 @@ The design uses the domain terms **Herdr Session**, **Space**, **Herdr Tab**, an
 - Listing the default and named local Herdr Sessions.
 - Distinguishing stopped, running, selected, connecting, connected, incompatible, and unavailable Sessions.
 - Resolving the selected Session's endpoint.
-- Socket `ping`, version/protocol/capability validation, subscription acknowledgement, snapshot acquisition, ordered buffering, request correlation, structured errors, and socket disposal.
+- Socket `ping`, version/protocol/capability validation, subscription acknowledgement, coalesced snapshot reconciliation, request correlation, structured errors, and socket disposal.
 - One active Session selection per extension host window/workspace.
 - Selection fallback and persistence.
 - A native Sessions View.
-- A host-neutral Session snapshot and event representation sufficient to form the authoritative projection used by later tickets.
-- Applying events received during bootstrap through the same idempotent reducer that later handles live events.
+- A host-neutral Session snapshot sufficient to form the projection used by later tickets.
+- Treating subscribed events as invalidation signals that trigger serialized full-snapshot replacement.
 - Updating the existing status model from actual connection state rather than treating CLI discovery as a connection.
 - Tests for all issue #11 acceptance criteria.
 
@@ -68,7 +68,7 @@ The following belongs to #12 or later tickets:
 - schema generation or runtime download of a schema;
 - changes to Herdr-owned focus or another client's navigation context.
 
-The issue #11 connection continues delivering events after bootstrap because the same subscription stays open. Comprehensive live-update and recovery semantics remain acceptance work for #12. #11 must not add reconnect policy under another name.
+The issue #11 connection continues receiving invalidation events after bootstrap because the same subscription stays open. Comprehensive reconnect and stale-state recovery semantics remain acceptance work for #12. #11 must not add reconnect policy under another name.
 
 ## 4. Existing and prerequisite baseline
 
@@ -90,7 +90,7 @@ This design builds on that baseline. #11 separates catalog availability from act
 
 ### D1. Catalog and active connection are separate state owners
 
-`HerdrSessionsService` owns executable availability and the set of known local Sessions. A new `ActiveHerdrSessionService` owns selection, one current navigation connection generation, the observable authoritative projection, and connection disposal. It is itself the state owner; do not add another store around it. Expose current readonly state and disposable typed subscriptions. Views derive data rather than replaying raw events or storing their own domain replicas.
+`HerdrSessionsService` owns executable availability and the set of known local Sessions. A new `ActiveHerdrSessionService` owns selection, one current navigation connection generation, the current snapshot projection, and connection disposal. It is itself the state owner; do not add another store around it. Expose current readonly state and disposable typed subscriptions. Views derive data rather than replaying raw events or storing their own domain replicas.
 
 This prevents CLI discovery state from being mistaken for socket connection state and matches `docs/architecture/sessions.md`.
 
@@ -109,34 +109,37 @@ Open server resources and other Herdr clients are unaffected. Already-open termi
 
 `JsonSocketHerdrSessionConnection` is one logical bootstrap/lifecycle owner, not a promise of one physical socket. Current public [Herdr Socket API documentation](https://herdr.dev/docs/socket-api/) prescribes `events.subscribe` on another connection while requesting `session.snapshot` on the request connection.
 
-Use that topology only after verifying applicability to the target 0.9.0/protocol 22 runtime (§10.1). The previous design's same-socket choice has no prototype evidence and is withdrawn. A different topology needs affirmative version-specific support, not an assumption that request correlation makes a subscription socket reusable.
+Use the topology established for the target 0.9.1/protocol 22 runtime (§10.1). The previous design's same-socket choice is withdrawn. A different topology needs affirmative version-specific support, not an assumption that request correlation makes a subscription socket reusable.
 
-### D4. Bootstrap ordering lives behind the connection interface
+### D4. Bootstrap and reconciliation live behind the connection interface
 
-The logical connection owns this sequence under the verified server contract:
+The logical connection owns this sequence:
 
 ```text
 open required transport(s)
 → validate ping/metadata and selected endpoint
-→ arm event buffer before subscription can emit
 → send events.subscribe on the supported subscription transport
-→ await subscription_started while buffering eligible events
+→ await subscription_started
+→ start accepting relevant events as invalidation signals
 → request session.snapshot on the supported request transport
-→ map and validate snapshot
-→ consumer installs snapshot
-→ reconcile buffered events in receive order using the verified boundary
-→ continue live delivery
+→ map, validate, and install the full snapshot
+→ if an invalidation arrived while the snapshot was pending, repeat snapshot reconciliation
+→ continue coalesced invalidation-driven reconciliation
 ```
 
-The feature owns projection transitions, not wire frames, response IDs, JSON fields, or transport count. An observer failure in presentation must not be mistaken for a reducer/protocol failure.
+Only one snapshot request may be in flight. Nearby invalidations are debounced. An invalidation received during a pending snapshot sets a dirty flag and causes another pass after that request completes. The feature owns projection transitions, not wire frames, response IDs, JSON fields, or transport count. A presentation observer failure must not be mistaken for a protocol failure.
 
-### D5. Reconciliation requires more than idempotence
+### D5. Snapshot replacement is the initial reconciliation strategy
 
-Duplicate-safe updates remain desirable: upsert complete records, remove absent IDs harmlessly, replace server ordering, normalize focus references, and key layouts by Herdr Tab ID. But idempotence alone cannot prevent an old buffered update from overwriting newer snapshot data.
+The snapshot is the only source used to replace the complete local projection. Event payloads are not applied as patches in #11. This avoids cross-connection event ordering, duplicate reduction, and stale buffered patches overwriting newer snapshot state.
 
-Before claiming authority, record the target version's guarantee that makes the documented snapshot-and-buffer algorithm coherent (or its supported reconciliation mechanism). Do not invent a global cursor: none has yet been established by the evidence gathered here. If version-specific evidence cannot establish the boundary, report a blocker rather than publishing a possibly inconsistent `connected` state.
+The first implementation does not compute a structural diff. It publishes each successful replacement snapshot and allows dependent Views to refresh from the complete value. If measurements show excessive serialization, refresh work, or rendering, optimize in this order:
 
-“Receive order” is the order of complete events on the subscription stream. It does not establish cross-connection causality. Controlled socket tests exercise the client under the documented contract; they do not prove that the real server implements it.
+1. compare normalized View-relevant snapshot values and suppress unchanged publication;
+2. add targeted snapshot diffs for precise View invalidation; and
+3. only if still necessary, evaluate payload-aware event reduction with a FIFO queue.
+
+These are measured optimizations, not initial correctness requirements. Herdr 0.9.1 still has a silent 512-entry event hub and no public cursor or server-incarnation ID. The owner accepts the low-probability undetected-overflow limitation for #11; the design does not claim a universal loss-free event guarantee.
 
 ### D6. Unknown fields are ignored; unknown required semantics fail safely
 
@@ -150,7 +153,7 @@ The connection fails as incompatible rather than manufacturing authority when:
 - snapshot metadata disagrees with validated ping metadata; or
 - an event explicitly subscribed to cannot be mapped safely.
 
-An unknown field alone never causes failure. An unknown event cannot silently mutate the projection; it is logged and the projection loses authority until a fresh bootstrap.
+An unknown field alone never causes failure. A well-formed event from the subscribed stream need not be mapped as a domain patch; it is an invalidation signal. Malformed envelopes fail safely rather than being ignored.
 
 ### D7. Persistence precedence is deterministic
 
@@ -186,7 +189,7 @@ The existing status controller/model can remain useful without becoming a compul
 
 The existing Status Bar remains, but “connected” means that socket validation and bootstrap completed for the selected Session. A merely running Session is not connected.
 
-For #11, a post-bootstrap socket closure transitions the active Session to disconnected/error and retains no claim of authority. Stale projection retention and reconnect presentation are added by #12.
+For #11, a post-bootstrap socket closure transitions the active Session to disconnected/error. Stale projection retention and reconnect presentation are added by #12.
 
 ## 6. Target ownership and dependency graph
 
@@ -253,7 +256,7 @@ type HerdrSessionMetadata = Readonly<{
 
 The descriptor contains domain identity and availability, not CLI records. The endpoint is optional until resolved for a running Session.
 
-The capability layer also owns host-neutral snapshot records for Spaces, Herdr Tabs, Panes, layouts, and Agents. Protocol snake_case fields are mapped to domain camelCase fields. Only fields needed to preserve the authoritative product model cross the seam; unknown protocol fields stay inside infrastructure.
+The capability layer also owns host-neutral snapshot records for Spaces, Herdr Tabs, Panes, layouts, and Agents. Protocol snake_case fields are mapped to domain camelCase fields. Only fields needed by the product model cross the seam; unknown protocol fields stay inside infrastructure.
 
 The snapshot root is conceptually:
 
@@ -272,7 +275,7 @@ type HerdrSessionSnapshot = Readonly<{
 }>;
 ```
 
-The initial implementation maps all required 0.9.0 fields used to identify and relate these records. It must not expose raw response envelopes or accept `unknown` as the feature's projection type.
+The initial implementation maps all required protocol-22 fields used to identify and relate these records. It must not expose raw response envelopes or accept `unknown` as the feature's projection type.
 
 ### 7.2 Catalog capability
 
@@ -300,8 +303,7 @@ The catalog state no longer has a `connected` variant. Its ready state contains 
 
 ```ts
 interface HerdrSessionProjectionConsumer {
-  installSnapshot(snapshot: HerdrSessionSnapshot): void;
-  applyEvent(event: HerdrSessionEvent): void;
+  replaceSnapshot(snapshot: HerdrSessionSnapshot): void;
   connectionClosed(failure: HerdrConnectionFailure): void;
 }
 
@@ -318,16 +320,16 @@ interface HerdrSessionConnectionFactory {
 Interface contract:
 
 - `bootstrap` may be called once.
-- It resolves only after ping, subscription acknowledgement, snapshot installation, and buffered-event drain.
-- `installSnapshot` is called exactly once before the first `applyEvent`.
-- `applyEvent` calls are serialized in subscription-stream receive order under the verified reconciliation contract.
+- It resolves only after ping, subscription acknowledgement, and one stable snapshot reconciliation pass.
+- `replaceSnapshot` receives complete mapped snapshots; no event patch crosses this capability.
+- Replacement callbacks are serialized, and no more than one snapshot request is in flight.
 - Transport count is private; all owned transports share one logical failure/disposal boundary.
 - No consumer callback occurs after `dispose` returns.
 - `dispose` is idempotent, rejects pending requests, removes listeners, and closes all owned transports.
 - An initialization failure disposes every owned transport before rejecting.
 - `connectionClosed` is emitted at most once for an unexpected post-open termination and never for intentional disposal.
 
-This is a deep interface: callers learn one bootstrap operation while request correlation, framing, buffering, parsing, metadata checks, and socket lifecycle remain hidden.
+This is a deep interface: callers learn one bootstrap operation while request correlation, framing, invalidation scheduling, snapshot replacement, parsing, metadata checks, and socket lifecycle remain hidden.
 
 ### 7.4 Structured failures
 
@@ -398,7 +400,7 @@ unselected
 selected-stopped(session)
 resolving(session)
 connecting(session)
-connected(session, metadata, authoritative projection)
+connected(session, metadata, current projection)
 incompatible(session, metadata?, diagnostic)
 disconnected(session, diagnostic)
 ```
@@ -454,22 +456,23 @@ No selection action starts a stopped Session automatically.
 
 ## 10. Socket protocol design
 
-### 10.1 Version-specific bootstrap gate and transport
+### 10.1 Version-specific transport and accepted limitation
 
-Before implementing the authority claim, record evidence for the targeted 0.9.0/protocol 22 runtime:
+Research for Herdr 0.9.0 and 0.9.1 established:
 
-1. whether request and subscription use separate connections as current public documentation specifies;
-2. when the subscription becomes eligible to receive events and when acknowledgement is sent;
-3. the snapshot/event boundary and why buffered replay produces current state;
-4. subscribed event coverage sufficient to keep mapped records coherent.
+1. ordinary request/response and subscription use separate connections;
+2. `subscription_started` confirms the server-side subscription setup;
+3. the public protocol exposes no event cursor, gap signal, or server-incarnation ID;
+4. the event hub retains 512 entries and can silently discard older events; and
+5. `pane.agent_status_changed` is scoped to a concrete Pane.
 
-The retained prototypes prove terminal bridging/handoff/layout, not this socket sequence. A schema describes shapes but does not alone prove ordering. Use version-matched documentation/source or a bounded disposable-Session probe; report unproven assumptions explicitly. A finite probe supports observed interleavings, not a universal guarantee. Do not silently substitute current web documentation for version-specific evidence.
+Sources and the owner decision are recorded in `docs/research/issue-11-bootstrap-gate.md` and `docs/research/issue-24-herdr-switcher-audit.md`. The missing universal guarantee is accepted for #11. The implementation uses events only as invalidation signals and does not claim that the stream is a loss-free journal.
 
-`NodeSocketFactory` and its local contract stay under Herdr socket infrastructure. The logical connection owns all required Unix sockets, parser buffers, request maps, and failure cleanup. For the documented two-connection shape, either required transport failing invalidates bootstrap/authority.
+`NodeSocketFactory` and its local contract stay under Herdr socket infrastructure. The logical connection owns all required Unix sockets, parser buffers, request state, dirty state, debounce scheduling, and failure cleanup. Either required transport failing invalidates bootstrap/current connection state.
 
 Each transport handles arbitrary UTF-8 chunk boundaries, newline-delimited JSON, and bounded line size. Serialize requests as one JSON object plus newline. Choose and document the line bound from measured target-version snapshots with safety margin; exceeding it is an invalid-response failure. Do not log snapshots or arbitrary raw payloads.
 
-Do not allow a separate subscription/request pair to connect to different server generations unnoticed. Verify the supported identity/metadata boundary and selected endpoint stability; equal version numbers alone are not proof of identical server instance. If the protocol cannot establish this, include the limitation in the bootstrap decision instead of inventing an identity field.
+A local connection generation guards late callbacks and completed snapshots. If a required transport closes during bootstrap, discard that attempt rather than publishing its snapshot. Herdr supplies no cross-connection server-incarnation identity; this remains an explicit accepted limitation rather than an invented field.
 
 ### 10.2 Request correlation
 
@@ -506,30 +509,40 @@ The expected result discriminator is `pong`. Validation requires:
 - endpoint generation compatibility when advertised; and
 - required capabilities for the operations actually used.
 
-For #11, `events.subscribe` and `session.snapshot` method support are proven by successful responses; optional capabilities are recorded, not guessed. `surface_interest`, `health_check`, `live_handoff`, and `detached_server_daemon` do not become required merely because Herdr 0.9.0 advertises them.
+For #11, `events.subscribe` and `session.snapshot` method support are proven by successful responses; optional capabilities are recorded, not guessed. `surface_interest`, `health_check`, `live_handoff`, and `detached_server_daemon` do not become required merely because the target runtime advertises them.
 
 The implementation supports protocol 22 initially. Unsupported protocol/generation is an `incompatible` state, not a generic transport error.
 
 ### 10.4 Subscription
 
-After required endpoint/metadata validation, send `events.subscribe` on the supported subscription transport with the lifecycle filters required to keep the snapshot projection coherent: workspace, worktree, Herdr Tab, Pane, Agent-status, and layout changes represented by the public 0.9.0 schema.
+After required endpoint/metadata validation, send `events.subscribe` on the supported subscription transport with the lifecycle filters that can change the mapped projection: workspace, worktree, Herdr Tab, Pane, Agent-status, and layout changes represented by the public 0.9.1 schema.
 
-Wait for a response whose result is `{type:"subscription_started"}`. Only then request `session.snapshot`.
+Wait for a response whose result is `{type:"subscription_started"}`. Only then request `session.snapshot`. A well-formed subscribed event marks reconciliation dirty; its payload is not applied as a patch.
 
-Output-match and scroll-only subscriptions are excluded from #11 because they are not needed for Session authority and could add high-volume traffic.
+Output, output-match, and scroll-only subscriptions are excluded. Terminal output uses the separate attach/control data path and must not trigger projection snapshots.
 
-### 10.5 Event buffering
+Pane-specific Agent-status subscriptions are reconciled when a snapshot reveals a changed Pane set. Arm the replacement subscription and await its acknowledgement before the stabilizing snapshot; keep the prior subscription until the replacement is ready. Duplicate invalidations are harmless.
 
-The FIFO buffer is armed before the subscribe request is written and remains active until snapshot installation completes. This avoids depending on the server flushing the acknowledgement before an already-eligible event.
+### 10.5 Invalidation scheduling
 
-Events that arrive:
+The connection keeps bounded scheduling state, not an event payload queue:
 
-- after the subscribe request is written but before acknowledgement are appended while acknowledgement is still required;
-- while the snapshot request is pending are appended;
-- while buffered events are being drained are appended to the same queue; and
-- after the queue is empty are delivered directly, still serialized through one dispatch loop.
+```text
+dirty: boolean
+snapshotInFlight: boolean
+debounceTimer: optional
+```
 
-The dispatcher never calls the consumer concurrently.
+A relevant event sets `dirty = true`. Nearby events are coalesced by a short documented debounce. Reconciliation serializes snapshot requests:
+
+```text
+while dirty:
+  dirty = false
+  snapshot = await requestSnapshot()
+  replaceSnapshot(snapshot)
+```
+
+If an event arrives while a snapshot is pending, it sets `dirty` again and causes one further pass. No more than one snapshot request or replacement callback runs concurrently. The debounce interval is a performance parameter, not a correctness boundary; tests use controlled scheduling rather than wall-clock sleeps.
 
 ### 10.6 Snapshot
 
@@ -539,16 +552,13 @@ Send:
 {"id":"…","method":"session.snapshot","params":{}}
 ```
 
-Require result discriminator `session_snapshot`. Map the nested snapshot to host-neutral domain data and verify snapshot version/protocol against ping metadata.
+Require result discriminator `session_snapshot`. Map the nested snapshot to host-neutral domain data and verify snapshot version/protocol against validated metadata.
 
-Then:
+Each successful pass calls `replaceSnapshot` with the complete mapped value. Bootstrap resolves only after at least one replacement and after no invalidation observed during that pass remains pending. Live invalidations continue through the same serialized reconciliation loop.
 
-1. call `installSnapshot` once;
-2. reconcile and drain queued events in FIFO order through `applyEvent` under the verified server boundary from D5/§10.1;
-3. switch to live delivery; and
-4. resolve `bootstrap` with validated metadata.
+The first implementation does not compare the old and new snapshots and does not compute targeted View diffs. It publishes the complete replacement. Performance work requires measurement and follows D5's optimization order.
 
-If mapping, installation, or reducer event application fails, close all owned transports and reject bootstrap. Presentation-subscriber exceptions must be isolated from these protocol/authority failures. The feature must never publish a partially authoritative `connected` state.
+If mapping or replacement fails, close all owned transports and reject bootstrap/current connection. Presentation-subscriber exceptions must be isolated from protocol failures. The feature must never publish a partially mapped projection.
 
 ### 10.7 Disposal
 
@@ -557,29 +567,26 @@ Intentional disposal performs, in order:
 1. mark disposed and invalidate dispatch;
 2. remove or disable all transport callbacks;
 3. reject pending requests with a local disposed failure;
-4. clear buffered events;
+4. clear dirty/debounce state;
 5. close/destroy every owned socket; and
 6. clear the consumer reference.
 
 Disposal does not call `server.stop` and does not alter any Herdr-owned resource.
 
-## 11. Projection reducer
+## 11. Projection replacement
 
-The active service owns one readonly projection value and exposes current state plus disposable typed subscriptions. It never exposes mutable maps or protocol objects. Apply complete transitions before notifying; do not emit partially installed bootstrap state as authoritative. A subscriber cannot mutate the projection or make a UI exception look like server incompatibility.
+The active service owns one readonly projection value and exposes current state plus disposable typed subscriptions. It never exposes mutable maps or protocol objects. It validates and commits a complete replacement before notifying. A subscriber cannot mutate the projection or make a UI exception look like server incompatibility.
 
-Internally, it may build replacement maps for efficient upsert/removal, then publish a new readonly snapshot. Event handling covers every subscribed lifecycle event. The implementation should group event-to-domain mapping with Herdr protocol infrastructure and event-to-projection reduction with the active-session feature.
+Snapshot mapping validates referential consistency before publication:
 
-The reducer must preserve referential consistency:
+- every Pane references an existing Space and Herdr Tab;
+- every Herdr Tab references an existing Space;
+- layouts reference known Herdr Tabs and Panes;
+- Agent records reference known Panes;
+- focus IDs reference present records when supplied; and
+- snapshot arrays use deterministic server number/order where supplied.
 
-- a Pane references existing Space and Herdr Tab IDs after each complete update;
-- a Herdr Tab references an existing Space;
-- closing a Space removes its child Herdr Tabs, Panes, layouts, and Agents if the event does not include all child closures;
-- closing a Herdr Tab removes its Panes/layout;
-- moving a Pane replaces old identity/location according to the event's previous and new IDs;
-- focus IDs are cleared when their records disappear; and
-- snapshot arrays remain deterministically ordered by server number/order where supplied.
-
-If an event cannot preserve these invariants, the projection is no longer authoritative and the connection fails safely. #12 will recover through a fresh bootstrap.
+The first implementation replaces and publishes the complete projection even when it equals the previous value. It does not compute a generic deep diff, normalized equality, or targeted View changes. Add those only after profiling shows a material problem. Event payload queueing and incremental projection reduction are a later fallback only if snapshot replacement remains too expensive after simpler comparison/diff optimizations.
 
 ## 12. Sessions View design
 
@@ -664,13 +671,13 @@ Navigation Session switching disposes only the previous navigation connection. I
 | #11 acceptance criterion | Design coverage | Verification evidence |
 | --- | --- | --- |
 | Resolve selected/default endpoint and validate ping/version/capabilities | D7, catalog `resolve`, §§9–10.3 | Feature selection tests; controlled socket integration tests for `pong`, protocol mismatch, capabilities, endpoint selection; version-specific bootstrap evidence |
-| Subscribe first, await ack, buffer events, request/install snapshot, apply buffer in order | D3–D5, §§10.4–10.6 | Socket integration test with events injected before/during snapshot and observable consumer call order |
+| Subscribe first, await ack, reconcile full snapshots after invalidations | D3–D5, §§10.4–10.6 | Socket integration tests inject events before/during snapshot, prove one request in flight, and observe complete replacement order |
 | Sessions View shows default and known local Sessions with connection state | D9, §12 | Feature state/selection tests; focused host provider/Extension Host coverage for row states and registration |
 | Selection remembered per workspace/window with safe fallback | D7–D8, §§8–9 | Feature tests with controlled store; persistence adapter/Extension Host test |
 | Switching changes local navigation only and is non-destructive | D2, §9.2 | Feature test asserts old connection disposal/new connection creation and no directory/server mutation call |
 | Correlate by ID, tolerate unknown fields, surface structured Herdr errors | D6, §§7.4, 10.2 | Controlled Unix-socket tests with out-of-order responses, extra fields, and `{id,error}` |
 | Connection, subscription, and View resources explicitly disposed | §§10.7, 14 | Unit/integration disposal tests and Extension Host deactivation coverage |
-| Tests prove ordering, buffering, persistence, metadata, disposal through public interfaces | §§16–17 | Fast feature suite, public connection integration suite, focused Extension Host suite |
+| Tests prove subscription ordering, invalidation reconciliation, persistence, metadata, and disposal through public interfaces | §§16–17 | Fast feature suite, public connection integration suite, focused Extension Host suite |
 
 ## 16. Verification strategy
 
@@ -687,9 +694,10 @@ Test observable host-neutral behavior by directly importing the implementation u
 - stopped selection does not start automatically;
 - user selection disposes the previous connection and creates one new connection;
 - stale generations cannot publish after rapid switching;
-- snapshot is installed before buffered events;
-- buffered event order is preserved;
-- repeated/upsert events are idempotent, and reconciliation under the verified server boundary does not regress newer snapshot data;
+- subscription acknowledgement precedes the initial snapshot request;
+- events during a pending snapshot mark reconciliation dirty and cause one subsequent pass;
+- event bursts are coalesced, snapshot requests never overlap, and each published value is a complete replacement;
+- the initial implementation publishes replacements without computing a snapshot diff or applying event payloads;
 - connection metadata becomes authoritative observable state and semantic status;
 - structured errors and incompatibility map to safe state;
 - explicit Start targets the selected Session;
@@ -720,9 +728,9 @@ Scenarios:
 2. unique request IDs and out-of-order response correlation;
 3. extra unknown fields on pong, acknowledgement, snapshot, event, and error;
 4. structured Herdr error propagation;
-5. event after subscription acknowledgement but before snapshot response;
-6. multiple events interleaved with unrelated responses;
-7. event arriving while the initial buffer drains;
+5. event after subscription acknowledgement but before snapshot response causes a second snapshot pass;
+6. multiple events are coalesced while unrelated responses remain correctly correlated;
+7. event during a live snapshot request marks dirty without starting a concurrent request;
 8. partial and multiple NDJSON lines across arbitrary chunks;
 9. malformed JSON, missing required fields, wrong result discriminator, and oversized line;
 10. protocol/version/generation mismatch;
@@ -730,7 +738,7 @@ Scenarios:
 12. pending request rejection and no late callbacks after disposal; and
 13. intentional disposal does not emit unexpected-disconnect state;
 14. all transports are cleaned up when either side of a supported two-connection bootstrap fails; and
-15. presentation observer exceptions do not corrupt projection authority.
+15. presentation observer exceptions do not corrupt connection state.
 
 The fixture must model the validated topology and boundary, not make an unsupported same-socket assumption pass. Separately record version-specific server evidence; controlled fixtures cannot prove real Herdr linearization or event completeness. Any real-Herdr probe is isolated from the normal suite and uses disposable resources only.
 
@@ -832,8 +840,8 @@ These are intended behavior changes and require explicit tests and release notes
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Event-gap or unsupported bootstrap boundary | Projection can be silently wrong | Version-specific server evidence plus connection-owned sequence and client interleaving tests |
-| Snapshot overlaps buffered changes | Stale replay can regress state even with idempotent operations | Verified reconciliation boundary, duplicate-safe reducer, and overlap/interleaving tests |
+| Internal Herdr event hub silently overflows before invalidation delivery | Projection can remain stale until another successful invalidation/reconciliation | Accepted low-probability protocol limitation; keep events lightweight and revisit periodic reconciliation only with evidence |
+| Event arrives while snapshot is pending | Completed snapshot may already be stale | Dirty flag forces one subsequent serialized snapshot pass |
 | Unknown additive fields break client | Version updates cause avoidable incompatibility | Structural extraction; ignore extras everywhere |
 | Unknown required semantics are ignored | Client claims false authority | Fail safe to incompatible/non-authoritative state |
 | Rapid Session switching publishes stale results | Wrong Session appears active | Generation token plus immediate old-connection disposal |
@@ -844,20 +852,20 @@ These are intended behavior changes and require explicit tests and release notes
 | View selection causes render-selection loop | Repeated reconnects | Adapter suppression around programmatic reveal/render |
 | CLI and socket metadata disagree | Connection to wrong/incompatible endpoint | Resolve selected endpoint, then trust validated ping; reject inconsistency |
 | Scope leaks into #12 reconnect work | Larger change and unclear acceptance | No timers/backoff/stale retention in #11; disconnected state waits for explicit trigger |
-| Full projection mapping makes #11 large | Longer implementation and review | Keep one host-neutral model and one reducer; avoid premature child Views or mutation operations |
+| Full snapshot replacement causes excess serialization or View refresh | CPU/UI overhead in large Herdr Sessions | Start without diff; measure; then add normalized equality/targeted diff, and consider event queue/reducer only if still needed |
 | Protocol DTOs leak into capability types | Future Herdr changes spread through features | Map at infrastructure seam and test public capability data |
 | Logging leaks large/session-sensitive data | Privacy and noisy Output channel | Log identifiers/metadata/diagnostics, never full snapshot or raw event body |
 
 ## 19. Implementation sequence
 
-Prerequisites: complete #23 with existing behavior preserved; validate the version-specific topology/reconciliation contract in §10.1 before claiming bootstrap authority.
+Prerequisites: #23 is complete and #24 records the accepted version-specific topology, reconciliation strategy, and protocol limitation.
 
 Then implement reviewable slices:
 
 1. **State/contracts split** — catalog availability versus observable active authority; preserve useful status seams without mandatory view layers.
 2. **Catalog deepening** — discover known Sessions, resolve one, explicitly start selected Session.
 3. **Transport and correlation** — implement supported transport topology, framing, IDs, failures, and complete resource cleanup.
-4. **Bootstrap and projection** — normalize snapshot/events, apply verified reconciliation, publish readonly coherent state.
+4. **Bootstrap and projection** — subscribe first, coalesce invalidations, serialize full snapshot replacement, and publish readonly complete state without an initial diff.
 5. **Selection** — persistence precedence, generation guards, switching and explicit retry.
 6. **Feature-owned host UI** — Sessions TreeProvider, status and command integration, contributions, and host composition.
 7. **Verification** — controlled client integration tests, isolated version evidence, focused Extension Host checks, and repository validation.
@@ -879,7 +887,7 @@ Resolve or verify the remaining implementation-design choices:
 - [ ] Verify the initial supported protocol policy for the target runtime.
 - [ ] Map the records/events needed for a coherent typed projection without speculative future-only fields.
 - [ ] #23 has completed the host ownership/alias/lint migration; direct imports of host-neutral implementations still load without VS Code.
-- [ ] Target-version evidence establishes transport topology and snapshot/event reconciliation; no unsupported single-socket or idempotence-only guarantee remains.
+- [x] Target-version evidence establishes transport topology; the owner accepts invalidation-driven full-snapshot reconciliation and the documented silent-overflow limitation.
 - [ ] The listed blast radius is acceptable before source implementation begins.
 
 ## 21. Exit criteria for the design phase

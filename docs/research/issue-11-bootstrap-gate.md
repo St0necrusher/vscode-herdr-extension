@@ -1,8 +1,12 @@
 # Research: issue #11 §10.1 bootstrap gate — Herdr v0.9.0 / protocol 22
 
-## Summary
+## Decision update (2026-09-18)
 
-The gate is **not cleared**. The v0.9.0 tag (annotated tag `cca4af8…`, commit `b99002a…`) does document subscribe-first/snapshot-second and its source establishes a server-side subscription start point, but protocol 22 is one-request-per-connection, has a silently bounded 512-event hub, lacks a wire cursor/instance identity, and cannot globally subscribe to `pane.agent_status_changed`. Therefore the design cannot yet claim a universally coherent authoritative projection or prove that its physical sockets reach the same server generation.
+This report remains the factual v0.9.0/protocol 22 baseline, but its original strict gate is superseded by the owner decision recorded in [`issue-24-herdr-switcher-audit.md`](./issue-24-herdr-switcher-audit.md). Issue #11 will use subscribe-first snapshot reconciliation: subscribed events invalidate the current projection and trigger a coalesced full snapshot replacement. The first implementation will not replay event payloads, compute snapshot diffs, or claim a universal loss-free event guarantee. The silent 512-event overflow remains an accepted low-probability limitation rather than an implementation blocker.
+
+## Original summary
+
+Under the original universal-authority requirement, the gate was **not cleared**. The v0.9.0 tag (annotated tag `cca4af8…`, commit `b99002a…`) does document subscribe-first/snapshot-second and its source establishes a server-side subscription start point, but protocol 22 is one-request-per-connection, has a silently bounded 512-event hub, lacks a wire cursor/instance identity, and cannot globally subscribe to `pane.agent_status_changed`. Therefore that stricter design could not claim a universally coherent authoritative projection or prove that its physical sockets reach the same server generation.
 
 Issue #23 at local commit `b604743df0a067c54febfc814d4a472395d5c689` matches the feature-ownership baseline described in `docs/design/issue-11-connect-bootstrap-session.md`; no #23 implementation mismatch was found. The mismatches below are in the proposed §10 protocol design, not product decisions.
 
