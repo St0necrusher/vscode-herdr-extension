@@ -18,7 +18,7 @@ Local navigation selection is not server focus. Server focus events update obser
 | --- | --- |
 | `catalog/` | Discover known Sessions, report executable/availability state, refresh configuration, and explicitly start a Session. |
 | `active-session/` | Selected Session, persistence, connection generation, bootstrap, one observable projection, authority/freshness, and connection disposal; reconnect policy in #12. |
-| `status/`, `commands/` when useful | Host-neutral status/action policy and operation routing where these have substantive behavior or a useful controlled seam. |
+| `status/` when useful | Substantive host-neutral status/action policy, not pass-through command binding. |
 | `vscode/` | Sessions-specific Status Bar, TreeProvider, concrete command registration, copy, icons, accessibility, and VS Code resources. |
 
 A separate `sessions-view/` controller/model is not mandatory. A provider may read narrow state sources and invoke operations directly. Do not add a wrapper store around the active-session service or copy domain records into each View.
@@ -31,22 +31,20 @@ The feature root is the common composition owner of its children. Its ordinary p
 
 ```text
 features/sessions/
-  index.ts                    # exports VsCodeSessionsFeature
-  SessionsFeature.ts          # host-neutral implementation; tests import directly
-  VsCodeSessionsFeature.ts    # root-level owner of host composition
+  index.ts                    # exports SessionsFeature
+  SessionsFeature.ts          # single owner of state, presentation, and registrations
   capabilities/
   catalog/
   active-session/             # introduced in #11
   status/                    # retain while it carries useful policy
-  commands/                  # retain while it carries useful policy
   vscode/
     index.ts
     # Session-specific status, tree, command implementations
 ```
 
-These are target responsibilities; exact class/file names may be refined without changing the graph. The host composition owner can construct host children and supply their capabilities to host-neutral composition. It does not import the VS Code API itself; concrete API calls stay in the host child. Sibling children communicate through parent-local capabilities, not sibling implementations.
+These are target responsibilities; exact class/file names may be refined without changing the graph. The single feature owner constructs the catalog, substantive status policy, concrete status view, and command binding. There is no second host-neutral feature composition solely for tests. It does not import the VS Code API itself; concrete API calls stay in the host child. Sibling children communicate through parent-local capabilities, not sibling implementations.
 
-`HerdrExtension` creates shared infrastructure, imports `VsCodeSessionsFeature` from `#features/sessions`, injects external capabilities, and disposes the feature owner. Do not export `SessionsFeature` or add `vscode.ts` solely for tests. The feature owner disposes its children. Do not also retain top-level disposal of a resource whose ownership moved into the feature.
+`HerdrExtension` creates shared infrastructure, imports `SessionsFeature` from `#features/sessions`, injects external capabilities, and disposes the feature owner. Do not add a second feature wrapper, extra entry, or forwarding operations solely for tests. The feature owner disposes its children. Do not also retain top-level disposal of a resource whose ownership moved into the feature.
 
 ## Capabilities and infrastructure
 
@@ -95,16 +93,18 @@ Dispose all owned transports, reject pending work, clear buffers/subscriptions, 
 
 Status and the Sessions TreeProvider consume catalog/active state and operations. Host code owns copy, icons, TreeItems, command IDs, and concrete registrations; manifest titles remain in `package.json`.
 
-Retain the existing host-neutral status controller/model where it protects useful behavior/tests. Do not require every future View to reproduce it. Keep substantive policy independent of VS Code and avoid injecting a mirror of the complete VS Code API.
+Retain the host-neutral status controller/model while it owns actual status derivation, available actions, and action policy. Test convenience alone does not justify it. `VsCodeHerdrCommands` stores dependencies in its constructor. `SessionsFeature.initialize()` calls its `register()` before catalog discovery to bind command IDs directly to catalog/status/configuration operations. The feature guards repeated initialization and initialization after disposal; the command module owns registration cleanup, including partial registration failure and disposal before registration. No intermediate command controller, registry interface, or handler bag is needed. Do not require every future View to reproduce it. Keep substantive policy independent of VS Code and avoid injecting a mirror of the complete VS Code API.
 
 State rendering, one-time notifications, focus/handoff, and layout opening are separate kinds of behavior. Bootstrap must not manufacture historical notifications or focus actions. Terminal output frames and screen history do not belong to the Session domain projection.
 
 ## Initialization and disposal
 
-Initialize dependent resources in order:
+The current constructor builds children, creates status presentation, and subscribes status policy; these resources are owned immediately and cleaned up even if initialization never starts. Command construction only stores dependencies. Do not infer that every constructor is side-effect-free from this command lifecycle.
+
+`SessionsFeature.initialize()` performs the remaining startup in order:
 
 ```text
-register presentation and commands
+register commands (presentation/subscriptions already exist)
 → discover catalog
 → resolve local selection
 → connect and bootstrap if running

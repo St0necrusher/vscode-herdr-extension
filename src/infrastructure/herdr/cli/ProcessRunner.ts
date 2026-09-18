@@ -1,4 +1,8 @@
 import { execFile, spawn } from "node:child_process";
+import { once } from "node:events";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export type ProcessResult = Readonly<{ stdout: string; stderr: string }>;
 
@@ -8,42 +12,27 @@ export interface ProcessRunner {
 }
 
 export class NodeProcessRunner implements ProcessRunner {
-  run(executable: string, args: readonly string[]): Promise<ProcessResult> {
-    return new Promise((resolve, reject) => {
-      execFile(
-        executable,
-        [...args],
-        { encoding: "utf8", timeout: 5_000, maxBuffer: 1024 * 1024 },
-        (error, stdout, stderr) => {
-          if (error) {
-            reject(
-              Object.assign(new Error(error.message, { cause: error }), {
-                code: error.code,
-                stdout,
-                stderr,
-              }),
-            );
-            return;
-          }
-          resolve({ stdout, stderr });
-        },
-      );
+  async run(
+    executable: string,
+    args: readonly string[],
+  ): Promise<ProcessResult> {
+    return await execFileAsync(executable, [...args], {
+      encoding: "utf8",
+      timeout: 5_000,
+      maxBuffer: 1024 * 1024,
     });
   }
 
-  spawnDetached(executable: string, args: readonly string[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const child = spawn(executable, [...args], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      child.once("error", reject);
-      child.once("spawn", () => {
-        child.removeListener("error", reject);
-        child.unref();
-        resolve();
-      });
+  async spawnDetached(
+    executable: string,
+    args: readonly string[],
+  ): Promise<void> {
+    const child = spawn(executable, [...args], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
     });
+    await once(child, "spawn");
+    child.unref();
   }
 }

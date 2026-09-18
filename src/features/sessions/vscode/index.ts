@@ -1,2 +1,2 @@
-export { VsCodeHerdrCommandRegistry } from "./VsCodeHerdrCommandRegistry.js";
+export { VsCodeHerdrCommands } from "./VsCodeHerdrCommands.js";
 export { VsCodeHerdrStatusView } from "./VsCodeHerdrStatusView.js";

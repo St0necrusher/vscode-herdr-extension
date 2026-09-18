@@ -1,2 +1,2 @@
-export { VsCodeSessionsFeature } from "./VsCodeSessionsFeature.js";
-export type { VsCodeSessionsFeatureDependencies } from "./VsCodeSessionsFeature.js";
+export { SessionsFeature } from "./SessionsFeature.js";
+export type { SessionsFeatureDependencies } from "./SessionsFeature.js";

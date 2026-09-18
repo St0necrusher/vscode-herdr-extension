@@ -55,15 +55,3 @@ export interface HerdrStatusView {
     status: HerdrStatusModel,
   ): Promise<HerdrStatusAction | undefined>;
 }
-
-export type HerdrCommandHandlers = Readonly<{
-  showStatusActions(): Promise<void>;
-  retryDiscovery(): Promise<void>;
-  start(): Promise<void>;
-  selectExecutable(): Promise<void>;
-  openSettings(): Promise<void>;
-}>;
-
-export interface HerdrCommandRegistry {
-  register(handlers: HerdrCommandHandlers): { dispose(): void };
-}

@@ -82,7 +82,7 @@ The implemented #10/#22 source has:
 - behavioral feature tests, CLI tests, and Extension Host activation coverage;
 - no active-session service, socket bootstrap, selection persistence, or Sessions TreeProvider.
 
-#23 places Session-specific host code under `features/sessions/vscode/` and composes it in `VsCodeSessionsFeature`. The accepted follow-up exports that owner from the ordinary `features/sessions/index.ts` through `#features/sessions`; source/aliases/lint must be aligned before #23 completes. Host-neutral implementations remain directly importable by tests without VS Code, without a separate public entry. Existing useful status/controller test seams can remain; new Views need not copy them.
+#23 placed Session-specific host code under `features/sessions/vscode/`. The accepted follow-up uses one `SessionsFeature`, exported from the ordinary `features/sessions/index.ts` through `#features/sessions`, without a second host-neutral feature wrapper. State/policy modules remain directly importable without VS Code. Commands bind directly to operations in `VsCodeHerdrCommands`; its constructor stores dependencies and the feature calls `register()` during initialization before discovery. Status policy remains separate because it derives status/actions, not to preserve a test harness.
 
 This design builds on that baseline. #11 separates catalog availability from actual connection authority and adds only its assigned behavior.
 
@@ -194,11 +194,10 @@ For #11, a post-bootstrap socket closure transitions the active Session to disco
 HerdrExtension
 ├── Herdr CLI and socket infrastructure
 ├── shared VS Code configuration/logging facilities
-└── VsCodeSessionsFeature (exported by features/sessions/index.ts)
-    ├── host-neutral SessionsFeature
-    │   ├── HerdrSessionsService
-    │   ├── ActiveHerdrSessionService
-    │   └── existing useful status/action policy
+└── SessionsFeature (exported by features/sessions/index.ts)
+    ├── HerdrSessionsService
+    ├── ActiveHerdrSessionService
+    ├── substantive status/action policy
     └── Sessions vscode/ children
         ├── status presentation and command registration
         ├── Sessions TreeProvider/presenter
@@ -207,7 +206,7 @@ HerdrExtension
 
 Composition passes host-neutral capabilities between children. Host presentation may receive active operations and state sources directly; siblings never import each other's implementations. Catalog and active state may have distinct narrow interfaces implemented by the same owner where appropriate.
 
-The ordinary `features/sessions/index.ts` exports `VsCodeSessionsFeature`; the extension imports it through `#features/sessions`. Host-neutral state/policy implementations must not load `vscode`; tests may import these files directly without going through the feature barrel. Do not create test-only production exports or an additional `vscode.ts` entry. The root composition owner constructs its host and host-neutral children without directly using the VS Code API. API calls stay in `vscode/` children.
+The ordinary `features/sessions/index.ts` exports the single `SessionsFeature` composition owner; the extension imports it through `#features/sessions`. Host-neutral state/policy implementations must not load `vscode`; tests may import these files directly without going through the feature barrel. Do not create test-only production exports or an additional `vscode.ts` entry. The root composition owner constructs its host and host-neutral children without directly using the VS Code API. API calls stay in `vscode/` children.
 
 Forbidden edges remain:
 
@@ -622,7 +621,7 @@ The provider prevents feedback loops when a render/reveal updates VS Code select
 - catalog state determines missing executable, discovery, and stopped availability;
 - active state determines resolving, connecting, connected, incompatible, and disconnected status.
 
-The command controller receives narrow operations:
+`VsCodeHerdrCommands` directly binds command IDs to narrow operations:
 
 - catalog retry/discovery;
 - start selected Session;
@@ -638,9 +637,9 @@ The status tooltip continues to show Session, executable, version, protocol, end
 
 ### 14.1 Construction
 
-`HerdrExtension` receives `ExtensionContext`, constructs external Herdr providers and shared host facilities, and injects capabilities into the feature's ordinary public composition entry. It passes the necessary host context to that entry without exposing VS Code types to the host-neutral feature surface.
+`HerdrExtension` receives `ExtensionContext`, constructs external Herdr providers and shared host facilities, and injects capabilities into the feature's ordinary public composition entry. It passes the necessary host context to that composition entry without exposing VS Code types to state/policy modules or capability contracts.
 
-The feature-root host composition owner creates Session-specific persistence, Views, and command registration children and supplies their host-neutral contracts where needed. It constructs or delegates host-neutral catalog/active composition explicitly. Register ownership before asynchronous initialization.
+The feature-root host composition owner creates Session-specific persistence, Views, and command registration children and supplies their host-neutral contracts where needed. It constructs catalog and active state owners directly; no second feature wrapper is introduced for tests. Register ownership before asynchronous initialization.
 
 ### 14.2 Initialization order
 
@@ -652,7 +651,7 @@ register status, Sessions View, and commands
 → connect and bootstrap if running
 ```
 
-Register state subscribers before asynchronous discovery. A stopped/unavailable Session is a successful feature initialization with a non-connected state. A bootstrap failure becomes active state/diagnostics rather than necessarily preventing activation. Registration failure still triggers cleanup.
+Construct the command-binding object with its dependencies; call `register()` from `SessionsFeature.initialize()` before discovery. Repeated initialization awaits the same work without duplicate registration; disposal prevents reactivation. Current status UI and its subscription are created during feature construction and are disposed even if initialization never starts; this design does not claim all constructors are side-effect-free. Register state subscribers before asynchronous discovery. A stopped/unavailable Session is a successful feature initialization with a non-connected state. A bootstrap failure becomes active state/diagnostics rather than necessarily preventing activation. Registration failure still triggers cleanup.
 
 ### 14.3 Disposal order
 
@@ -677,7 +676,7 @@ Navigation Session switching disposes only the previous navigation connection. I
 
 ### 16.1 Fast feature tests
 
-Extend `src/features/sessions/SessionsFeature.test.ts` and, only where a child has an independently meaningful interface, add colocated child tests.
+Extend colocated catalog and status-policy tests and add active-session behavioral tests through its state/operation interfaces. The feature composition is VS Code-oriented: test its registrations and lifecycle in `test/extension/sessions.test.ts`, not through a host-neutral wrapper created solely for tests.
 
 Test observable host-neutral behavior by directly importing the implementation under test or using useful capability seams. Do not require a public feature export or globally mock `vscode`:
 
@@ -776,9 +775,8 @@ Paths below use the #23 exports and files; do not redo their ownership migration
 | `src/capabilities/sessions/index.ts` | External catalog, connection, snapshot/event and failure contracts | High: public seam |
 | `src/features/sessions/capabilities/` | Local active/catalog state sources and operations | Medium |
 | `src/features/sessions/catalog/` | All-Session discovery; remove CLI-derived authority | High |
-| `src/features/sessions/status/` and `commands/` where retained | Actual active authority, selected-Session operations | High/medium |
-| `src/features/sessions/SessionsFeature.ts` | Host-neutral active/catalog composition | High |
-| `src/features/sessions/index.ts`, `VsCodeSessionsFeature.ts` | Export composition, construct persistence/provider, inject capabilities, own lifecycle | High |
+| `src/features/sessions/status/` and `vscode/VsCodeHerdrCommands.ts` | Actual active authority and direct bindings to selected-Session operations | High/medium |
+| `src/features/sessions/SessionsFeature.ts`, `index.ts` | Single composition owner and export: construct state/persistence/provider, inject capabilities, own lifecycle | High |
 | `src/features/sessions/vscode/` | Adapt existing status/commands and add Sessions provider | Medium |
 | `src/infrastructure/herdr/cli/` | All Sessions, resolution, explicit selected start | High |
 | `src/infrastructure/herdr/index.ts` | Export connection factory | Medium |

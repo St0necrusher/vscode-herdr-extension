@@ -59,8 +59,8 @@ export class HerdrSessionsService
     return { dispose: () => this.listeners.delete(listener) };
   }
 
-  retry(): Promise<void> {
-    return this.discover();
+  async retry(): Promise<void> {
+    await this.discover();
   }
 
   async start(): Promise<void> {

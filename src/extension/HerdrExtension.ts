@@ -1,5 +1,5 @@
 import type * as vscode from "vscode";
-import { VsCodeSessionsFeature } from "#features/sessions";
+import { SessionsFeature } from "#features/sessions";
 import {
   HerdrCliSessionDirectory,
   NodeProcessRunner,
@@ -11,13 +11,13 @@ import {
 
 export class HerdrExtension implements vscode.Disposable {
   private readonly logger: VsCodeHerdrLogger;
-  private readonly sessions: VsCodeSessionsFeature;
+  private readonly sessions: SessionsFeature;
   private disposed = false;
 
   constructor() {
     this.logger = new VsCodeHerdrLogger();
     const configuration = new VsCodeHerdrConfiguration();
-    this.sessions = new VsCodeSessionsFeature({
+    this.sessions = new SessionsFeature({
       directory: new HerdrCliSessionDirectory(new NodeProcessRunner()),
       configuration,
       configurationActions: configuration,

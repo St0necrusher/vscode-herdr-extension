@@ -2,31 +2,26 @@ import type { HerdrLogger } from "#capabilities/runtime";
 import type {
   HerdrConfigurationActions,
   HerdrConfigurationSource,
-  HerdrSessionCatalogState,
   HerdrSessionDirectory,
 } from "#capabilities/sessions";
-import type {
-  HerdrCommandRegistry,
-  HerdrStatusView,
-} from "./capabilities/index.js";
 import { HerdrSessionsService } from "./catalog/index.js";
-import { HerdrSessionsCommandsController } from "./commands/index.js";
 import { HerdrStatusController } from "./status/index.js";
+import { VsCodeHerdrCommands, VsCodeHerdrStatusView } from "./vscode/index.js";
 
 export type SessionsFeatureDependencies = Readonly<{
   directory: HerdrSessionDirectory;
   configuration: HerdrConfigurationSource;
-  statusView: HerdrStatusView;
   configurationActions: HerdrConfigurationActions;
-  commands: HerdrCommandRegistry;
   logger: HerdrLogger;
 }>;
 
 export class SessionsFeature {
   private readonly catalog: HerdrSessionsService;
+  private readonly statusView: VsCodeHerdrStatusView;
   private readonly status: HerdrStatusController;
-  private readonly commands: HerdrSessionsCommandsController;
+  private readonly commands: VsCodeHerdrCommands;
   private disposed = false;
+  private initialization: Promise<void> | undefined;
 
   constructor(dependencies: SessionsFeatureDependencies) {
     this.catalog = new HerdrSessionsService(
@@ -34,35 +29,50 @@ export class SessionsFeature {
       dependencies.configuration,
       dependencies.logger,
     );
-    this.status = new HerdrStatusController(
-      this.catalog,
-      this.catalog,
-      dependencies.statusView,
-      dependencies.configurationActions,
-      dependencies.logger,
-    );
-    this.commands = new HerdrSessionsCommandsController(
-      dependencies.commands,
-      this.catalog,
-      this.status,
-      dependencies.configurationActions,
-    );
+    let statusView: VsCodeHerdrStatusView | undefined;
+    let status: HerdrStatusController | undefined;
+
+    try {
+      statusView = new VsCodeHerdrStatusView(dependencies.logger);
+      status = new HerdrStatusController(
+        this.catalog,
+        this.catalog,
+        statusView,
+        dependencies.configurationActions,
+        dependencies.logger,
+      );
+      this.commands = new VsCodeHerdrCommands(
+        this.catalog,
+        status,
+        dependencies.configurationActions,
+      );
+      this.statusView = statusView;
+      this.status = status;
+    } catch (error) {
+      status?.dispose();
+      statusView?.dispose();
+      this.catalog.dispose();
+      throw error;
+    }
   }
 
-  initialize(): Promise<void> {
-    return this.catalog.initialize();
+  async initialize(): Promise<void> {
+    if (this.disposed) return;
+    this.initialization ??= this.initializeResources();
+    await this.initialization;
   }
 
-  retry(): Promise<void> {
-    return this.catalog.retry();
-  }
-
-  start(): Promise<void> {
-    return this.catalog.start();
-  }
-
-  getCatalogState(): HerdrSessionCatalogState {
-    return this.catalog.getState();
+  private async initializeResources(): Promise<void> {
+    // Cache the shared initialization before any callbacks can reenter it.
+    await Promise.resolve();
+    if (this.disposed) return;
+    try {
+      this.commands.register();
+      await this.catalog.initialize();
+    } catch (error) {
+      this.dispose();
+      throw error;
+    }
   }
 
   dispose(): void {
@@ -70,6 +80,7 @@ export class SessionsFeature {
     this.disposed = true;
     this.commands.dispose();
     this.status.dispose();
+    this.statusView.dispose();
     this.catalog.dispose();
   }
 }

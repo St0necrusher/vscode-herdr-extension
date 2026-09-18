@@ -242,7 +242,7 @@ export default tseslint.config(
     files: ["src/features/*/*.ts"],
     ignores: [
       "src/features/*/index.ts",
-      "src/features/*/VsCode*Feature.ts",
+      "src/features/*/*Feature.ts",
       "src/features/**/*.test.ts",
     ],
     rules: {
@@ -272,7 +272,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/features/*/VsCode*Feature.ts", "src/features/*/index.ts"],
+    files: ["src/features/*/*Feature.ts", "src/features/*/index.ts"],
     rules: {
       "no-restricted-imports": [
         "error",

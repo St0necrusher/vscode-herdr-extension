@@ -1,6 +1,6 @@
 # Accepted direction: reactive Herdr state and feature-owned VS Code presentation
 
-Status: **architecture direction accepted by the owner and implemented by [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23)**.
+Status: **feature ownership implemented by [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23); owner-approved follow-up removes redundant composition and command-binding layers**.
 
 This decision tunes implementation structure without reopening product decisions in #1–#9. Canonical architecture documents, source, aliases, and ESLint guardrails follow this direction. This document records rationale and scope, not permission to expand #11.
 
@@ -75,7 +75,7 @@ These replacements are reflected in the canonical documents and source layout.
 | --- | --- |
 | All concrete VS Code presentation belongs to `infrastructure/vscode` | Feature-specific presentation and command binding belong to that feature's explicitly named `vscode/` child. Cross-feature host facilities may remain in infrastructure. |
 | Features are entirely host-neutral | State owners, synchronization, and independently meaningful policy remain host-neutral. The feature's host child may use VS Code directly. |
-| Every view follows capability data → feature view model → infrastructure view | Presentation reads a narrow state source and invokes narrow operations. Add a model/controller/interface only for a current policy, transformation, substitution, or testing need. |
+| Every view follows capability data → feature view model → infrastructure view | Presentation reads a narrow state source and invokes narrow operations. Add a model/controller/interface only for substantive policy, transformation, or production substitution. Test convenience alone is not a reason. |
 | Feature composition cannot construct its concrete VS Code presentation | A feature-owned host composition entry constructs its host children; the extension root wires top-level dependencies and owns top-level lifecycle. |
 
 Retain capability independence, public entry points, sibling isolation, package-import aliases, class/lifecycle rules, and feature-to-infrastructure implementation isolation. Allowing `vscode` imports is **not** permission to import concrete Herdr infrastructure from a feature.
@@ -102,9 +102,10 @@ Use the existing discovery/status/commands slice to establish the boundary befor
 
 - Move `VsCodeHerdrStatusView` from `src/infrastructure/vscode/presentation/` into the Sessions feature's host child.
 - Move Session-specific VS Code command registration from `src/infrastructure/vscode/commands/` into the same feature owner.
-- Export `VsCodeSessionsFeature` from the ordinary Sessions `index.ts`; update `HerdrExtension` to use `#features/sessions` and transfer resource ownership without double disposal. Remove the redundant `vscode.ts` entry/alias and the test-only public export of `SessionsFeature`.
+- Export one `SessionsFeature` from the ordinary Sessions `index.ts`. It directly composes catalog, status policy, concrete view, and command registrations. Remove the `VsCodeSessionsFeature` wrapper, test-only forwarding methods, and any redundant host entry.
+- Bind command IDs directly to catalog/status/configuration operations in `VsCodeHerdrCommands`. Remove the pass-through commands controller, registry interface, and intermediate handler bag; preserve cleanup on partial registration failure.
 - Keep the catalog and substantive status/action policy independently importable and testable without VS Code.
-- Preserve the existing controller/view seam where it still carries real behavior or a useful controlled test boundary. Do not merge it solely to reduce class count. New Views are not required to copy it.
+- Preserve the status controller/view seam while it carries substantive status derivation and action policy, not merely because existing tests use it. Do not merge it solely to reduce class count. New Views are not required to copy it.
 - Update exports, aliases, canonical rules, and architecture lint together. Remove only files/contracts made obsolete by these moves.
 
 ### Explicit exclusions
@@ -123,11 +124,11 @@ Preserve current visible status semantics during this refactor, including the ba
 
 The earlier `/impl` rule separates test authoring from production implementation. If execution uses that workflow, test additions/changes and guardrail verification fixtures need an explicitly approved testing phase; they are not silently included in a production-only pass. Existing tests can still run throughout.
 
-Repository commands: `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm test`, `npm run build`, `npm run test:extension`. This proposal does not claim these checks have run for a refactor that has not started.
+Repository commands: `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm test`, `npm run build`, `npm run test:extension`. The follow-up was validated locally with these commands: typecheck, lint, formatting, 18 fast tests, build, and 6 Extension Host tests passed. This is local evidence, not a claim about CI.
 
 ## 7. Work that belongs inside #11
 
-`docs/design/issue-11-connect-bootstrap-session.md` uses `VsCodeSessionsFeature` exported through the ordinary `features/sessions/index.ts`. This entry-point simplification is the accepted follow-up to the initial #23 implementation; source/aliases/lint still need to be aligned. The bootstrap evidence gate remains unresolved:
+`docs/design/issue-11-connect-bootstrap-session.md` uses one `SessionsFeature` exported through the ordinary `features/sessions/index.ts`. The accepted follow-up removes the second feature composition and forwarding command-binding layers; state/policy tests exercise the actual owners rather than requiring a host-neutral feature wrapper. The bootstrap evidence gate remains unresolved:
 
 | Sections | Amendment |
 | --- | --- |
@@ -151,4 +152,4 @@ The current public [Socket API documentation](https://herdr.dev/docs/socket-api/
 
 If doing the refactor inside #11 instead, keep it as a distinct first, behavior-preserving slice with the same exit criteria. Do not intertwine file movement, import-policy changes, and new socket state transitions in one unreviewable change.
 
-The feature-owned host boundary is accepted. The owner subsequently simplified entry-point and test-import rules: update source, package mappings, tests, and ESLint to the ordinary Sessions entry before claiming full alignment. This follow-up changes no product behavior.
+The feature-owned host boundary is accepted. The follow-up additionally rejects production scaffolding whose only purpose is the test harness. The approved testing phase migrated catalog/status assertions to their actual owners and command bindings/lifecycle to Extension Host tests. The removed host-neutral feature harness was not retained as production scaffolding. This follow-up changes no product behavior.

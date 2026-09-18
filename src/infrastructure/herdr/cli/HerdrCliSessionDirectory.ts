@@ -68,8 +68,8 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
     }
   }
 
-  start(configuration: HerdrConfiguration): Promise<void> {
-    return this.runner.spawnDetached(
+  async start(configuration: HerdrConfiguration): Promise<void> {
+    await this.runner.spawnDetached(
       configuration.executable,
       serverArgs(configuration),
     );

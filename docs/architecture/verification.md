@@ -17,7 +17,7 @@ Tests may directly import the implementation under test, bypassing production en
 
 Production import visibility is not a test-access policy. Colocated tests may directly import their module's implementation; integration tests may directly import implementations they intentionally exercise. These exceptions do not allow production code to import tests or bypass its own boundaries. Do not manually assemble another module's private children merely to assert their wiring; prefer its meaningful behavior. Keep test helpers out of production exports.
 
-A controlled implementation used in a test satisfies the same capability consumed in production. Tests do not require a production service to construct its own fake dependency.
+A controlled implementation used in a test satisfies the same real boundary consumed in production. Tests do not require a production service to construct its own fake dependency. Do not preserve a host-neutral feature wrapper, forwarding controller, command registry interface, or production-only-for-tests accessors to retain a test harness. Test catalog/state and substantive status policy directly; test real command binding and feature composition at the host integration boundary. If a seam is removed, migrate its behavioral coverage rather than recreate it as production scaffolding.
 
 A test does not assert private methods, concrete child classes, constructor wiring, incidental collaborator calls, or file layout. Calls that are themselves required external effects, such as explicitly starting a Herdr Session, remain observable behavior.
 
