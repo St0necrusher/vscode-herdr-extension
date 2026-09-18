@@ -9,8 +9,7 @@ function createRunner(outputs: (ReturnType<typeof result> | Error)[]) {
   const run = vi.fn(() => {
     const output = outputs.shift();
     if (output instanceof Error) return Promise.reject(output);
-    if (output === undefined)
-      return Promise.reject(new Error("No process result"));
+    if (output === undefined) return Promise.reject(new Error("No process result"));
     return Promise.resolve(output);
   });
   const spawnDetached = vi.fn(() => Promise.resolve());
@@ -42,9 +41,7 @@ describe("Herdr CLI Session directory", () => {
     });
     const { runner } = createRunner([missing]);
 
-    await expect(
-      new HerdrCliSessionDirectory(runner).discover(defaults),
-    ).resolves.toMatchObject({
+    await expect(new HerdrCliSessionDirectory(runner).discover(defaults)).resolves.toMatchObject({
       kind: "missing-executable",
       configuration: defaults,
     });
@@ -53,9 +50,7 @@ describe("Herdr CLI Session directory", () => {
   it("maps a stopped Herdr Session", async () => {
     const { runner } = createRunner([sessionList(false)]);
 
-    await expect(
-      new HerdrCliSessionDirectory(runner).discover(defaults),
-    ).resolves.toEqual({
+    await expect(new HerdrCliSessionDirectory(runner).discover(defaults)).resolves.toEqual({
       kind: "stopped",
       configuration: defaults,
     });
@@ -67,9 +62,7 @@ describe("Herdr CLI Session directory", () => {
     });
     const { runner } = createRunner([failure]);
 
-    await expect(
-      new HerdrCliSessionDirectory(runner).discover(defaults),
-    ).resolves.toEqual({
+    await expect(new HerdrCliSessionDirectory(runner).discover(defaults)).resolves.toEqual({
       kind: "error",
       configuration: defaults,
       diagnostic: "Session discovery failed",
@@ -92,9 +85,7 @@ describe("Herdr CLI Session directory", () => {
       }),
     ]);
 
-    await expect(
-      new HerdrCliSessionDirectory(runner).discover(defaults),
-    ).resolves.toEqual({
+    await expect(new HerdrCliSessionDirectory(runner).discover(defaults)).resolves.toEqual({
       kind: "connected",
       configuration: defaults,
       version: "0.9.0",
@@ -118,9 +109,7 @@ describe("Herdr CLI Session directory", () => {
       }),
     ]);
 
-    await expect(
-      new HerdrCliSessionDirectory(runner).discover(defaults),
-    ).resolves.toMatchObject({
+    await expect(new HerdrCliSessionDirectory(runner).discover(defaults)).resolves.toMatchObject({
       kind: "incompatible",
       version: "1.0.0",
       protocol: 23,
@@ -137,10 +126,6 @@ describe("Herdr CLI Session directory", () => {
       session: "work",
     });
 
-    expect(spawnDetached).toHaveBeenCalledWith("/usr/local/bin/herdr", [
-      "--session",
-      "work",
-      "server",
-    ]);
+    expect(spawnDetached).toHaveBeenCalledWith("/usr/local/bin/herdr", ["--session", "work", "server"]);
   });
 });

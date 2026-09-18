@@ -1,8 +1,4 @@
-import type {
-  HerdrConfiguration,
-  HerdrSessionDirectory,
-  HerdrSessionDiscovery,
-} from "#capabilities/sessions";
+import type { HerdrConfiguration, HerdrSessionDirectory, HerdrSessionDiscovery } from "#capabilities/sessions";
 import type { ProcessRunner } from "./ProcessRunner.js";
 
 interface SessionRecord {
@@ -31,21 +27,13 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
     this.runner = runner;
   }
 
-  async discover(
-    configuration: HerdrConfiguration,
-  ): Promise<HerdrSessionDiscovery> {
+  async discover(configuration: HerdrConfiguration): Promise<HerdrSessionDiscovery> {
     let sessions: SessionRecord[];
     try {
-      const response = await this.runner.run(configuration.executable, [
-        "session",
-        "list",
-        "--json",
-      ]);
+      const response = await this.runner.run(configuration.executable, ["session", "list", "--json"]);
       sessions = parseSessionList(response.stdout);
     } catch (error) {
-      return isMissingExecutable(error)
-        ? missingExecutable(configuration)
-        : discoveryError(configuration, error);
+      return isMissingExecutable(error) ? missingExecutable(configuration) : discoveryError(configuration, error);
     }
 
     const session = sessions.find((candidate) =>
@@ -56,23 +44,15 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
     if (session?.running !== true) return stopped(configuration);
 
     try {
-      const response = await this.runner.run(
-        configuration.executable,
-        statusArgs(configuration),
-      );
+      const response = await this.runner.run(configuration.executable, statusArgs(configuration));
       return discoveryFromStatus(configuration, parseStatus(response.stdout));
     } catch (error) {
-      return isMissingExecutable(error)
-        ? missingExecutable(configuration)
-        : discoveryError(configuration, error);
+      return isMissingExecutable(error) ? missingExecutable(configuration) : discoveryError(configuration, error);
     }
   }
 
   async start(configuration: HerdrConfiguration): Promise<void> {
-    await this.runner.spawnDetached(
-      configuration.executable,
-      serverArgs(configuration),
-    );
+    await this.runner.spawnDetached(configuration.executable, serverArgs(configuration));
   }
 }
 
@@ -90,10 +70,7 @@ function parseStatus(stdout: string): StatusRecord {
   return parsed;
 }
 
-function discoveryFromStatus(
-  configuration: HerdrConfiguration,
-  status: StatusRecord,
-): HerdrSessionDiscovery {
+function discoveryFromStatus(configuration: HerdrConfiguration, status: StatusRecord): HerdrSessionDiscovery {
   const server = status.server;
   if (server?.running !== true) return stopped(configuration);
 
@@ -132,14 +109,10 @@ function statusArgs(configuration: HerdrConfiguration): string[] {
 }
 
 function serverArgs(configuration: HerdrConfiguration): string[] {
-  return configuration.session === "default"
-    ? ["server"]
-    : ["--session", configuration.session, "server"];
+  return configuration.session === "default" ? ["server"] : ["--session", configuration.session, "server"];
 }
 
-function missingExecutable(
-  configuration: HerdrConfiguration,
-): HerdrSessionDiscovery {
+function missingExecutable(configuration: HerdrConfiguration): HerdrSessionDiscovery {
   return { kind: "missing-executable", configuration };
 }
 
@@ -147,10 +120,7 @@ function stopped(configuration: HerdrConfiguration): HerdrSessionDiscovery {
   return { kind: "stopped", configuration };
 }
 
-function discoveryError(
-  configuration: HerdrConfiguration,
-  error: unknown,
-): HerdrSessionDiscovery {
+function discoveryError(configuration: HerdrConfiguration, error: unknown): HerdrSessionDiscovery {
   return {
     kind: "error",
     configuration,
@@ -159,11 +129,7 @@ function discoveryError(
 }
 
 function processErrorMessage(error: unknown): string {
-  if (
-    isRecord(error) &&
-    typeof error.stderr === "string" &&
-    error.stderr.trim()
-  ) {
+  if (isRecord(error) && typeof error.stderr === "string" && error.stderr.trim()) {
     return error.stderr.trim();
   }
   return error instanceof Error ? error.message : String(error);

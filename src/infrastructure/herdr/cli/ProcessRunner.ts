@@ -12,10 +12,7 @@ export interface ProcessRunner {
 }
 
 export class NodeProcessRunner implements ProcessRunner {
-  async run(
-    executable: string,
-    args: readonly string[],
-  ): Promise<ProcessResult> {
+  async run(executable: string, args: readonly string[]): Promise<ProcessResult> {
     return await execFileAsync(executable, [...args], {
       encoding: "utf8",
       timeout: 5_000,
@@ -23,10 +20,7 @@ export class NodeProcessRunner implements ProcessRunner {
     });
   }
 
-  async spawnDetached(
-    executable: string,
-    args: readonly string[],
-  ): Promise<void> {
+  async spawnDetached(executable: string, args: readonly string[]): Promise<void> {
     const child = spawn(executable, [...args], {
       detached: true,
       stdio: "ignore",

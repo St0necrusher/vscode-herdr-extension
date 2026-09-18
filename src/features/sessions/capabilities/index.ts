@@ -16,12 +16,7 @@ export interface HerdrStatusOperations {
   showActions(): Promise<void>;
 }
 
-export type HerdrStatusAction =
-  | "start"
-  | "select-executable"
-  | "open-settings"
-  | "retry"
-  | "show-diagnostics";
+export type HerdrStatusAction = "start" | "select-executable" | "open-settings" | "retry" | "show-diagnostics";
 
 type HerdrStatusIdentity = Readonly<{
   herdrSession: string;
@@ -51,7 +46,5 @@ export type HerdrStatusModel = HerdrStatusIdentity &
 
 export interface HerdrStatusView {
   render(status: HerdrStatusModel): void;
-  chooseAction(
-    status: HerdrStatusModel,
-  ): Promise<HerdrStatusAction | undefined>;
+  chooseAction(status: HerdrStatusModel): Promise<HerdrStatusAction | undefined>;
 }

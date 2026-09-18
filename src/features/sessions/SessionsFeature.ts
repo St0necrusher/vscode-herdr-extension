@@ -24,11 +24,7 @@ export class SessionsFeature {
   private initialization: Promise<void> | undefined;
 
   constructor(dependencies: SessionsFeatureDependencies) {
-    this.catalog = new HerdrSessionsService(
-      dependencies.directory,
-      dependencies.configuration,
-      dependencies.logger,
-    );
+    this.catalog = new HerdrSessionsService(dependencies.directory, dependencies.configuration, dependencies.logger);
     let statusView: VsCodeHerdrStatusView | undefined;
     let status: HerdrStatusController | undefined;
 
@@ -41,11 +37,7 @@ export class SessionsFeature {
         dependencies.configurationActions,
         dependencies.logger,
       );
-      this.commands = new VsCodeHerdrCommands(
-        this.catalog,
-        status,
-        dependencies.configurationActions,
-      );
+      this.commands = new VsCodeHerdrCommands(this.catalog, status, dependencies.configurationActions);
       this.statusView = statusView;
       this.status = status;
     } catch (error) {

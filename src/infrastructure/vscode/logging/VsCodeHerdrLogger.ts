@@ -11,8 +11,7 @@ export class VsCodeHerdrLogger implements HerdrLogger {
   }
 
   error(message: string, error?: unknown): void {
-    const detail =
-      error instanceof Error ? (error.stack ?? error.message) : error;
+    const detail = error instanceof Error ? (error.stack ?? error.message) : error;
     this.output.error(message, detail);
   }
 

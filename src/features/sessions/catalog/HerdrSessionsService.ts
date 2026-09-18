@@ -1,34 +1,19 @@
 import type { HerdrLogger } from "#capabilities/runtime";
-import type {
-  HerdrConfigurationSource,
-  HerdrSessionCatalogState,
-  HerdrSessionDirectory,
-} from "#capabilities/sessions";
-import type {
-  HerdrSessionCatalogOperations,
-  HerdrSessionCatalogStateSource,
-} from "../capabilities/index.js";
+import type { HerdrConfigurationSource, HerdrSessionCatalogState, HerdrSessionDirectory } from "#capabilities/sessions";
+import type { HerdrSessionCatalogOperations, HerdrSessionCatalogStateSource } from "../capabilities/index.js";
 
-export class HerdrSessionsService
-  implements HerdrSessionCatalogStateSource, HerdrSessionCatalogOperations
-{
+export class HerdrSessionsService implements HerdrSessionCatalogStateSource, HerdrSessionCatalogOperations {
   private readonly directory: HerdrSessionDirectory;
   private readonly configuration: HerdrConfigurationSource;
   private readonly logger: HerdrLogger;
-  private readonly listeners = new Set<
-    (state: HerdrSessionCatalogState) => void
-  >();
+  private readonly listeners = new Set<(state: HerdrSessionCatalogState) => void>();
   private state: HerdrSessionCatalogState;
   private configurationSubscription: { dispose(): void } | undefined;
   private initialized = false;
   private disposed = false;
   private revision = 0;
 
-  constructor(
-    directory: HerdrSessionDirectory,
-    configuration: HerdrConfigurationSource,
-    logger: HerdrLogger,
-  ) {
+  constructor(directory: HerdrSessionDirectory, configuration: HerdrConfigurationSource, logger: HerdrLogger) {
     this.directory = directory;
     this.configuration = configuration;
     this.logger = logger;
@@ -67,9 +52,7 @@ export class HerdrSessionsService
     if (this.disposed || this.state.kind !== "stopped") return;
     const configuration = this.configuration.read();
     const startRevision = this.revision;
-    this.logger.info(
-      `Starting Herdr Session "${configuration.session}" by explicit request.`,
-    );
+    this.logger.info(`Starting Herdr Session "${configuration.session}" by explicit request.`);
 
     try {
       await this.directory.start(configuration);
@@ -100,9 +83,7 @@ export class HerdrSessionsService
     const configuration = this.configuration.read();
     const requestRevision = ++this.revision;
     this.publish({ kind: "checking", configuration });
-    this.logger.info(
-      `Discovering Herdr Session "${configuration.session}" with ${configuration.executable}.`,
-    );
+    this.logger.info(`Discovering Herdr Session "${configuration.session}" with ${configuration.executable}.`);
 
     try {
       const discovered = await this.directory.discover(configuration);

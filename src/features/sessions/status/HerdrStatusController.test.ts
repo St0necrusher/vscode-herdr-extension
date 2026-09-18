@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { HerdrSessionCatalogState } from "#capabilities/sessions";
-import type {
-  HerdrStatusAction,
-  HerdrStatusModel,
-} from "../capabilities/index.js";
+import type { HerdrStatusAction, HerdrStatusModel } from "../capabilities/index.js";
 import { HerdrStatusController } from "./HerdrStatusController.js";
 
 function harness() {
@@ -61,46 +58,36 @@ describe("Session status policy", () => {
     const h = harness();
     try {
       expect(h.view.render.mock.calls.at(-1)?.[0].availableActions).toEqual(
-        expect.arrayContaining([
-          "select-executable",
-          "open-settings",
-          "retry",
-          "show-diagnostics",
-        ]),
+        expect.arrayContaining(["select-executable", "open-settings", "retry", "show-diagnostics"]),
       );
       h.change("stopped");
-      expect(h.view.render.mock.calls.at(-1)?.[0].availableActions).toContain(
-        "start",
-      );
+      expect(h.view.render.mock.calls.at(-1)?.[0].availableActions).toContain("start");
     } finally {
       h.controller.dispose();
     }
   });
 
-  it.each<HerdrStatusAction>([
-    "start",
-    "retry",
-    "select-executable",
-    "open-settings",
-    "show-diagnostics",
-  ])("performs the chosen %s action", async (action) => {
-    const h = harness();
-    try {
-      h.change("stopped");
-      h.view.chooseAction.mockResolvedValue(action);
-      await h.controller.showActions();
-      const operation = {
-        start: h.catalog.start,
-        retry: h.catalog.retry,
-        "select-executable": h.configuration.selectExecutable,
-        "open-settings": h.configuration.openSettings,
-        "show-diagnostics": h.logger.show,
-      }[action];
-      expect(operation).toHaveBeenCalledOnce();
-    } finally {
-      h.controller.dispose();
-    }
-  });
+  it.each<HerdrStatusAction>(["start", "retry", "select-executable", "open-settings", "show-diagnostics"])(
+    "performs the chosen %s action",
+    async (action) => {
+      const h = harness();
+      try {
+        h.change("stopped");
+        h.view.chooseAction.mockResolvedValue(action);
+        await h.controller.showActions();
+        const operation = {
+          start: h.catalog.start,
+          retry: h.catalog.retry,
+          "select-executable": h.configuration.selectExecutable,
+          "open-settings": h.configuration.openSettings,
+          "show-diagnostics": h.logger.show,
+        }[action];
+        expect(operation).toHaveBeenCalledOnce();
+      } finally {
+        h.controller.dispose();
+      }
+    },
+  );
 
   it("ignores a pending action after disposal and removes its subscription", async () => {
     const h = harness();

@@ -34,28 +34,14 @@ export default tseslint.config(
       "import/resolver": {
         typescript: { project: "./tsconfig.json" },
       },
-      "import-x/resolver-next": [
-        createTypeScriptImportResolver({ project: "./tsconfig.json" }),
-      ],
-      "import-x/extensions": [
-        ".ts",
-        ".tsx",
-        ".cts",
-        ".mts",
-        ".js",
-        ".jsx",
-        ".cjs",
-        ".mjs",
-      ],
+      "import-x/resolver-next": [createTypeScriptImportResolver({ project: "./tsconfig.json" })],
+      "import-x/extensions": [".ts", ".tsx", ".cts", ".mts", ".js", ".jsx", ".cjs", ".mjs"],
       "import-x/parsers": {
         "@typescript-eslint/parser": [".ts", ".tsx", ".cts", ".mts"],
       },
       "boundaries/elements": [
         element("feature-child", "src/features/*/*", ["feature", "module"]),
-        element("infrastructure-child", "src/infrastructure/*/*", [
-          "owner",
-          "module",
-        ]),
+        element("infrastructure-child", "src/infrastructure/*/*", ["owner", "module"]),
         element("capability", "src/capabilities/*", ["module"]),
         element("feature", "src/features/*", ["feature"]),
         element("infrastructure", "src/infrastructure/*", ["owner"]),
@@ -67,17 +53,13 @@ export default tseslint.config(
       ...boundaries.configs.recommended.rules,
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-confusing-void-expression": "off",
-      "@typescript-eslint/restrict-template-expressions": [
-        "error",
-        { allowNumber: true },
-      ],
+      "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
       "import-x/no-cycle": "error",
       "no-restricted-syntax": [
         "error",
         {
           selector: "PrivateIdentifier",
-          message:
-            "Use the TypeScript private modifier instead of JavaScript # private identifiers.",
+          message: "Use the TypeScript private modifier instead of JavaScript # private identifiers.",
         },
       ],
       "boundaries/no-unknown-files": "error",
@@ -194,20 +176,17 @@ export default tseslint.config(
             {
               disallow: { to: { element: { type: "capability" } } },
               dependency: { source: "!#capabilities/*" },
-              message:
-                "Top-level capability boundaries must use a #capabilities package import alias.",
+              message: "Top-level capability boundaries must use a #capabilities package import alias.",
             },
             {
               disallow: { to: { element: { type: "feature" } } },
               dependency: { source: "!#features/*" },
-              message:
-                "Top-level feature boundaries must use a #features package import alias.",
+              message: "Top-level feature boundaries must use a #features package import alias.",
             },
             {
               disallow: { to: { element: { type: "infrastructure" } } },
               dependency: { source: "!#infrastructure/*" },
-              message:
-                "Top-level infrastructure boundaries must use a #infrastructure package import alias.",
+              message: "Top-level infrastructure boundaries must use a #infrastructure package import alias.",
             },
           ],
         },
@@ -240,11 +219,7 @@ export default tseslint.config(
   },
   {
     files: ["src/features/*/*.ts"],
-    ignores: [
-      "src/features/*/index.ts",
-      "src/features/*/*Feature.ts",
-      "src/features/**/*.test.ts",
-    ],
+    ignores: ["src/features/*/index.ts", "src/features/*/*Feature.ts", "src/features/**/*.test.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -252,15 +227,13 @@ export default tseslint.config(
           paths: [
             {
               name: "vscode",
-              message:
-                "Host-neutral feature state and policy must not use the VS Code API.",
+              message: "Host-neutral feature state and policy must not use the VS Code API.",
             },
           ],
           patterns: [
             {
               group: ["./vscode.js", "./vscode/*", "./VsCode*"],
-              message:
-                "Host-neutral feature state and policy must not load host implementations.",
+              message: "Host-neutral feature state and policy must not load host implementations.",
             },
             {
               regex: String.raw`\.test\.[cm]?[jt]sx?$`,
@@ -280,8 +253,7 @@ export default tseslint.config(
           paths: [
             {
               name: "vscode",
-              message:
-                "The feature host composition entry must delegate direct VS Code API use to its vscode child.",
+              message: "The feature host composition entry must delegate direct VS Code API use to its vscode child.",
             },
           ],
           patterns: [
@@ -309,8 +281,7 @@ export default tseslint.config(
           paths: [
             {
               name: "vscode",
-              message:
-                "Host-neutral tests must not load VS Code; use Extension Host tests for host integration.",
+              message: "Host-neutral tests must not load VS Code; use Extension Host tests for host integration.",
             },
           ],
         },
@@ -318,11 +289,7 @@ export default tseslint.config(
     },
   },
   {
-    files: [
-      "src/features/*/vscode/**/*.ts",
-      "src/infrastructure/vscode/**/*.ts",
-      "src/extension/**/*.ts",
-    ],
+    files: ["src/features/*/vscode/**/*.ts", "src/infrastructure/vscode/**/*.ts", "src/extension/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",

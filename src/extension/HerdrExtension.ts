@@ -1,13 +1,7 @@
 import type * as vscode from "vscode";
 import { SessionsFeature } from "#features/sessions";
-import {
-  HerdrCliSessionDirectory,
-  NodeProcessRunner,
-} from "#infrastructure/herdr";
-import {
-  VsCodeHerdrConfiguration,
-  VsCodeHerdrLogger,
-} from "#infrastructure/vscode";
+import { HerdrCliSessionDirectory, NodeProcessRunner } from "#infrastructure/herdr";
+import { VsCodeHerdrConfiguration, VsCodeHerdrLogger } from "#infrastructure/vscode";
 
 export class HerdrExtension implements vscode.Disposable {
   private readonly logger: VsCodeHerdrLogger;

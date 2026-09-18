@@ -3,9 +3,7 @@ import * as vscode from "vscode";
 
 suite("Herdr extension", () => {
   test("activates and registers lifecycle recovery commands", async () => {
-    const extension = vscode.extensions.getExtension(
-      "St0necrusher.vscode-herdr-extension",
-    );
+    const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
     assert.ok(extension, "Extension is installed in the test host");
 
     await extension.activate();

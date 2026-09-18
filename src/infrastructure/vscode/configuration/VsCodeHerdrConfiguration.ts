@@ -1,13 +1,7 @@
 import * as vscode from "vscode";
-import type {
-  HerdrConfiguration,
-  HerdrConfigurationActions,
-  HerdrConfigurationSource,
-} from "#capabilities/sessions";
+import type { HerdrConfiguration, HerdrConfigurationActions, HerdrConfigurationSource } from "#capabilities/sessions";
 
-export class VsCodeHerdrConfiguration
-  implements HerdrConfigurationSource, HerdrConfigurationActions
-{
+export class VsCodeHerdrConfiguration implements HerdrConfigurationSource, HerdrConfigurationActions {
   read(): HerdrConfiguration {
     const configuration = vscode.workspace.getConfiguration("herdr");
     const executable = configuration.get<string>("executable", "herdr").trim();
@@ -20,10 +14,7 @@ export class VsCodeHerdrConfiguration
 
   onDidChange(listener: () => void): { dispose(): void } {
     return vscode.workspace.onDidChangeConfiguration((event) => {
-      if (
-        event.affectsConfiguration("herdr.executable") ||
-        event.affectsConfiguration("herdr.session")
-      ) {
+      if (event.affectsConfiguration("herdr.executable") || event.affectsConfiguration("herdr.session")) {
         listener();
       }
     });
@@ -45,9 +36,6 @@ export class VsCodeHerdrConfiguration
   }
 
   async openSettings(): Promise<void> {
-    await vscode.commands.executeCommand(
-      "workbench.action.openSettings",
-      "@ext:St0necrusher.vscode-herdr-extension",
-    );
+    await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:St0necrusher.vscode-herdr-extension");
   }
 }

@@ -6,6 +6,9 @@
   "publisher": "St0necrusher",
   "private": true,
   "license": "MIT",
+  "prettier": {
+    "printWidth": 120
+  },
   "engines": {
     "vscode": "^1.100.0"
   },

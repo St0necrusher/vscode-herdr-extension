@@ -1,8 +1,5 @@
 import type { HerdrLogger } from "#capabilities/runtime";
-import type {
-  HerdrConfigurationActions,
-  HerdrSessionCatalogState,
-} from "#capabilities/sessions";
+import type { HerdrConfigurationActions, HerdrSessionCatalogState } from "#capabilities/sessions";
 import type {
   HerdrSessionCatalogOperations,
   HerdrSessionCatalogStateSource,
@@ -12,11 +9,7 @@ import type {
   HerdrStatusView,
 } from "../capabilities/index.js";
 
-const standardActions: readonly HerdrStatusAction[] = [
-  "retry",
-  "open-settings",
-  "show-diagnostics",
-];
+const standardActions: readonly HerdrStatusAction[] = ["retry", "open-settings", "show-diagnostics"];
 
 export class HerdrStatusController implements HerdrStatusOperations {
   private readonly stateSource: HerdrSessionCatalogStateSource;
@@ -47,9 +40,7 @@ export class HerdrStatusController implements HerdrStatusOperations {
   async showActions(): Promise<void> {
     if (this.disposed) return;
     const requestRevision = this.revision;
-    const action = await this.view.chooseAction(
-      statusModel(this.stateSource.getState()),
-    );
+    const action = await this.view.chooseAction(statusModel(this.stateSource.getState()));
     if (requestRevision !== this.revision || action === undefined) return;
     await this.perform(action);
   }

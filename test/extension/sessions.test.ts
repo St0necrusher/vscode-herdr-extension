@@ -121,13 +121,7 @@ suite("Sessions host bindings and lifecycle", () => {
         commands.register();
         assert.deepEqual(registered, ids);
         for (const id of ids) await vscode.commands.executeCommand(prefix + id);
-        assert.deepEqual(calls, [
-          "status",
-          "retry",
-          "start",
-          "select",
-          "settings",
-        ]);
+        assert.deepEqual(calls, ["status", "retry", "start", "select", "settings"]);
       } finally {
         commands.dispose();
       }
@@ -150,14 +144,7 @@ suite("Sessions host bindings and lifecycle", () => {
         await vscode.commands.executeCommand(prefix + "herdr.start");
         await vscode.commands.executeCommand(prefix + "herdr.selectExecutable");
         await vscode.commands.executeCommand(prefix + "herdr.openSettings");
-        assert.deepEqual(d.calls, [
-          "discover",
-          "discover",
-          "start",
-          "discover",
-          "select-executable",
-          "open-settings",
-        ]);
+        assert.deepEqual(d.calls, ["discover", "discover", "start", "discover", "select-executable", "open-settings"]);
       } finally {
         feature.dispose();
       }

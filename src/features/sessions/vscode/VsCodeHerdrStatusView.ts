@@ -1,15 +1,10 @@
 import * as vscode from "vscode";
 import type { HerdrLogger } from "#capabilities/runtime";
-import type {
-  HerdrStatusAction,
-  HerdrStatusModel,
-  HerdrStatusView,
-} from "../capabilities/index.js";
+import type { HerdrStatusAction, HerdrStatusModel, HerdrStatusView } from "../capabilities/index.js";
 
 type StatusTone = "checking" | "connected" | "failed";
 
-type StatusQuickPickItem = vscode.QuickPickItem &
-  Readonly<{ id: HerdrStatusAction }>;
+type StatusQuickPickItem = vscode.QuickPickItem & Readonly<{ id: HerdrStatusAction }>;
 
 type StatusPresentation = Readonly<{
   description: string;
@@ -19,10 +14,7 @@ type StatusPresentation = Readonly<{
 
 export class VsCodeHerdrStatusView implements HerdrStatusView {
   private readonly logger: HerdrLogger;
-  private readonly status = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Left,
-    50,
-  );
+  private readonly status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
 
   constructor(logger: HerdrLogger) {
     this.logger = logger;
@@ -41,18 +33,14 @@ export class VsCodeHerdrStatusView implements HerdrStatusView {
           ? "testing.iconQueued"
           : "testing.iconFailed",
     );
-    this.status.tooltip = new vscode.MarkdownString(
-      formatTooltip(status, presentation),
-    );
+    this.status.tooltip = new vscode.MarkdownString(formatTooltip(status, presentation));
     this.status.accessibilityInformation = {
       label: `Herdr: ${presentation.description}`,
     };
     this.logger.info(formatDiagnostics(status));
   }
 
-  async chooseAction(
-    status: HerdrStatusModel,
-  ): Promise<HerdrStatusAction | undefined> {
+  async chooseAction(status: HerdrStatusModel): Promise<HerdrStatusAction | undefined> {
     const presentation = statusPresentation(status);
     const selected = await vscode.window.showQuickPick(presentation.actions, {
       title: `Herdr: ${presentation.description}`,
@@ -120,10 +108,7 @@ function actionPresentation(action: HerdrStatusAction): StatusQuickPickItem {
   }
 }
 
-function formatTooltip(
-  status: HerdrStatusModel,
-  presentation: StatusPresentation,
-): string {
+function formatTooltip(status: HerdrStatusModel, presentation: StatusPresentation): string {
   const lines = [
     `**Herdr — ${presentation.description}**`,
     "",
@@ -140,31 +125,19 @@ function formatTooltip(
 }
 
 function formatDiagnostics(status: HerdrStatusModel): string {
-  const details = [
-    statusMessage(status),
-    `Session: ${status.herdrSession}.`,
-    `Executable: ${status.executable}.`,
-  ];
+  const details = [statusMessage(status), `Session: ${status.herdrSession}.`, `Executable: ${status.executable}.`];
   for (const fact of diagnosticFacts(status)) {
     details.push(`${fact.label}: ${fact.value}.`);
   }
   return `[${status.kind}] ${details.join(" ")}`;
 }
 
-function diagnosticFacts(
-  status: HerdrStatusModel,
-): readonly Readonly<{ label: string; value: string }>[] {
+function diagnosticFacts(status: HerdrStatusModel): readonly Readonly<{ label: string; value: string }>[] {
   if (status.kind !== "connected" && status.kind !== "incompatible") return [];
   return [
-    ...(status.version === undefined
-      ? []
-      : [{ label: "Version", value: status.version }]),
-    ...(status.protocol === undefined
-      ? []
-      : [{ label: "Protocol", value: String(status.protocol) }]),
-    ...(status.endpoint === undefined
-      ? []
-      : [{ label: "Endpoint", value: status.endpoint }]),
+    ...(status.version === undefined ? [] : [{ label: "Version", value: status.version }]),
+    ...(status.protocol === undefined ? [] : [{ label: "Protocol", value: String(status.protocol) }]),
+    ...(status.endpoint === undefined ? [] : [{ label: "Endpoint", value: status.endpoint }]),
   ];
 }
 

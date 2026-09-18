@@ -1,18 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type {
-  HerdrConfiguration,
-  HerdrConfigurationSource,
-  HerdrSessionDiscovery,
-} from "#capabilities/sessions";
+import type { HerdrConfiguration, HerdrConfigurationSource, HerdrSessionDiscovery } from "#capabilities/sessions";
 import { HerdrSessionsService } from "./HerdrSessionsService.js";
 
 const defaults: HerdrConfiguration = {
   executable: "herdr",
   session: "default",
 };
-const connected = (
-  configuration: HerdrConfiguration,
-): HerdrSessionDiscovery => ({
+const connected = (configuration: HerdrConfiguration): HerdrSessionDiscovery => ({
   kind: "connected",
   configuration,
   version: "0.9.0",
@@ -20,11 +14,7 @@ const connected = (
   endpoint: "/tmp/herdr.sock",
 });
 
-function harness(
-  discover = vi.fn((configuration: HerdrConfiguration) =>
-    Promise.resolve(connected(configuration)),
-  ),
-) {
+function harness(discover = vi.fn((configuration: HerdrConfiguration) => Promise.resolve(connected(configuration)))) {
   let current = defaults;
   let listener: (() => void) | undefined;
   const configuration: HerdrConfigurationSource = {
@@ -119,9 +109,7 @@ describe("Session catalog", () => {
       await h.catalog.initialize();
       h.change(old);
       h.change(current);
-      await vi.waitFor(() =>
-        expect(h.catalog.getState()).toEqual(connected(current)),
-      );
+      await vi.waitFor(() => expect(h.catalog.getState()).toEqual(connected(current)));
       finish?.(connected(old));
       await Promise.resolve();
       expect(h.directory.discover).toHaveBeenLastCalledWith(current);
