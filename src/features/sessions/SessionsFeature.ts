@@ -8,7 +8,7 @@ import { HerdrSessionsService } from "./catalog/index.js";
 import { HerdrStatusController } from "./status/index.js";
 import { VsCodeHerdrCommands, VsCodeHerdrStatusView } from "./vscode/index.js";
 
-export type SessionsFeatureDependencies = Readonly<{
+type SessionsFeatureDependencies = Readonly<{
   directory: HerdrSessionDirectory;
   configuration: HerdrConfigurationSource;
   configurationActions: HerdrConfigurationActions;
@@ -21,7 +21,6 @@ export class SessionsFeature {
   private readonly status: HerdrStatusController;
   private readonly commands: VsCodeHerdrCommands;
   private disposed = false;
-  private initialization: Promise<void> | undefined;
 
   constructor(dependencies: SessionsFeatureDependencies) {
     this.catalog = new HerdrSessionsService(dependencies.directory, dependencies.configuration, dependencies.logger);
@@ -49,14 +48,6 @@ export class SessionsFeature {
   }
 
   async initialize(): Promise<void> {
-    if (this.disposed) return;
-    this.initialization ??= this.initializeResources();
-    await this.initialization;
-  }
-
-  private async initializeResources(): Promise<void> {
-    // Cache the shared initialization before any callbacks can reenter it.
-    await Promise.resolve();
     if (this.disposed) return;
     try {
       this.commands.register();

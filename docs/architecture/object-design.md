@@ -75,6 +75,8 @@ export class ExampleFeature implements Disposable {
 }
 ```
 
+Support repeated, concurrent, or reentrant initialization only when a current call path or explicit contract requires it. When the nearest composition owner is the sole caller and initializes its child once, prefer direct linear initialization. Do not add shared Promise caches, artificial scheduling yields, or initialization guards for hypothetical callers.
+
 Initialization failure leaves no unowned live resource. Disposal cancels timers and subscriptions, closes owned connections, invalidates in-flight work, and prevents late callbacks from publishing new state.
 
 Closing or disposing an extension-owned client resource does not stop server-owned Herdr Sessions, Spaces, Herdr Tabs, Panes, processes, or agents unless an explicit user operation requests that server action.
@@ -107,7 +109,7 @@ Class-private fields and methods use TypeScript's `private` modifier. Do not use
 
 ## Asynchronous code
 
-Use `async`/`await` for Promise-returning production methods and asynchronous control flow, rather than `.then()` chains or manual `Promise.resolve()` return wrappers. Contracts still declare `Promise<T>`; they do not declare `async`. Callback/event APIs may require `new Promise` at the infrastructure boundary; never use an async Promise executor. Preserve ordering, cancellation, shared in-flight work, and error cleanup when changing syntax. A deliberate microtask yield for reentrancy is not a return wrapper and should explain its purpose.
+Use `async`/`await` for Promise-returning production methods and asynchronous control flow, rather than `.then()` chains or manual `Promise.resolve()` return wrappers. Contracts still declare `Promise<T>`; they do not declare `async`. Callback/event APIs may require `new Promise` at the infrastructure boundary; never use an async Promise executor. Preserve required ordering, cancellation, shared in-flight work, and error cleanup when changing syntax. A deliberate microtask yield for a current reentrancy requirement is not a return wrapper and should explain its purpose.
 
 ## Functions and transformations
 

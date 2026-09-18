@@ -651,7 +651,7 @@ register status, Sessions View, and commands
 → connect and bootstrap if running
 ```
 
-Construct the command-binding object with its dependencies; call `register()` from `SessionsFeature.initialize()` before discovery. Repeated initialization awaits the same work without duplicate registration; disposal prevents reactivation. Current status UI and its subscription are created during feature construction and are disposed even if initialization never starts; this design does not claim all constructors are side-effect-free. Register state subscribers before asynchronous discovery. A stopped/unavailable Session is a successful feature initialization with a non-connected state. A bootstrap failure becomes active state/diagnostics rather than necessarily preventing activation. Registration failure still triggers cleanup.
+Construct the command-binding object with its dependencies; call `register()` from `SessionsFeature.initialize()` before discovery. Extension activation owns the single feature-initialization call; add repeated or concurrent initialization support only if a real caller requires it. Disposal prevents later activation. Current status UI and its subscription are created during feature construction and are disposed even if initialization never starts; this design does not claim all constructors are side-effect-free. Register state subscribers before asynchronous discovery. A stopped/unavailable Session is a successful feature initialization with a non-connected state. A bootstrap failure becomes active state/diagnostics rather than necessarily preventing activation. Registration failure still triggers cleanup.
 
 ### 14.3 Disposal order
 

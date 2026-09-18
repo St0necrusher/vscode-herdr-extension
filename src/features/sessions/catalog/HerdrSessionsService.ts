@@ -9,7 +9,6 @@ export class HerdrSessionsService implements HerdrSessionCatalogStateSource, Her
   private readonly listeners = new Set<(state: HerdrSessionCatalogState) => void>();
   private state: HerdrSessionCatalogState;
   private configurationSubscription: { dispose(): void } | undefined;
-  private initialized = false;
   private disposed = false;
   private revision = 0;
 
@@ -24,8 +23,7 @@ export class HerdrSessionsService implements HerdrSessionCatalogStateSource, Her
   }
 
   async initialize(): Promise<void> {
-    if (this.initialized || this.disposed) return;
-    this.initialized = true;
+    if (this.disposed) return;
     this.configurationSubscription = this.configuration.onDidChange(() => {
       void this.discover();
     });

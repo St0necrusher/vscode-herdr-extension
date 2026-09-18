@@ -14,6 +14,12 @@ This file contains the rules needed for every code change. Read the additional r
 - **Herdr Sessions:** before changing Herdr Session discovery, startup, selection, connection, bootstrap, reconnect, status, commands, or Sessions View behavior, read [`sessions.md`](sessions.md).
 - **Verification:** before changing tests, import enforcement, ESLint architecture rules, or the validation baseline, read [`verification.md`](verification.md).
 
+## Current requirements over speculative flexibility
+
+Every module, seam, abstraction, public surface, and lifecycle guarantee needs a current, nameable reason: an acceptance criterion, a production consumer or provider, an external boundary, or an accepted architecture invariant. A future ticket, hypothetical second consumer, possible technology change, or test convenience is not sufficient justification.
+
+Record worthwhile future direction without creating its scaffolding. Add the structure when the behavior or consumer arrives. This rule does not weaken current correctness, cleanup, ownership, or product requirements.
+
 ## Top-level architecture
 
 The extension has four top-level owners:

@@ -130,13 +130,13 @@ suite("Sessions host bindings and lifecycle", () => {
     });
   });
 
-  test("initializes once, routes operations, and releases commands and configuration subscription", async () => {
+  test("initializes, routes operations, and releases commands and configuration subscription", async () => {
     await withCommands(async (prefix, registered) => {
       const d = dependencies();
       const feature = new SessionsFeature(d.value);
       try {
         assert.deepEqual(registered, []);
-        await Promise.all([feature.initialize(), feature.initialize()]);
+        await feature.initialize();
         assert.deepEqual(registered, ids);
         assert.deepEqual(d.calls, ["discover"]);
         assert.equal(d.subscribed(), true);
