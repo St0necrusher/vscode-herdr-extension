@@ -1,5 +1,5 @@
-import type { HerdrSessionSnapshot } from "./snapshot.js";
-import type { HerdrResolvedSession, HerdrSessionMetadata } from "./session.js";
+import type { HerdrSessionSnapshot } from "./snapshot";
+import type { HerdrResolvedSession, HerdrSessionMetadata } from "./session";
 
 export type HerdrConnectionFailure =
   | Readonly<{ kind: "transport"; diagnostic: string }>

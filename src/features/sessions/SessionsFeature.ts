@@ -1,15 +1,15 @@
 import * as vscode from "vscode";
-import type { HerdrLogger } from "#capabilities/runtime";
+import type { HerdrLogger } from "@capabilities/runtime";
 import type {
   HerdrConfigurationActions,
   HerdrConfigurationSource,
   HerdrSessionConnectionFactory,
   HerdrSessionDirectory,
-} from "#capabilities/sessions";
-import type { PersistentKeyValueStorage } from "./capabilities/index.js";
-import { SessionsModel } from "./SessionsModel.js";
-import { VsCodeSessionsView } from "./view/index.js";
-import { StatusFeature } from "./status/index.js";
+} from "@capabilities/sessions";
+import type { PersistentKeyValueStorage } from "./capabilities";
+import { SessionsModel } from "./SessionsModel";
+import { VsCodeSessionsView } from "./view";
+import { StatusFeature } from "./status";
 
 export type SessionsFeatureDependencies = Readonly<{
   directory: HerdrSessionDirectory;

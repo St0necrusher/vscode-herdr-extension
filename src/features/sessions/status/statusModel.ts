@@ -1,5 +1,5 @@
-import type { HerdrConnectionFailure } from "#capabilities/sessions";
-import type { HerdrStatusModel, SessionsState } from "../capabilities/index.js";
+import type { HerdrConnectionFailure } from "@capabilities/sessions";
+import type { HerdrStatusModel, SessionsState } from "../capabilities";
 
 const standardActions = ["retry", "open-settings", "show-diagnostics"] as const;
 

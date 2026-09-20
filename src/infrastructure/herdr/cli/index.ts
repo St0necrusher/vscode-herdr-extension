@@ -1,2 +1,2 @@
-export { HerdrCliSessionDirectory } from "./HerdrCliSessionDirectory.js";
-export { NodeProcessRunner } from "./ProcessRunner.js";
+export { HerdrCliSessionDirectory } from "./HerdrCliSessionDirectory";
+export { NodeProcessRunner } from "./ProcessRunner";

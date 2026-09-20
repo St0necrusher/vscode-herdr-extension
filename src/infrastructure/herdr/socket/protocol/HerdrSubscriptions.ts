@@ -1,5 +1,5 @@
-import { invalidResponse } from "./HerdrProtocol.js";
-import type { HerdrProtocolRecord } from "./HerdrProtocol.js";
+import { invalidResponse } from "./HerdrProtocol";
+import type { HerdrProtocolRecord } from "./HerdrProtocol";
 
 const baseSubscriptions = [
   "workspace.created",

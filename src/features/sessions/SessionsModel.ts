@@ -1,4 +1,4 @@
-import type { HerdrLogger } from "#capabilities/runtime";
+import type { HerdrLogger } from "@capabilities/runtime";
 import type {
   HerdrConfiguration,
   HerdrConfigurationSource,
@@ -10,14 +10,14 @@ import type {
   HerdrSessionDirectory,
   HerdrSessionMetadata,
   HerdrSessionSnapshot,
-} from "#capabilities/sessions";
+} from "@capabilities/sessions";
 import type {
   ActiveSessionState,
   PersistentKeyValueStorage,
   SessionsOperations,
   SessionsState,
   SessionsStateSource,
-} from "./capabilities/index.js";
+} from "./capabilities";
 
 const selectedSessionKey = "herdr.selectedSession";
 

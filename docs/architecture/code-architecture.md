@@ -156,7 +156,7 @@ Protocol and mechanism details remain inside infrastructure and become capabilit
 
 ## Imports and public surfaces
 
-Production imports crossing a top-level module use its public `index.ts` through the native `#capabilities`, `#features`, or `#infrastructure` aliases. Imports inside one module are relative and use runtime `.js` specifiers. A parent may import the public entry of a child it owns.
+Production imports crossing a top-level module use its public `index.ts` through the `@capabilities`, `@features`, or `@infrastructure` aliases. Imports inside one module are relative, omit runtime extensions, and use directory resolution for public `index.ts` entries. The aliases are resolved consistently by TypeScript, esbuild, and Vitest; the bundled extension is the runtime entry point. A parent may import the public entry of a child it owns.
 
 There are three visibility levels:
 

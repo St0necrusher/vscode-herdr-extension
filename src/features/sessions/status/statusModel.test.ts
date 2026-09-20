@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { statusModel } from "./statusModel.js";
-import type { SessionsState } from "../capabilities/index.js";
+import { statusModel } from "./statusModel";
+import type { SessionsState } from "../capabilities";
 const base = { executable: "herdr", session: "default" };
 describe("statusModel", () => {
   it("derives recovery actions from aggregate catalog and active state", () => {

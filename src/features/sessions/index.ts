@@ -1,1 +1,1 @@
-export { SessionsFeature } from "./SessionsFeature.js";
+export { SessionsFeature } from "./SessionsFeature";

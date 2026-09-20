@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { HerdrConfiguration, HerdrConfigurationActions, HerdrConfigurationSource } from "#capabilities/sessions";
+import type { HerdrConfiguration, HerdrConfigurationActions, HerdrConfigurationSource } from "@capabilities/sessions";
 
 export class VsCodeHerdrConfiguration implements HerdrConfigurationSource, HerdrConfigurationActions {
   read(): HerdrConfiguration {

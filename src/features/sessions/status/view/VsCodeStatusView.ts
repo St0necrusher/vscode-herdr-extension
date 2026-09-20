@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import type { HerdrLogger } from "#capabilities/runtime";
-import type { HerdrStatusAction, HerdrStatusModel } from "../../capabilities/index.js";
+import type { HerdrLogger } from "@capabilities/runtime";
+import type { HerdrStatusAction, HerdrStatusModel } from "../../capabilities";
 
 type StatusTone = "checking" | "connected" | "failed";
 type Item = vscode.QuickPickItem & Readonly<{ id: HerdrStatusAction }>;

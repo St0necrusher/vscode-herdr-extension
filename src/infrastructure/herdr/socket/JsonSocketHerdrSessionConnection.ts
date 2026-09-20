@@ -1,4 +1,4 @@
-import { HerdrConnectionFailureError } from "#capabilities/sessions";
+import { HerdrConnectionFailureError } from "@capabilities/sessions";
 import type {
   HerdrConnectionFailure,
   HerdrResolvedSession,
@@ -6,18 +6,18 @@ import type {
   HerdrSessionMetadata,
   HerdrSessionProjectionConsumer,
   HerdrSessionSnapshot,
-} from "#capabilities/sessions";
-import type { HerdrLogger } from "#capabilities/runtime";
+} from "@capabilities/sessions";
+import type { HerdrLogger } from "@capabilities/runtime";
 import {
   invalidResponse,
   parsePongResult,
   requireResultType,
   type HerdrProtocolRecord,
-} from "./protocol/HerdrProtocol.js";
-import { parseSnapshotResult } from "./protocol/HerdrSessionSnapshotDecoder.js";
-import { subscriptionsForPanes, validateEventMessage } from "./protocol/HerdrSubscriptions.js";
-import type { HerdrSocketConnector, HerdrSocketTransport } from "./NodeHerdrSocketConnector.js";
-import { asFailure, JsonSocketClient } from "./JsonSocketClient.js";
+} from "./protocol/HerdrProtocol";
+import { parseSnapshotResult } from "./protocol/HerdrSessionSnapshotDecoder";
+import { subscriptionsForPanes, validateEventMessage } from "./protocol/HerdrSubscriptions";
+import type { HerdrSocketConnector, HerdrSocketTransport } from "./NodeHerdrSocketConnector";
+import { asFailure, JsonSocketClient } from "./JsonSocketClient";
 
 const reconciliationDebounceMs = 50;
 

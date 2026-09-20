@@ -1,8 +1,8 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-import { SessionsFeature } from "../../src/features/sessions/SessionsFeature.js";
-import { VsCodeSessionsView } from "../../src/features/sessions/view/VsCodeSessionsView.js";
-import type { SessionsState, SessionsStateSource } from "../../src/features/sessions/capabilities/index.js";
+import { SessionsFeature } from "../../src/features/sessions/SessionsFeature";
+import { VsCodeSessionsView } from "../../src/features/sessions/view/VsCodeSessionsView";
+import type { SessionsState, SessionsStateSource } from "../../src/features/sessions/capabilities";
 
 let sequence = 0;
 const commandIds = [

@@ -1,2 +1,2 @@
-export { JsonSocketHerdrSessionConnectionFactory } from "./JsonSocketHerdrSessionConnectionFactory.js";
-export { NodeHerdrSocketConnector } from "./NodeHerdrSocketConnector.js";
+export { JsonSocketHerdrSessionConnectionFactory } from "./JsonSocketHerdrSessionConnectionFactory";
+export { NodeHerdrSocketConnector } from "./NodeHerdrSocketConnector";

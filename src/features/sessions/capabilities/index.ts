@@ -4,7 +4,7 @@ import type {
   HerdrSessionDescriptor,
   HerdrSessionMetadata,
   HerdrSessionSnapshot,
-} from "#capabilities/sessions";
+} from "@capabilities/sessions";
 
 export type SessionsCatalogState =
   | Readonly<{ kind: "checking" }>

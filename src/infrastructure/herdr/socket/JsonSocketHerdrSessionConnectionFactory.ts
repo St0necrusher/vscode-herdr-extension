@@ -1,11 +1,11 @@
-import type { HerdrLogger } from "#capabilities/runtime";
+import type { HerdrLogger } from "@capabilities/runtime";
 import type {
   HerdrResolvedSession,
   HerdrSessionConnection,
   HerdrSessionConnectionFactory,
-} from "#capabilities/sessions";
-import { JsonSocketHerdrSessionConnection } from "./JsonSocketHerdrSessionConnection.js";
-import type { HerdrSocketConnector } from "./NodeHerdrSocketConnector.js";
+} from "@capabilities/sessions";
+import { JsonSocketHerdrSessionConnection } from "./JsonSocketHerdrSessionConnection";
+import type { HerdrSocketConnector } from "./NodeHerdrSocketConnector";
 
 const defaultRequestTimeoutMs = 5_000;
 const defaultConnectTimeoutMs = 5_000;

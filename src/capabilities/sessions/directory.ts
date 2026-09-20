@@ -1,5 +1,5 @@
-import type { HerdrConfiguration } from "./configuration.js";
-import type { HerdrSessionDescriptor, HerdrResolvedSession, HerdrSessionId } from "./session.js";
+import type { HerdrConfiguration } from "./configuration";
+import type { HerdrSessionDescriptor, HerdrResolvedSession, HerdrSessionId } from "./session";
 
 export type HerdrSessionListResult =
   | Readonly<{

@@ -13,8 +13,8 @@ import type {
   HerdrSpaceWorktree,
   HerdrTab,
   HerdrTabLayout,
-} from "#capabilities/sessions";
-import { incompatible, invalidResponse, requireResultType, type HerdrProtocolRecord } from "./HerdrProtocol.js";
+} from "@capabilities/sessions";
+import { incompatible, invalidResponse, requireResultType, type HerdrProtocolRecord } from "./HerdrProtocol";
 
 export function parseSnapshotResult(result: HerdrProtocolRecord, metadata: HerdrSessionMetadata): HerdrSessionSnapshot {
   requireResultType(result, "session_snapshot");

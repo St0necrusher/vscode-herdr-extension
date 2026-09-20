@@ -1,1 +1,1 @@
-export { StatusFeature } from "./StatusFeature.js";
+export { StatusFeature } from "./StatusFeature";

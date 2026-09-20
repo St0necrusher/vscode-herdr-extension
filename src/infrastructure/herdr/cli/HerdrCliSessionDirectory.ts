@@ -4,8 +4,8 @@ import type {
   HerdrSessionDescriptor,
   HerdrSessionDirectory,
   HerdrSessionListResult,
-} from "#capabilities/sessions";
-import type { ProcessRunner } from "./ProcessRunner.js";
+} from "@capabilities/sessions";
+import type { ProcessRunner } from "./ProcessRunner";
 
 interface SessionRecord {
   name: string;

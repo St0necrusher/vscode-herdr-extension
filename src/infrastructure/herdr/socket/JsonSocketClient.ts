@@ -1,8 +1,8 @@
 import { StringDecoder } from "node:string_decoder";
-import { HerdrConnectionFailureError } from "#capabilities/sessions";
-import type { HerdrLogger } from "#capabilities/runtime";
-import { herdrError, invalidResponse, type HerdrProtocolRecord } from "./protocol/HerdrProtocol.js";
-import type { HerdrSocketTransport } from "./NodeHerdrSocketConnector.js";
+import { HerdrConnectionFailureError } from "@capabilities/sessions";
+import type { HerdrLogger } from "@capabilities/runtime";
+import { herdrError, invalidResponse, type HerdrProtocolRecord } from "./protocol/HerdrProtocol";
+import type { HerdrSocketTransport } from "./NodeHerdrSocketConnector";
 
 const maxLineBytes = 8 * 1024 * 1024;
 

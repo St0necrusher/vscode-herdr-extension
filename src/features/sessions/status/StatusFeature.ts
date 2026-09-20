@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
-import type { HerdrConfigurationActions } from "#capabilities/sessions";
-import type { HerdrLogger } from "#capabilities/runtime";
-import type { SessionsOperations, SessionsStateSource } from "../capabilities/index.js";
-import { statusModel } from "./statusModel.js";
-import { VsCodeStatusView } from "./view/VsCodeStatusView.js";
+import type { HerdrConfigurationActions } from "@capabilities/sessions";
+import type { HerdrLogger } from "@capabilities/runtime";
+import type { SessionsOperations, SessionsStateSource } from "../capabilities";
+import { statusModel } from "./statusModel";
+import { VsCodeStatusView } from "./view/VsCodeStatusView";
 
 export class StatusFeature {
   private readonly view: VsCodeStatusView;

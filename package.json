@@ -15,21 +15,7 @@
   "categories": [
     "Other"
   ],
-  "main": "./dist/src/extension/activate.js",
-  "imports": {
-    "#capabilities/*": {
-      "types": "./src/capabilities/*/index.ts",
-      "default": "./dist/src/capabilities/*/index.js"
-    },
-    "#features/*": {
-      "types": "./src/features/*/index.ts",
-      "default": "./dist/src/features/*/index.js"
-    },
-    "#infrastructure/*": {
-      "types": "./src/infrastructure/*/index.ts",
-      "default": "./dist/src/infrastructure/*/index.js"
-    }
-  },
+  "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -108,7 +94,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run typecheck && node esbuild.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src test",
     "format": "prettier --write .",
@@ -124,6 +110,7 @@
     "@typescript-eslint/parser": "^8.44.1",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
+    "esbuild": "^0.27.7",
     "eslint": "^9.36.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.5",

@@ -9,10 +9,10 @@ import type {
   HerdrSessionMetadata,
   HerdrSessionSnapshot,
   HerdrSessionDescriptor,
-} from "#capabilities/sessions";
-import { HerdrConnectionFailureError } from "#capabilities/sessions";
-import type { PersistentKeyValueStorage } from "./capabilities/index.js";
-import { SessionsModel } from "./SessionsModel.js";
+} from "@capabilities/sessions";
+import { HerdrConnectionFailureError } from "@capabilities/sessions";
+import type { PersistentKeyValueStorage } from "./capabilities";
+import { SessionsModel } from "./SessionsModel";
 
 const configuration: HerdrConfiguration = { executable: "herdr", session: "default" };
 const defaultSession: HerdrSessionDescriptor = {

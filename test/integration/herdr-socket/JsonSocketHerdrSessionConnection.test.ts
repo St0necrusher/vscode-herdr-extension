@@ -1,13 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type {
-  HerdrSessionConnection,
-  HerdrSessionProjectionConsumer,
-} from "../../../src/capabilities/sessions/index.js";
-import { JsonSocketHerdrSessionConnectionFactory } from "../../../src/infrastructure/herdr/socket/JsonSocketHerdrSessionConnectionFactory.js";
+import type { HerdrSessionConnection, HerdrSessionProjectionConsumer } from "../../../src/capabilities/sessions";
+import { JsonSocketHerdrSessionConnectionFactory } from "../../../src/infrastructure/herdr/socket/JsonSocketHerdrSessionConnectionFactory";
 import type {
   HerdrSocketConnector,
   HerdrSocketTransport,
-} from "../../../src/infrastructure/herdr/socket/NodeHerdrSocketConnector.js";
+} from "../../../src/infrastructure/herdr/socket/NodeHerdrSocketConnector";
 
 type Request = Readonly<{
   id: string;

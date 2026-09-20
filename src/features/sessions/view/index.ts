@@ -1,1 +1,1 @@
-export { VsCodeSessionsView } from "./VsCodeSessionsView.js";
+export { VsCodeSessionsView } from "./VsCodeSessionsView";

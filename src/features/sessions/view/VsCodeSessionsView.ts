@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import type { HerdrConnectionFailure } from "#capabilities/sessions";
-import type { SessionsState, SessionsStateSource } from "../capabilities/index.js";
+import type { HerdrConnectionFailure } from "@capabilities/sessions";
+import type { SessionsState, SessionsStateSource } from "../capabilities";
 
 export class VsCodeSessionsView implements vscode.TreeDataProvider<SessionTreeItem>, vscode.Disposable {
   private readonly changes: vscode.EventEmitter<SessionTreeItem | undefined | null>;

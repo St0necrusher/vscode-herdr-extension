@@ -1,5 +1,5 @@
-export type { HerdrConfiguration, HerdrConfigurationActions, HerdrConfigurationSource } from "./configuration.js";
-export type { HerdrSessionId, HerdrSessionDescriptor, HerdrSessionMetadata, HerdrResolvedSession } from "./session.js";
+export type { HerdrConfiguration, HerdrConfigurationActions, HerdrConfigurationSource } from "./configuration";
+export type { HerdrSessionId, HerdrSessionDescriptor, HerdrSessionMetadata, HerdrResolvedSession } from "./session";
 export type {
   HerdrAgentStatus,
   HerdrAgentSessionReference,
@@ -14,12 +14,12 @@ export type {
   HerdrLayoutSplit,
   HerdrTabLayout,
   HerdrSessionSnapshot,
-} from "./snapshot.js";
-export type { HerdrSessionListResult, HerdrSessionDirectory } from "./directory.js";
+} from "./snapshot";
+export type { HerdrSessionListResult, HerdrSessionDirectory } from "./directory";
 export {
   HerdrConnectionFailureError,
   type HerdrConnectionFailure,
   type HerdrSessionProjectionConsumer,
   type HerdrSessionConnection,
   type HerdrSessionConnectionFactory,
-} from "./connection.js";
+} from "./connection";
