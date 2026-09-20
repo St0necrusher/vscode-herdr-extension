@@ -1,1 +1,1 @@
-export { HerdrStatusController } from "./HerdrStatusController.js";
+export { StatusFeature } from "./StatusFeature.js";

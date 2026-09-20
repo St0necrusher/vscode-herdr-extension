@@ -1,48 +1,64 @@
+import * as vscode from "vscode";
 import type { HerdrLogger } from "#capabilities/runtime";
 import type {
   HerdrConfigurationActions,
   HerdrConfigurationSource,
+  HerdrSessionConnectionFactory,
   HerdrSessionDirectory,
 } from "#capabilities/sessions";
-import { HerdrSessionsService } from "./catalog/index.js";
-import { HerdrStatusController } from "./status/index.js";
-import { VsCodeHerdrCommands, VsCodeHerdrStatusView } from "./vscode/index.js";
+import type { PersistentKeyValueStorage } from "./capabilities/index.js";
+import { SessionsModel } from "./SessionsModel.js";
+import { VsCodeSessionsView } from "./view/index.js";
+import { StatusFeature } from "./status/index.js";
 
-type SessionsFeatureDependencies = Readonly<{
+export type SessionsFeatureDependencies = Readonly<{
   directory: HerdrSessionDirectory;
+  connectionFactory: HerdrSessionConnectionFactory;
   configuration: HerdrConfigurationSource;
   configurationActions: HerdrConfigurationActions;
+  storage: PersistentKeyValueStorage;
   logger: HerdrLogger;
 }>;
 
 export class SessionsFeature {
-  private readonly catalog: HerdrSessionsService;
-  private readonly statusView: VsCodeHerdrStatusView;
-  private readonly status: HerdrStatusController;
-  private readonly commands: VsCodeHerdrCommands;
+  private readonly model: SessionsModel;
+  private readonly view: VsCodeSessionsView;
+  private readonly status: StatusFeature;
+  private readonly commands: vscode.Disposable;
   private disposed = false;
 
   constructor(dependencies: SessionsFeatureDependencies) {
-    this.catalog = new HerdrSessionsService(dependencies.directory, dependencies.configuration, dependencies.logger);
-    let statusView: VsCodeHerdrStatusView | undefined;
-    let status: HerdrStatusController | undefined;
-
+    this.model = new SessionsModel(
+      dependencies.directory,
+      dependencies.connectionFactory,
+      dependencies.configuration,
+      dependencies.storage,
+      dependencies.logger,
+    );
+    let view: VsCodeSessionsView | undefined;
+    let status: StatusFeature | undefined;
     try {
-      statusView = new VsCodeHerdrStatusView(dependencies.logger);
-      status = new HerdrStatusController(
-        this.catalog,
-        this.catalog,
-        statusView,
-        dependencies.configurationActions,
-        dependencies.logger,
-      );
-      this.commands = new VsCodeHerdrCommands(this.catalog, status, dependencies.configurationActions);
-      this.statusView = statusView;
+      view = new VsCodeSessionsView(this.model);
+      status = new StatusFeature(this.model, this.model, dependencies.configurationActions, dependencies.logger);
+      const registrations: vscode.Disposable[] = [];
+      try {
+        registrations.push(
+          vscode.commands.registerCommand("herdr.selectSession", (id: unknown) =>
+            typeof id === "string" ? this.model.selectSession(id) : undefined,
+          ),
+        );
+        registrations.push(vscode.commands.registerCommand("herdr.refreshSessions", () => this.model.refresh()));
+        this.commands = vscode.Disposable.from(...registrations);
+      } catch (error) {
+        vscode.Disposable.from(...registrations).dispose();
+        throw error;
+      }
+      this.view = view;
       this.status = status;
     } catch (error) {
       status?.dispose();
-      statusView?.dispose();
-      this.catalog.dispose();
+      view?.dispose();
+      this.model.dispose();
       throw error;
     }
   }
@@ -50,8 +66,7 @@ export class SessionsFeature {
   async initialize(): Promise<void> {
     if (this.disposed) return;
     try {
-      this.commands.register();
-      await this.catalog.initialize();
+      await this.model.initialize();
     } catch (error) {
       this.dispose();
       throw error;
@@ -63,7 +78,7 @@ export class SessionsFeature {
     this.disposed = true;
     this.commands.dispose();
     this.status.dispose();
-    this.statusView.dispose();
-    this.catalog.dispose();
+    this.view.dispose();
+    this.model.dispose();
   }
 }

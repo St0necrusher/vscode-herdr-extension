@@ -1,6 +1,6 @@
 # Design: connect and bootstrap one Herdr Session (#11)
 
-Status: **accepted implementation design; no implementation has started**
+Status: **historical accepted implementation design; behavior remains relevant, while its catalog/active feature split is superseded by [`feature-oriented-architecture-simplification.md`](feature-oriented-architecture-simplification.md)**
 Issue: [#11 — Connect and bootstrap one Herdr Session](https://github.com/St0necrusher/vscode-herdr-extension/issues/11)  
 Parent: [#9 — Implement the Herdr-native VS Code MVP](https://github.com/St0necrusher/vscode-herdr-extension/issues/9)  
 Blocked-by status: #10, #22, and #23 are complete. Research #24 is resolved by the owner decision recorded in `docs/research/issue-24-herdr-switcher-audit.md`.
@@ -26,13 +26,10 @@ This document deliberately stops at design. It does not authorize source impleme
 
 This design follows, in descending order of authority:
 
-1. `docs/architecture/code-architecture.md`;
-2. `docs/architecture/object-design.md`;
-3. `docs/architecture/sessions.md`;
-4. `docs/architecture/verification.md`;
-5. issue #11 and the still-applicable product decisions in #9;
-6. `CONTEXT.md`; and
-7. the Herdr 0.9.0/0.9.1 schemas and findings recorded in `docs/research/herdr-capabilities-and-integration.md`, `docs/research/issue-11-bootstrap-gate.md`, and `docs/research/issue-24-herdr-switcher-audit.md`.
+1. [`docs/architecture/code-architecture.md`](../architecture/code-architecture.md);
+2. issue #11 and the still-applicable product decisions in #9;
+3. `CONTEXT.md`; and
+4. the Herdr 0.9.0/0.9.1 schemas and findings recorded in `docs/research/herdr-capabilities-and-integration.md`, `docs/research/issue-11-bootstrap-gate.md`, and `docs/research/issue-24-herdr-switcher-audit.md`.
 
 The design uses the domain terms **Herdr Session**, **Space**, **Herdr Tab**, and **Pane**. Socket paths, NDJSON, request IDs, Node sockets, VS Code `Memento`, and Tree APIs are implementation details.
 
@@ -92,7 +89,7 @@ This design builds on that baseline. #11 separates catalog availability from act
 
 `HerdrSessionsService` owns executable availability and the set of known local Sessions. A new `ActiveHerdrSessionService` owns selection, one current navigation connection generation, the current snapshot projection, and connection disposal. It is itself the state owner; do not add another store around it. Expose current readonly state and disposable typed subscriptions. Views derive data rather than replaying raw events or storing their own domain replicas.
 
-This prevents CLI discovery state from being mistaken for socket connection state and matches `docs/architecture/sessions.md`.
+This prevents CLI discovery state from being mistaken for socket connection state. The later accepted architecture preserves those state slices inside one `SessionsModel` rather than as peer observable services.
 
 ### D2. The selected Session is local navigation context
 

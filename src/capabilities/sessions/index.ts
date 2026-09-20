@@ -1,54 +1,25 @@
-export type HerdrConfiguration = Readonly<{
-  executable: string;
-  session: string;
-}>;
-
-export type HerdrSessionCatalogState =
-  | Readonly<{ kind: "checking"; configuration: HerdrConfiguration }>
-  | Readonly<{
-      kind: "missing-executable";
-      configuration: HerdrConfiguration;
-    }>
-  | Readonly<{
-      kind: "stopped";
-      configuration: HerdrConfiguration;
-    }>
-  | Readonly<{
-      kind: "connected";
-      configuration: HerdrConfiguration;
-      version: string;
-      protocol: number;
-      endpoint: string;
-    }>
-  | Readonly<{
-      kind: "incompatible";
-      configuration: HerdrConfiguration;
-      version?: string;
-      protocol?: number;
-      endpoint?: string;
-    }>
-  | Readonly<{
-      kind: "error";
-      configuration: HerdrConfiguration;
-      diagnostic: string;
-    }>;
-
-export type HerdrSessionDiscovery = Exclude<
-  HerdrSessionCatalogState,
-  Readonly<{ kind: "checking"; configuration: HerdrConfiguration }>
->;
-
-export interface HerdrConfigurationSource {
-  read(): HerdrConfiguration;
-  onDidChange(listener: () => void): { dispose(): void };
-}
-
-export interface HerdrSessionDirectory {
-  discover(configuration: HerdrConfiguration): Promise<HerdrSessionDiscovery>;
-  start(configuration: HerdrConfiguration): Promise<void>;
-}
-
-export interface HerdrConfigurationActions {
-  selectExecutable(): Promise<void>;
-  openSettings(): Promise<void>;
-}
+export type { HerdrConfiguration, HerdrConfigurationActions, HerdrConfigurationSource } from "./configuration.js";
+export type { HerdrSessionId, HerdrSessionDescriptor, HerdrSessionMetadata, HerdrResolvedSession } from "./session.js";
+export type {
+  HerdrAgentStatus,
+  HerdrAgentSessionReference,
+  HerdrSpaceWorktree,
+  HerdrSpace,
+  HerdrTab,
+  HerdrPaneScroll,
+  HerdrPane,
+  HerdrAgent,
+  HerdrLayoutRectangle,
+  HerdrLayoutPane,
+  HerdrLayoutSplit,
+  HerdrTabLayout,
+  HerdrSessionSnapshot,
+} from "./snapshot.js";
+export type { HerdrSessionListResult, HerdrSessionDirectory } from "./directory.js";
+export {
+  HerdrConnectionFailureError,
+  type HerdrConnectionFailure,
+  type HerdrSessionProjectionConsumer,
+  type HerdrSessionConnection,
+  type HerdrSessionConnectionFactory,
+} from "./connection.js";

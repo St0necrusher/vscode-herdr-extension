@@ -1,6 +1,11 @@
 import type * as vscode from "vscode";
 import { SessionsFeature } from "#features/sessions";
-import { HerdrCliSessionDirectory, NodeProcessRunner } from "#infrastructure/herdr";
+import {
+  HerdrCliSessionDirectory,
+  JsonSocketHerdrSessionConnectionFactory,
+  NodeHerdrSocketConnector,
+  NodeProcessRunner,
+} from "#infrastructure/herdr";
 import { VsCodeHerdrConfiguration, VsCodeHerdrLogger } from "#infrastructure/vscode";
 
 export class HerdrExtension implements vscode.Disposable {
@@ -8,15 +13,23 @@ export class HerdrExtension implements vscode.Disposable {
   private readonly sessions: SessionsFeature;
   private disposed = false;
 
-  constructor() {
-    this.logger = new VsCodeHerdrLogger();
-    const configuration = new VsCodeHerdrConfiguration();
-    this.sessions = new SessionsFeature({
-      directory: new HerdrCliSessionDirectory(new NodeProcessRunner()),
-      configuration,
-      configurationActions: configuration,
-      logger: this.logger,
-    });
+  constructor(context: vscode.ExtensionContext) {
+    const logger = new VsCodeHerdrLogger();
+    try {
+      const configuration = new VsCodeHerdrConfiguration();
+      this.logger = logger;
+      this.sessions = new SessionsFeature({
+        directory: new HerdrCliSessionDirectory(new NodeProcessRunner()),
+        connectionFactory: new JsonSocketHerdrSessionConnectionFactory(logger, new NodeHerdrSocketConnector()),
+        configuration,
+        configurationActions: configuration,
+        storage: context.workspaceState,
+        logger,
+      });
+    } catch (error) {
+      logger.dispose();
+      throw error;
+    }
   }
 
   async initialize(): Promise<void> {

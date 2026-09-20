@@ -14,5 +14,7 @@ suite("Herdr extension", () => {
     assert.ok(commands.includes("herdr.start"));
     assert.ok(commands.includes("herdr.selectExecutable"));
     assert.ok(commands.includes("herdr.openSettings"));
+    assert.ok(commands.includes("herdr.selectSession"));
+    assert.ok(commands.includes("herdr.refreshSessions"));
   });
 });

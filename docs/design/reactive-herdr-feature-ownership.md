@@ -1,6 +1,6 @@
 # Accepted direction: reactive Herdr state and feature-owned VS Code presentation
 
-Status: **feature ownership implemented by [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23); owner-approved follow-up removes redundant composition and command-binding layers**.
+Status: **historical accepted direction implemented by [#23](https://github.com/St0necrusher/vscode-herdr-extension/issues/23); its internal feature graph is superseded by [`feature-oriented-architecture-simplification.md`](feature-oriented-architecture-simplification.md)**.
 
 This decision tunes implementation structure without reopening product decisions in #1–#9. Canonical architecture documents, source, aliases, and ESLint guardrails follow this direction. This document records rationale and scope, not permission to expand #11.
 
@@ -86,13 +86,7 @@ Host-neutral state/policy implementation modules must not transitively load `vsc
 
 Shared logging/configuration facilities need not move simply to make the directory tree symmetrical. Ownership and actual consumers decide placement. Move single-feature contracts out of top-level capabilities only after their remaining consumers have been checked.
 
-Canonical amendments and their enforcement:
-
-- `docs/architecture/code-architecture.md`: feature host children, presentation, composition, and public entry rules.
-- `docs/architecture/object-design.md`: optional presentation intermediates; retain lifecycle and real-boundary DI.
-- `docs/architecture/sessions.md`: observable active state and feature-owned host composition.
-- `docs/architecture/verification.md`: host-neutral importability and updated allowed/forbidden import examples; remove obsolete Dependency Cruiser transition wording.
-- `eslint.config.mjs` and `package.json`: enforce the accepted boundaries and entry points in the same migration.
+Current canonical rules are consolidated in [`code-architecture.md`](../architecture/code-architecture.md). `eslint.config.mjs` and `package.json` enforce the matching boundaries and entry points as source migration proceeds.
 
 ## 6. Refactor before #11: existing behavior only
 

@@ -1,4 +1,10 @@
-import type { HerdrConfiguration, HerdrSessionDirectory, HerdrSessionDiscovery } from "#capabilities/sessions";
+import type {
+  HerdrConfiguration,
+  HerdrResolvedSession,
+  HerdrSessionDescriptor,
+  HerdrSessionDirectory,
+  HerdrSessionListResult,
+} from "#capabilities/sessions";
 import type { ProcessRunner } from "./ProcessRunner.js";
 
 interface SessionRecord {
@@ -9,13 +15,8 @@ interface SessionRecord {
 }
 
 interface StatusRecord {
-  client?: { version?: string; protocol?: number };
   server?: {
     running?: boolean;
-    version?: string;
-    protocol?: number;
-    compatible?: boolean;
-    endpoint_compatible?: boolean;
     socket?: string;
   };
 }
@@ -27,32 +28,44 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
     this.runner = runner;
   }
 
-  async discover(configuration: HerdrConfiguration): Promise<HerdrSessionDiscovery> {
-    let sessions: SessionRecord[];
+  async list(configuration: HerdrConfiguration): Promise<HerdrSessionListResult> {
     try {
       const response = await this.runner.run(configuration.executable, ["session", "list", "--json"]);
-      sessions = parseSessionList(response.stdout);
+      const sessions = parseSessionList(response.stdout);
+      return {
+        kind: "success",
+        sessions: sessions.map(toDescriptor),
+      };
     } catch (error) {
-      return isMissingExecutable(error) ? missingExecutable(configuration) : discoveryError(configuration, error);
-    }
-
-    const session = sessions.find((candidate) =>
-      configuration.session === "default"
-        ? candidate.default || candidate.name === "default"
-        : candidate.name === configuration.session,
-    );
-    if (session?.running !== true) return stopped(configuration);
-
-    try {
-      const response = await this.runner.run(configuration.executable, statusArgs(configuration));
-      return discoveryFromStatus(configuration, parseStatus(response.stdout));
-    } catch (error) {
-      return isMissingExecutable(error) ? missingExecutable(configuration) : discoveryError(configuration, error);
+      return isMissingExecutable(error) ? { kind: "missing-executable" } : listFailure(error);
     }
   }
 
-  async start(configuration: HerdrConfiguration): Promise<void> {
-    await this.runner.spawnDetached(configuration.executable, serverArgs(configuration));
+  async resolve(configuration: HerdrConfiguration, sessionId: string): Promise<HerdrResolvedSession> {
+    const response = await this.runner.run(configuration.executable, ["session", "list", "--json"]);
+    const sessions = parseSessionList(response.stdout);
+    const session = sessions.find((candidate) => candidate.name === sessionId);
+    if (session === undefined) throw new Error(`Herdr Session "${sessionId}" is no longer known.`);
+    if (!session.running) throw new Error(`Herdr Session "${sessionId}" is stopped.`);
+
+    if (session.socket_path !== undefined && session.socket_path.length > 0) {
+      return { id: sessionId, endpoint: session.socket_path };
+    }
+
+    const statusResponse = await this.runner.run(configuration.executable, statusArgs(sessionId));
+    const status = parseStatus(statusResponse.stdout);
+    if (
+      status.server?.running !== true ||
+      typeof status.server.socket !== "string" ||
+      status.server.socket.length === 0
+    ) {
+      throw new Error(`Herdr Session "${sessionId}" has no running endpoint.`);
+    }
+    return { id: sessionId, endpoint: status.server.socket };
+  }
+
+  async start(configuration: HerdrConfiguration, sessionId: string): Promise<void> {
+    await this.runner.spawnDetached(configuration.executable, serverArgs(sessionId));
   }
 }
 
@@ -61,7 +74,10 @@ function parseSessionList(stdout: string): SessionRecord[] {
   if (!isRecord(parsed) || !Array.isArray(parsed.sessions)) {
     throw new Error("Herdr returned an invalid Session list.");
   }
-  return parsed.sessions.filter(isSessionRecord);
+  return parsed.sessions.map((value) => {
+    if (!isSessionRecord(value)) throw new Error("Herdr returned an invalid Session record.");
+    return value;
+  });
 }
 
 function parseStatus(stdout: string): StatusRecord {
@@ -70,68 +86,32 @@ function parseStatus(stdout: string): StatusRecord {
   return parsed;
 }
 
-function discoveryFromStatus(configuration: HerdrConfiguration, status: StatusRecord): HerdrSessionDiscovery {
-  const server = status.server;
-  if (server?.running !== true) return stopped(configuration);
-
-  const version = server.version ?? status.client?.version;
-  const protocol = server.protocol ?? status.client?.protocol;
-  const endpoint = server.socket;
-  if (
-    server.compatible !== true ||
-    server.endpoint_compatible !== true ||
-    version === undefined ||
-    protocol === undefined ||
-    endpoint === undefined
-  ) {
-    return {
-      kind: "incompatible",
-      configuration,
-      ...(version === undefined ? {} : { version }),
-      ...(protocol === undefined ? {} : { protocol }),
-      ...(endpoint === undefined ? {} : { endpoint }),
-    };
-  }
-
+function toDescriptor(session: SessionRecord): HerdrSessionDescriptor {
   return {
-    kind: "connected",
-    configuration,
-    version,
-    protocol,
-    endpoint,
+    id: session.name,
+    isDefault: session.default,
+    availability: session.running ? "running" : "stopped",
+    ...(session.running && session.socket_path !== undefined ? { endpoint: session.socket_path } : {}),
   };
 }
 
-function statusArgs(configuration: HerdrConfiguration): string[] {
-  return configuration.session === "default"
-    ? ["status", "--json"]
-    : ["--session", configuration.session, "status", "--json"];
+function statusArgs(sessionId: string): string[] {
+  return sessionId === "default" ? ["status", "--json"] : ["--session", sessionId, "status", "--json"];
 }
 
-function serverArgs(configuration: HerdrConfiguration): string[] {
-  return configuration.session === "default" ? ["server"] : ["--session", configuration.session, "server"];
+function serverArgs(sessionId: string): string[] {
+  return sessionId === "default" ? ["server"] : ["--session", sessionId, "server"];
 }
 
-function missingExecutable(configuration: HerdrConfiguration): HerdrSessionDiscovery {
-  return { kind: "missing-executable", configuration };
-}
-
-function stopped(configuration: HerdrConfiguration): HerdrSessionDiscovery {
-  return { kind: "stopped", configuration };
-}
-
-function discoveryError(configuration: HerdrConfiguration, error: unknown): HerdrSessionDiscovery {
+function listFailure(error: unknown): HerdrSessionListResult {
   return {
-    kind: "error",
-    configuration,
+    kind: "failure",
     diagnostic: processErrorMessage(error),
   };
 }
 
 function processErrorMessage(error: unknown): string {
-  if (isRecord(error) && typeof error.stderr === "string" && error.stderr.trim()) {
-    return error.stderr.trim();
-  }
+  if (isRecord(error) && typeof error.stderr === "string" && error.stderr.trim()) return error.stderr.trim();
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -143,6 +123,7 @@ function isSessionRecord(value: unknown): value is SessionRecord {
   return (
     isRecord(value) &&
     typeof value.name === "string" &&
+    value.name.length > 0 &&
     typeof value.default === "boolean" &&
     typeof value.running === "boolean" &&
     (value.socket_path === undefined || typeof value.socket_path === "string")
@@ -150,5 +131,5 @@ function isSessionRecord(value: unknown): value is SessionRecord {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

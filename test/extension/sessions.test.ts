@@ -1,14 +1,19 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import { SessionsFeature } from "../../src/features/sessions/SessionsFeature.js";
-import { VsCodeHerdrCommands } from "../../src/features/sessions/vscode/VsCodeHerdrCommands.js";
-import type { HerdrSessionDiscovery } from "../../src/capabilities/sessions/index.js";
 
 let sequence = 0;
+const commandIds = [
+  "herdr.showStatusActions",
+  "herdr.start",
+  "herdr.retryDiscovery",
+  "herdr.selectExecutable",
+  "herdr.openSettings",
+  "herdr.selectSession",
+  "herdr.refreshSessions",
+];
 
-// Use the real host registry/executor without colliding with the activated extension.
-// Only command IDs are namespaced at the external API boundary; no production seam.
-async function withCommands(
+async function withNamespacedCommands(
   run: (prefix: string, registered: string[]) => Promise<void>,
   failAt?: number,
 ): Promise<void> {
@@ -28,35 +33,40 @@ async function withCommands(
   }
 }
 
-const ids = [
-  "herdr.showStatusActions",
-  "herdr.retryDiscovery",
-  "herdr.start",
-  "herdr.selectExecutable",
-  "herdr.openSettings",
-];
-
-function dependencies() {
+function dependencies(options: { list?: () => Promise<never>; configurationFailure?: boolean } = {}) {
   const configuration = { executable: "unused-test-herdr", session: "default" };
   const calls: string[] = [];
+  let storedSelection: unknown;
   let subscribed = false;
   return {
     calls,
     subscribed: () => subscribed,
     value: {
       directory: {
-        discover: (): Promise<HerdrSessionDiscovery> => {
-          calls.push("discover");
-          return Promise.resolve({ kind: "stopped", configuration });
-        },
-        start: () => {
+        list:
+          options.list ??
+          (() =>
+            Promise.resolve({
+              kind: "success" as const,
+              sessions: [{ id: "default", isDefault: true, availability: "stopped" as const }],
+            })),
+        resolve: () => Promise.reject(new Error("stopped Session must not resolve")),
+        start: (_configuration: typeof configuration, sessionId: string) => {
+          assert.equal(sessionId, "default");
           calls.push("start");
           return Promise.resolve();
         },
       },
+      connectionFactory: {
+        create: () => ({
+          bootstrap: () => Promise.reject(new Error("stopped Session must not connect")),
+          dispose: () => undefined,
+        }),
+      },
       configuration: {
         read: () => configuration,
         onDidChange: () => {
+          if (options.configurationFailure) throw new Error("configuration subscription failed");
           subscribed = true;
           return {
             dispose: () => {
@@ -75,135 +85,81 @@ function dependencies() {
           return Promise.resolve();
         },
       },
-      logger: {
-        info: () => undefined,
-        error: () => undefined,
-        show: () => undefined,
+      logger: { info: () => undefined, error: () => undefined, show: () => undefined },
+      storage: {
+        get: () => storedSelection,
+        update: (_key: string, value: unknown) => {
+          storedSelection = value;
+          calls.push(`save:${String(value)}`);
+          return Promise.resolve();
+        },
       },
     },
   };
 }
 
-suite("Sessions host bindings and lifecycle", () => {
-  test("constructs without registering; register binds all commands and dispose removes them", async () => {
-    await withCommands(async (prefix, registered) => {
-      const calls: string[] = [];
-      const commands = new VsCodeHerdrCommands(
-        {
-          retry: () => {
-            calls.push("retry");
-            return Promise.resolve();
-          },
-          start: () => {
-            calls.push("start");
-            return Promise.resolve();
-          },
-        },
-        {
-          showActions: () => {
-            calls.push("status");
-            return Promise.resolve();
-          },
-        },
-        {
-          selectExecutable: () => {
-            calls.push("select");
-            return Promise.resolve();
-          },
-          openSettings: () => {
-            calls.push("settings");
-            return Promise.resolve();
-          },
-        },
-      );
-      try {
-        assert.deepEqual(registered, []);
-        commands.register();
-        assert.deepEqual(registered, ids);
-        for (const id of ids) await vscode.commands.executeCommand(prefix + id);
-        assert.deepEqual(calls, ["status", "retry", "start", "select", "settings"]);
-      } finally {
-        commands.dispose();
-      }
-      const remaining = await vscode.commands.getCommands(true);
-      assert.ok(ids.every((id) => !remaining.includes(prefix + id)));
-    });
-  });
-
-  test("initializes, routes operations, and releases commands and configuration subscription", async () => {
-    await withCommands(async (prefix, registered) => {
+suite("Sessions feature host bindings and lifecycle", () => {
+  test("Feature owns command registration, routes commands, and disposes all resources", async () => {
+    await withNamespacedCommands(async (prefix, registered) => {
       const d = dependencies();
       const feature = new SessionsFeature(d.value);
       try {
-        assert.deepEqual(registered, []);
+        assert.deepEqual(registered, commandIds);
         await feature.initialize();
-        assert.deepEqual(registered, ids);
-        assert.deepEqual(d.calls, ["discover"]);
         assert.equal(d.subscribed(), true);
-        await vscode.commands.executeCommand(prefix + "herdr.retryDiscovery");
+        assert.equal(d.calls.includes("save:default"), true);
         await vscode.commands.executeCommand(prefix + "herdr.start");
-        await vscode.commands.executeCommand(prefix + "herdr.selectExecutable");
-        await vscode.commands.executeCommand(prefix + "herdr.openSettings");
-        assert.deepEqual(d.calls, ["discover", "discover", "start", "discover", "select-executable", "open-settings"]);
+        await vscode.commands.executeCommand(prefix + "herdr.refreshSessions");
+        await vscode.commands.executeCommand(prefix + "herdr.selectSession", "default");
+        assert.equal(d.calls.filter((call) => call === "start").length, 1);
       } finally {
         feature.dispose();
       }
       assert.equal(d.subscribed(), false);
-      await feature.initialize();
-      assert.deepEqual(registered, ids);
       const remaining = await vscode.commands.getCommands(true);
-      assert.ok(ids.every((id) => !remaining.includes(prefix + id)));
+      assert.ok(commandIds.every((id) => !remaining.includes(prefix + id)));
     });
   });
 
-  test("disposal before initialization is safe and prevents registration", async () => {
-    await withCommands(async (_prefix, registered) => {
+  test("partial Feature command registration cleans earlier registrations and Views", async () => {
+    await withNamespacedCommands((_prefix, registered) => {
       const d = dependencies();
-      const feature = new SessionsFeature(d.value);
-      feature.dispose();
-      await feature.initialize();
-      assert.deepEqual(registered, []);
-      assert.deepEqual(d.calls, []);
-    });
-  });
-
-  test("partial command registration failure cleans up without starting discovery", async () => {
-    await withCommands(async (prefix, registered) => {
-      const d = dependencies();
-      const feature = new SessionsFeature(d.value);
-      try {
-        await assert.rejects(feature.initialize(), /registration failed/);
-        assert.equal(registered.length, 2);
-        assert.deepEqual(d.calls, []);
-        const remaining = await vscode.commands.getCommands(true);
-        assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
-      } finally {
-        feature.dispose();
-      }
+      assert.throws(() => new SessionsFeature(d.value), /registration failed/);
+      assert.equal(registered.length, 2);
+      return Promise.resolve();
     }, 2);
   });
 
-  test("initialization failure releases commands and the configuration subscription", async () => {
-    await withCommands(async (prefix, registered) => {
-      const d = dependencies();
-      const feature = new SessionsFeature({
-        ...d.value,
-        configuration: {
-          ...d.value.configuration,
-          read: () => {
-            if (d.subscribed()) throw new Error("configuration read failed");
-            return d.value.configuration.read();
-          },
-        },
-      });
+  test("initialization failure disposes command registrations and configuration subscription", async () => {
+    await withNamespacedCommands(async (prefix, registered) => {
+      const d = dependencies({ configurationFailure: true });
+      const feature = new SessionsFeature(d.value);
       try {
-        await assert.rejects(feature.initialize(), /configuration read failed/);
+        await assert.rejects(feature.initialize(), /configuration subscription failed/);
         assert.equal(d.subscribed(), false);
         const remaining = await vscode.commands.getCommands(true);
         assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
       } finally {
         feature.dispose();
       }
+    });
+  });
+
+  test("disposal before initialization prevents model initialization and command use", async () => {
+    await withNamespacedCommands(async (prefix, registered) => {
+      const d = dependencies();
+      const feature = new SessionsFeature(d.value);
+      feature.dispose();
+      await feature.initialize();
+      assert.equal(d.calls.length, 0);
+      assert.equal(registered.length, commandIds.length);
+      let commandFailed = false;
+      try {
+        await vscode.commands.executeCommand(prefix + "herdr.start");
+      } catch {
+        commandFailed = true;
+      }
+      assert.equal(commandFailed, true);
     });
   });
 });

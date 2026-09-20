@@ -54,8 +54,43 @@
       {
         "command": "herdr.openSettings",
         "title": "Herdr: Open Settings"
+      },
+      {
+        "command": "herdr.selectSession",
+        "title": "Herdr: Select Herdr Session"
+      },
+      {
+        "command": "herdr.refreshSessions",
+        "title": "Herdr: Refresh Sessions",
+        "icon": "$(refresh)"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "herdr",
+          "title": "Herdr",
+          "icon": "media/herdr.svg"
+        }
+      ]
+    },
+    "views": {
+      "herdr": [
+        {
+          "id": "herdr.sessions",
+          "name": "Sessions"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "herdr.refreshSessions",
+          "when": "view == herdr.sessions",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Herdr",
       "properties": {
@@ -67,7 +102,7 @@
         "herdr.session": {
           "type": "string",
           "default": "default",
-          "description": "Herdr Session to discover and start. Use default for the default Session."
+          "description": "Initial Herdr Session preference/fallback when no valid saved per-workspace/window selection exists; use default for the default Session. This setting does not start a Session automatically."
         }
       }
     }

@@ -1,2 +1,2 @@
-export { VsCodeHerdrConfiguration } from "./configuration/index.js";
-export { VsCodeHerdrLogger } from "./logging/index.js";
+export { VsCodeHerdrConfiguration } from "./VsCodeHerdrConfiguration.js";
+export { VsCodeHerdrLogger } from "./VsCodeHerdrLogger.js";
