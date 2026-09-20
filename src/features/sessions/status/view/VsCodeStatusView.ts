@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { HerdrLogger } from "@capabilities/runtime";
 import type { HerdrStatusAction, HerdrStatusModel } from "../../capabilities";
 
-type StatusTone = "checking" | "connected" | "failed";
+type StatusTone = "checking" | "reconnecting" | "connected" | "failed";
 type Item = vscode.QuickPickItem & Readonly<{ id: HerdrStatusAction }>;
 
 export class VsCodeStatusView implements vscode.Disposable {
@@ -27,7 +27,7 @@ export class VsCodeStatusView implements vscode.Disposable {
     this.status.color = new vscode.ThemeColor(
       presentation.tone === "connected"
         ? "testing.iconPassed"
-        : presentation.tone === "checking"
+        : presentation.tone === "checking" || presentation.tone === "reconnecting"
           ? "testing.iconQueued"
           : "testing.iconFailed",
     );
@@ -67,18 +67,19 @@ function statusDescription(kind: HerdrStatusModel["kind"]): string {
       return "resolving Session";
     case "connecting":
       return "connecting";
+    case "reconnecting":
+      return "reconnecting";
     case "connected":
       return "connected";
     case "incompatible":
       return "incompatible";
-    case "disconnected":
-      return "disconnected";
     case "error":
       return "unavailable";
   }
 }
 function statusTone(kind: HerdrStatusModel["kind"]): StatusTone {
   if (kind === "connected") return "connected";
+  if (kind === "reconnecting") return "reconnecting";
   if (kind === "checking" || kind === "resolving" || kind === "connecting") return "checking";
   return "failed";
 }
@@ -103,10 +104,12 @@ function formatTooltip(model: HerdrStatusModel, presentation: Readonly<{ descrip
   ];
   if (model.kind === "connected") {
     lines.push(`Endpoint: \`${model.endpoint}\``, `Version: \`${model.version}\``, `Protocol: \`${model.protocol}\``);
-  } else if (model.kind === "incompatible" || model.kind === "disconnected") {
+  } else if (model.kind === "reconnecting" || model.kind === "incompatible") {
     appendFact(lines, "Endpoint", model.endpoint);
     appendFact(lines, "Version", model.version);
     appendFact(lines, "Protocol", model.protocol);
+    if (model.kind === "reconnecting" && model.retryAt !== undefined)
+      lines.push(`Next attempt: \`${new Date(model.retryAt).toLocaleTimeString()}\``);
     lines.push(`Diagnostic: ${model.diagnostic}`);
   } else if (model.kind === "error") {
     lines.push(`Diagnostic: ${model.diagnostic}`);
@@ -132,10 +135,11 @@ function statusMessage(model: HerdrStatusModel): string {
       return `Resolving the ${model.herdrSession} Herdr Session.`;
     case "connecting":
       return `Connecting to the ${model.herdrSession} Herdr Session.`;
+    case "reconnecting":
+      return `Reconnecting to the ${model.herdrSession} Herdr Session (${model.phase}).`;
     case "connected":
       return `Connected to the ${model.herdrSession} Herdr Session.`;
     case "incompatible":
-    case "disconnected":
     case "error":
       return model.diagnostic;
   }

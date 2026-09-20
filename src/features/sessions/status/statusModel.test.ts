@@ -29,24 +29,37 @@ describe("statusModel", () => {
     expect(statusModel(state).availableActions).not.toContain("start");
   });
 
-  it("retains diagnostics and connection metadata", () => {
+  it("retains stale metadata and waiting details while reconnecting", () => {
     const state: SessionsState = {
       configuration: base,
       catalog: { kind: "ready", sessions: [] },
       active: {
-        kind: "disconnected",
+        kind: "reconnecting",
         session: { id: "default", isDefault: true, availability: "running" },
-        metadata: { version: "1", protocol: 2 },
         endpoint: "/tmp/herdr.sock",
+        staleProjection: {
+          metadata: { version: "1", protocol: 2 },
+          snapshot: { version: "1", protocol: 2, spaces: [], herdrTabs: [], panes: [], layouts: [], agents: [] },
+        },
         failure: { kind: "transport", diagnostic: "closed" },
+        phase: { kind: "waiting", retryAt: 1234 },
       },
     };
     expect(statusModel(state)).toMatchObject({
-      kind: "disconnected",
+      kind: "reconnecting",
+      phase: "waiting",
+      retryAt: 1234,
       version: "1",
       protocol: 2,
       endpoint: "/tmp/herdr.sock",
       diagnostic: "closed",
     });
+    if (state.active.kind !== "reconnecting") throw new Error("expected reconnecting state");
+    const attempting = statusModel({
+      ...state,
+      active: { ...state.active, phase: { kind: "attempting" } },
+    });
+    expect(attempting).toMatchObject({ kind: "reconnecting", phase: "attempting" });
+    expect(attempting).not.toHaveProperty("retryAt");
   });
 });

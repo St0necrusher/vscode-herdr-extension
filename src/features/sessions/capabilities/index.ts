@@ -12,32 +12,61 @@ export type SessionsCatalogState =
   | Readonly<{ kind: "ready"; sessions: readonly HerdrSessionDescriptor[] }>
   | Readonly<{ kind: "error"; sessions?: readonly HerdrSessionDescriptor[]; diagnostic: string }>;
 
+export type UnselectedActiveSessionState = Readonly<{ kind: "unselected" }>;
+export type SelectedStoppedActiveSessionState = Readonly<{
+  kind: "selected-stopped";
+  session: HerdrSessionDescriptor;
+}>;
+export type StartFailedActiveSessionState = Readonly<{
+  kind: "start-failed";
+  session: HerdrSessionDescriptor;
+  diagnostic: string;
+}>;
+export type ResolvingActiveSessionState = Readonly<{ kind: "resolving"; session: HerdrSessionDescriptor }>;
+export type ConnectingActiveSessionState = Readonly<{
+  kind: "connecting";
+  session: HerdrSessionDescriptor;
+  endpoint: string;
+}>;
+export type ConnectedActiveSessionState = Readonly<{
+  kind: "connected";
+  session: HerdrSessionDescriptor;
+  endpoint: string;
+  metadata: HerdrSessionMetadata;
+  snapshot: HerdrSessionSnapshot;
+}>;
+export type StaleSessionProjection = Readonly<{
+  metadata: HerdrSessionMetadata;
+  snapshot: HerdrSessionSnapshot;
+}>;
+export type AttemptingReconnectPhase = Readonly<{ kind: "attempting" }>;
+export type WaitingReconnectPhase = Readonly<{ kind: "waiting"; retryAt: number }>;
+export type ReconnectPhase = AttemptingReconnectPhase | WaitingReconnectPhase;
+export type ReconnectingActiveSessionState = Readonly<{
+  kind: "reconnecting";
+  session: HerdrSessionDescriptor;
+  endpoint?: string;
+  staleProjection?: StaleSessionProjection;
+  failure: Exclude<HerdrConnectionFailure, { kind: "incompatible" }>;
+  phase: ReconnectPhase;
+}>;
+export type IncompatibleActiveSessionState = Readonly<{
+  kind: "incompatible";
+  session: HerdrSessionDescriptor;
+  endpoint?: string;
+  staleProjection?: StaleSessionProjection;
+  failure: Extract<HerdrConnectionFailure, { kind: "incompatible" }>;
+}>;
+
 export type ActiveSessionState =
-  | Readonly<{ kind: "unselected" }>
-  | Readonly<{ kind: "selected-stopped"; session: HerdrSessionDescriptor }>
-  | Readonly<{ kind: "start-failed"; session: HerdrSessionDescriptor; diagnostic: string }>
-  | Readonly<{ kind: "resolving"; session: HerdrSessionDescriptor }>
-  | Readonly<{ kind: "connecting"; session: HerdrSessionDescriptor; endpoint: string }>
-  | Readonly<{
-      kind: "connected";
-      session: HerdrSessionDescriptor;
-      endpoint: string;
-      metadata: HerdrSessionMetadata;
-      snapshot: HerdrSessionSnapshot;
-    }>
-  | Readonly<{
-      kind: "incompatible";
-      session: HerdrSessionDescriptor;
-      endpoint?: string;
-      failure: Extract<HerdrConnectionFailure, { kind: "incompatible" }>;
-    }>
-  | Readonly<{
-      kind: "disconnected";
-      session: HerdrSessionDescriptor;
-      endpoint?: string;
-      metadata?: HerdrSessionMetadata;
-      failure: Exclude<HerdrConnectionFailure, { kind: "incompatible" }>;
-    }>;
+  | UnselectedActiveSessionState
+  | SelectedStoppedActiveSessionState
+  | StartFailedActiveSessionState
+  | ResolvingActiveSessionState
+  | ConnectingActiveSessionState
+  | ConnectedActiveSessionState
+  | ReconnectingActiveSessionState
+  | IncompatibleActiveSessionState;
 
 export type SessionsState = Readonly<{
   configuration: HerdrConfiguration;
@@ -70,15 +99,44 @@ type HerdrStatusIdentity = Readonly<{
   availableActions: readonly HerdrStatusAction[];
 }>;
 
+export type CheckingHerdrStatusModel = Readonly<{ kind: "checking" }>;
+export type MissingExecutableHerdrStatusModel = Readonly<{ kind: "missing-executable" }>;
+export type StoppedHerdrStatusModel = Readonly<{ kind: "stopped" }>;
+export type ResolvingHerdrStatusModel = Readonly<{ kind: "resolving" }>;
+export type ConnectingHerdrStatusModel = Readonly<{ kind: "connecting" }>;
+export type ConnectedHerdrStatusModel = Readonly<{
+  kind: "connected";
+  version: string;
+  protocol: number;
+  endpoint: string;
+}>;
+export type ReconnectingHerdrStatusModel = Readonly<{
+  kind: "reconnecting";
+  diagnostic: string;
+  phase: ReconnectPhase["kind"];
+  retryAt?: number;
+  version?: string;
+  protocol?: number;
+  endpoint?: string;
+}>;
+export type IncompatibleHerdrStatusModel = Readonly<{
+  kind: "incompatible";
+  diagnostic: string;
+  version?: string;
+  protocol?: number;
+  endpoint?: string;
+}>;
+export type ErrorHerdrStatusModel = Readonly<{ kind: "error"; diagnostic: string }>;
+
 export type HerdrStatusModel = HerdrStatusIdentity &
   (
-    | Readonly<{ kind: "checking" }>
-    | Readonly<{ kind: "missing-executable" }>
-    | Readonly<{ kind: "stopped" }>
-    | Readonly<{ kind: "resolving" }>
-    | Readonly<{ kind: "connecting" }>
-    | Readonly<{ kind: "connected"; version: string; protocol: number; endpoint: string }>
-    | Readonly<{ kind: "incompatible"; diagnostic: string; version?: string; protocol?: number; endpoint?: string }>
-    | Readonly<{ kind: "disconnected"; diagnostic: string; version?: string; protocol?: number; endpoint?: string }>
-    | Readonly<{ kind: "error"; diagnostic: string }>
+    | CheckingHerdrStatusModel
+    | MissingExecutableHerdrStatusModel
+    | StoppedHerdrStatusModel
+    | ResolvingHerdrStatusModel
+    | ConnectingHerdrStatusModel
+    | ConnectedHerdrStatusModel
+    | ReconnectingHerdrStatusModel
+    | IncompatibleHerdrStatusModel
+    | ErrorHerdrStatusModel
   );

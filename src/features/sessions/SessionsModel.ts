@@ -14,15 +14,24 @@ import type {
 import type {
   ActiveSessionState,
   PersistentKeyValueStorage,
+  ReconnectingActiveSessionState,
   SessionsOperations,
   SessionsState,
   SessionsStateSource,
+  StaleSessionProjection,
 } from "./capabilities";
 
 const selectedSessionKey = "herdr.selectedSession";
+const reconnectDelays = [500, 1000, 2000, 5000, 10000, 30000] as const;
 
 interface Disposable {
   dispose(): void;
+}
+
+interface RecoveryContext {
+  readonly failure: Exclude<HerdrConnectionFailure, { kind: "incompatible" }>;
+  readonly staleProjection?: StaleSessionProjection;
+  readonly endpoint?: string;
 }
 
 export class SessionsModel implements SessionsStateSource, SessionsOperations {
@@ -35,10 +44,13 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
   private state: SessionsState;
   private configurationSubscription: Disposable | undefined;
   private connection: HerdrSessionConnection | undefined;
+  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private selectedId: string | undefined;
   private persistence = Promise.resolve();
   private revision = 0;
   private generation = 0;
+  private attempt = 0;
+  private reconnectSequence = 0;
   private disposed = false;
 
   constructor(
@@ -79,6 +91,8 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
     const configuration = this.configuration.read();
     const requestRevision = ++this.revision;
     this.generation += 1;
+    this.attempt += 1;
+    this.cancelReconnect();
     this.disposeConnection();
     this.selectedId = undefined;
     this.publish({ configuration, catalog: { kind: "checking" }, active: { kind: "unselected" } });
@@ -119,7 +133,13 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
     if (this.disposed || this.state.catalog.kind !== "ready") return;
     const session = this.state.catalog.sessions.find((candidate) => candidate.id === sessionId);
     if (session === undefined) return;
-    if (this.selectedId === session.id && !needsRetry(this.state.active, session)) return;
+    if (this.selectedId === session.id) {
+      const active = this.state.active;
+      if (active.kind === "reconnecting" || active.kind === "incompatible") {
+        await this.restartRecovery(session, this.state.configuration, recoveryFromState(active));
+      }
+      return;
+    }
     await this.activate(session, this.state.configuration, true);
   }
 
@@ -152,8 +172,8 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
       return;
     }
     const active = this.state.active;
-    if (active.kind === "disconnected" || active.kind === "incompatible") {
-      await this.activate(active.session, this.state.configuration, false);
+    if (active.kind === "reconnecting" || active.kind === "incompatible") {
+      await this.restartRecovery(active.session, this.state.configuration, recoveryFromState(active));
       return;
     }
     await this.refresh();
@@ -164,8 +184,10 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
     this.disposed = true;
     this.revision += 1;
     this.generation += 1;
+    this.attempt += 1;
     this.configurationSubscription?.dispose();
     this.configurationSubscription = undefined;
+    this.cancelReconnect();
     this.disposeConnection();
     this.listeners.clear();
   }
@@ -212,6 +234,8 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
     persist: boolean,
   ): Promise<void> {
     const generation = ++this.generation;
+    this.attempt += 1;
+    this.cancelReconnect();
     this.disposeConnection();
     this.selectedId = session.id;
     const persistence = persist ? this.persistSelection(session.id, generation) : Promise.resolve();
@@ -221,83 +245,172 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
         return;
       }
       this.publishCurrent({ kind: "resolving", session });
-      let connection: HerdrSessionConnection | undefined;
-      let metadata: HerdrSessionMetadata | undefined;
-      let snapshot: HerdrSessionSnapshot | undefined;
-      let resolved: HerdrResolvedSession | undefined;
-      try {
-        resolved = await this.directory.resolve(configuration, session.id);
-        if (!this.isCurrent(generation)) return;
-        this.publishCurrent({ kind: "connecting", session, endpoint: resolved.endpoint });
-        connection = this.connectionFactory.create(resolved);
-        this.connection = connection;
-        const consumer = {
-          replaceSnapshot: (next: HerdrSessionSnapshot): void => {
-            if (!this.isCurrent(generation) || this.connection !== connection) return;
-            snapshot = next;
-            if (this.state.active.kind === "connected") this.publishCurrent({ ...this.state.active, snapshot: next });
-          },
-          connectionClosed: (failure: HerdrConnectionFailure): void => {
-            if (!this.isCurrent(generation) || this.connection !== connection) return;
-            this.connection = undefined;
-            this.generation += 1;
-            this.publishCurrent(
-              failure.kind === "incompatible"
-                ? {
-                    kind: "incompatible",
-                    session,
-                    ...(resolved?.endpoint === undefined ? {} : { endpoint: resolved.endpoint }),
-                    failure,
-                  }
-                : {
-                    kind: "disconnected",
-                    session,
-                    ...(resolved?.endpoint === undefined ? {} : { endpoint: resolved.endpoint }),
-                    ...(metadata === undefined ? {} : { metadata }),
-                    failure,
-                  },
-            );
-          },
-        };
-        metadata = await connection.bootstrap(consumer);
-        if (!this.isCurrent(generation) || this.connection !== connection) {
-          connection.dispose();
-          return;
-        }
-        if (snapshot === undefined) throw new Error("Herdr connection completed without a Session snapshot.");
-        this.publishCurrent({ kind: "connected", session, endpoint: resolved.endpoint, metadata, snapshot });
-      } catch (error) {
-        if (!this.isCurrent(generation)) {
-          connection?.dispose();
-          return;
-        }
-        if (this.connection === connection) this.connection = undefined;
-        connection?.dispose();
-        const failure = normalizeFailure(error);
-        this.publishCurrent(
-          failure.kind === "incompatible"
-            ? {
-                kind: "incompatible",
-                session,
-                ...((resolved?.endpoint ?? session.endpoint)
-                  ? { endpoint: resolved?.endpoint ?? session.endpoint }
-                  : {}),
-                failure,
-              }
-            : {
-                kind: "disconnected",
-                session,
-                ...((resolved?.endpoint ?? session.endpoint)
-                  ? { endpoint: resolved?.endpoint ?? session.endpoint }
-                  : {}),
-                ...(metadata === undefined ? {} : { metadata }),
-                failure,
-              },
-        );
-      }
+      await this.runAttempt(session, configuration, generation, false);
     } finally {
       await persistence;
     }
+  }
+
+  private async restartRecovery(
+    session: HerdrSessionDescriptor,
+    configuration: HerdrConfiguration,
+    previous: RecoveryContext,
+  ): Promise<void> {
+    const generation = ++this.generation;
+    this.attempt += 1;
+    this.cancelReconnect();
+    this.disposeConnection();
+    this.selectedId = session.id;
+    this.reconnectSequence = 0;
+    this.publishReconnecting(session, previous, { kind: "attempting" });
+    await this.runAttempt(session, configuration, generation, true, previous);
+  }
+
+  private async runAttempt(
+    session: HerdrSessionDescriptor,
+    configuration: HerdrConfiguration,
+    generation: number,
+    reconnect: boolean,
+    recovery?: RecoveryContext,
+  ): Promise<void> {
+    const attempt = ++this.attempt;
+    if (reconnect && recovery === undefined) return;
+    let connection: HerdrSessionConnection | undefined;
+    let metadata: HerdrSessionMetadata | undefined;
+    let snapshot: HerdrSessionSnapshot | undefined;
+    let resolved: HerdrResolvedSession | undefined;
+    if (reconnect) {
+      if (recovery === undefined) return;
+      this.publishReconnecting(session, recovery, { kind: "attempting" });
+    }
+    try {
+      resolved = await this.directory.resolve(configuration, session.id);
+      if (!this.isCurrentAttempt(generation, attempt)) return;
+      if (reconnect) {
+        if (recovery === undefined) return;
+        this.publishReconnecting(
+          session,
+          { ...recovery, endpoint: resolved.endpoint },
+          {
+            kind: "attempting",
+          },
+        );
+      } else {
+        this.publishCurrent({ kind: "connecting", session, endpoint: resolved.endpoint });
+      }
+      connection = this.connectionFactory.create(resolved);
+      this.connection = connection;
+      const consumer = {
+        replaceSnapshot: (next: HerdrSessionSnapshot): void => {
+          if (!this.isCurrentAttempt(generation, attempt) || this.connection !== connection) return;
+          snapshot = next;
+          if (this.state.active.kind === "connected") this.publishCurrent({ ...this.state.active, snapshot: next });
+        },
+        connectionClosed: (failure: HerdrConnectionFailure): void => {
+          if (!this.isCurrentAttempt(generation, attempt) || this.connection !== connection) return;
+          const wasConnected = this.state.active.kind === "connected";
+          this.connection = undefined;
+          connection?.dispose();
+          const staleProjection = retainStaleProjection(recovery?.staleProjection, metadata, snapshot);
+          const context = {
+            failure: failure.kind === "incompatible" ? transportFailure(failure.diagnostic) : failure,
+            ...(staleProjection === undefined ? {} : { staleProjection }),
+            ...(resolved?.endpoint === undefined ? {} : { endpoint: resolved.endpoint }),
+          } satisfies RecoveryContext;
+          if (failure.kind === "incompatible") {
+            this.publishCurrent({
+              kind: "incompatible",
+              session,
+              ...(resolved?.endpoint === undefined ? {} : { endpoint: resolved.endpoint }),
+              ...(staleProjection === undefined ? {} : { staleProjection }),
+              failure,
+            });
+          } else {
+            this.beginRecovery(session, context, wasConnected, wasConnected);
+          }
+        },
+      };
+      metadata = await connection.bootstrap(consumer);
+      if (!this.isCurrentAttempt(generation, attempt) || this.connection !== connection) {
+        connection.dispose();
+        return;
+      }
+      if (snapshot === undefined) throw new Error("Herdr connection completed without a Session snapshot.");
+      this.cancelReconnect();
+      this.publishCurrent({ kind: "connected", session, endpoint: resolved.endpoint, metadata, snapshot });
+    } catch (error) {
+      if (!this.isCurrentAttempt(generation, attempt)) {
+        connection?.dispose();
+        return;
+      }
+      if (this.connection === connection) this.connection = undefined;
+      connection?.dispose();
+      const failure = normalizeFailure(error);
+      const staleProjection = retainStaleProjection(recovery?.staleProjection, metadata, snapshot);
+      if (failure.kind === "incompatible") {
+        this.publishCurrent({
+          kind: "incompatible",
+          session,
+          ...((resolved?.endpoint ?? session.endpoint) ? { endpoint: resolved?.endpoint ?? session.endpoint } : {}),
+          ...(staleProjection === undefined ? {} : { staleProjection }),
+          failure,
+        });
+      } else {
+        const context = {
+          failure,
+          ...(staleProjection === undefined ? {} : { staleProjection }),
+          ...((resolved?.endpoint ?? session.endpoint) ? { endpoint: resolved?.endpoint ?? session.endpoint } : {}),
+        } satisfies RecoveryContext;
+        this.beginRecovery(session, context, false, !reconnect);
+      }
+    }
+  }
+
+  private beginRecovery(
+    session: HerdrSessionDescriptor,
+    context: RecoveryContext,
+    immediate: boolean,
+    reset: boolean,
+  ): void {
+    if (!this.isCurrentSession(session.id)) return;
+    if (reset) this.reconnectSequence = 0;
+    if (immediate) {
+      this.publishReconnecting(session, context, { kind: "attempting" });
+      void this.runAttempt(session, this.state.configuration, this.generation, true, context);
+      return;
+    }
+    this.scheduleReconnect(session, context);
+  }
+
+  private scheduleReconnect(session: HerdrSessionDescriptor, context: RecoveryContext): void {
+    if (!this.isCurrentSession(session.id)) return;
+    this.cancelReconnectTimer();
+    const baseDelay = reconnectDelays[Math.min(this.reconnectSequence, reconnectDelays.length - 1)] ?? 30000;
+    this.reconnectSequence += 1;
+    const delay = Math.round(baseDelay * (0.8 + Math.random() * 0.4));
+    const retryAt = Date.now() + delay;
+    this.publishReconnecting(session, context, { kind: "waiting", retryAt });
+    const generation = this.generation;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      if (!this.isCurrent(generation)) return;
+      void this.runAttempt(session, this.state.configuration, generation, true, context);
+    }, delay);
+  }
+
+  private publishReconnecting(
+    session: HerdrSessionDescriptor,
+    context: RecoveryContext,
+    phase: ReconnectingActiveSessionState["phase"],
+  ): void {
+    this.publishCurrent({
+      kind: "reconnecting",
+      session,
+      ...(context.endpoint === undefined ? {} : { endpoint: context.endpoint }),
+      ...(context.staleProjection === undefined ? {} : { staleProjection: context.staleProjection }),
+      failure: context.failure,
+      phase,
+    });
   }
 
   private persistSelection(sessionId: string, generation: number): Promise<void> {
@@ -337,8 +450,26 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
     return !this.disposed && generation === this.generation;
   }
 
+  private isCurrentAttempt(generation: number, attempt: number): boolean {
+    return this.isCurrent(generation) && attempt === this.attempt;
+  }
+
+  private isCurrentSession(sessionId: string): boolean {
+    return !this.disposed && this.selectedId === sessionId;
+  }
+
   private isCurrentStart(revision: number, generation: number, sessionId: string): boolean {
     return this.isCurrentRevision(revision) && this.isCurrent(generation) && this.selectedId === sessionId;
+  }
+
+  private cancelReconnect(): void {
+    this.cancelReconnectTimer();
+    this.reconnectSequence = 0;
+  }
+
+  private cancelReconnectTimer(): void {
+    if (this.reconnectTimer !== undefined) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
   }
 
   private disposeConnection(): void {
@@ -347,8 +478,33 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
   }
 }
 
-function needsRetry(active: ActiveSessionState, session: HerdrSessionDescriptor): boolean {
-  return (active.kind === "disconnected" || active.kind === "incompatible") && active.session.id === session.id;
+function recoveryFromState(
+  active: Extract<ActiveSessionState, { kind: "reconnecting" | "incompatible" }>,
+): RecoveryContext {
+  if (active.kind === "reconnecting") {
+    return {
+      failure: active.failure,
+      ...(active.staleProjection === undefined ? {} : { staleProjection: active.staleProjection }),
+      ...(active.endpoint === undefined ? {} : { endpoint: active.endpoint }),
+    };
+  }
+  return {
+    failure: transportFailure(active.failure.diagnostic),
+    ...(active.staleProjection === undefined ? {} : { staleProjection: active.staleProjection }),
+    ...(active.endpoint === undefined ? {} : { endpoint: active.endpoint }),
+  };
+}
+
+function retainStaleProjection(
+  previous: StaleSessionProjection | undefined,
+  metadata: HerdrSessionMetadata | undefined,
+  snapshot: HerdrSessionSnapshot | undefined,
+): StaleSessionProjection | undefined {
+  return metadata === undefined || snapshot === undefined ? previous : { metadata, snapshot };
+}
+
+function transportFailure(diagnostic: string): Exclude<HerdrConnectionFailure, { kind: "incompatible" }> {
+  return { kind: "transport", diagnostic };
 }
 
 function normalizeFailure(error: unknown): HerdrConnectionFailure {

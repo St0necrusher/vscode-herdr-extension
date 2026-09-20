@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   HerdrConfiguration,
   HerdrConnectionFailure,
@@ -64,6 +64,11 @@ type HarnessOptions = Readonly<{
   list?: () => Promise<Awaited<ReturnType<HerdrSessionDirectory["list"]>>>;
   autoConnections?: boolean;
   connectionFailure?: unknown;
+  connectionPlan?: readonly Readonly<{
+    auto?: boolean;
+    failure?: unknown;
+    snapshot?: HerdrSessionSnapshot;
+  }>[];
   start?: () => ReturnType<HerdrSessionDirectory["start"]>;
   autoStorage?: boolean;
   storageFailure?: unknown;
@@ -116,11 +121,12 @@ function createHarness(options: HarnessOptions = {}) {
   const connectionFactory: HerdrSessionConnectionFactory = {
     create: (resolved: HerdrResolvedSession) => {
       const bootstrap = deferred<HerdrSessionMetadata>();
+      const plan = options.connectionPlan?.[records.length];
       const record: ConnectionRecord = {
         id: resolved.id,
         disposed: false,
         settle: () => {
-          record.replaceSnapshot(snapshot);
+          record.replaceSnapshot(plan?.snapshot ?? snapshot);
           bootstrap.resolve(metadata);
         },
         fail: (error) => bootstrap.reject(error),
@@ -131,11 +137,10 @@ function createHarness(options: HarnessOptions = {}) {
       const connection: HerdrSessionConnection = {
         bootstrap: (consumer) => {
           record.consumer = consumer;
-          if (options.connectionFailure !== undefined) {
-            const failure = options.connectionFailure;
+          const failure = plan?.failure ?? options.connectionFailure;
+          if (failure !== undefined)
             return Promise.reject(failure instanceof Error ? failure : new Error(JSON.stringify(failure)));
-          }
-          if (options.autoConnections !== false) record.settle();
+          if (plan?.auto !== false && options.autoConnections !== false) record.settle();
           return bootstrap.promise;
         },
         dispose: () => {
@@ -169,6 +174,11 @@ function createHarness(options: HarnessOptions = {}) {
     hasConfigurationListener: () => configurationListener !== undefined,
   };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 async function waitFor<T>(read: () => T | undefined): Promise<T> {
   await vi.waitFor(() => expect(read()).toBeDefined());
@@ -369,15 +379,15 @@ describe("SessionsModel", () => {
 
   it.each([
     [{ kind: "incompatible", diagnostic: "unsupported protocol" }, "incompatible"],
-    [{ kind: "transport", diagnostic: "socket closed" }, "disconnected"],
+    [{ kind: "transport", diagnostic: "socket closed" }, "reconnecting"],
   ] as const)("publishes authoritative %s connection failure", async (failure, expected) => {
     const h = createHarness({ connectionFailure: new HerdrConnectionFailureError(failure) });
     await h.model.initialize();
     expect(h.model.getState().active.kind).toBe(expected);
   });
 
-  it("transitions to disconnected on unexpected closure and ignores observer failures", async () => {
-    const h = createHarness();
+  it("transitions to reconnecting on unexpected closure and ignores observer failures", async () => {
+    const h = createHarness({ connectionPlan: [{}, { auto: false }] });
     const seen: string[] = [];
     h.model.onDidChange((state) => {
       seen.push(state.active.kind);
@@ -388,8 +398,320 @@ describe("SessionsModel", () => {
     const connection = h.records[0];
     if (connection === undefined) throw new Error("default connection was not created");
     connection.close({ kind: "transport", diagnostic: "socket closed" });
-    expect(h.model.getState().active).toMatchObject({ kind: "disconnected", failure: { diagnostic: "socket closed" } });
-    expect(seen).toContain("disconnected");
+    await vi.waitFor(() => expect(h.records).toHaveLength(2));
+    expect(h.model.getState().active).toMatchObject({
+      kind: "reconnecting",
+      failure: { diagnostic: "socket closed" },
+      staleProjection: { metadata, snapshot },
+      phase: { kind: "attempting" },
+    });
+    expect(h.records[0]?.disposed).toBe(true);
+    expect(seen).toContain("reconnecting");
+  });
+
+  it("enters reconnect recovery after an initial retryable failure without stale context", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const h = createHarness({ connectionPlan: [{ failure: new Error("socket unavailable") }] });
+
+    await h.model.initialize();
+
+    expect(h.model.getState().active).toMatchObject({
+      kind: "reconnecting",
+      failure: { kind: "transport", diagnostic: "socket unavailable" },
+      phase: { kind: "waiting", retryAt: 500 },
+    });
+    expect(h.model.getState().active).not.toHaveProperty("staleProjection");
+    expect(vi.getTimerCount()).toBe(1);
+    h.model.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(h.records).toHaveLength(1);
+  });
+
+  it("resolves a fresh endpoint and creates a fresh connection for each retry", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const h = createHarness({
+      connectionPlan: [{ failure: new Error("first failure") }, { failure: new Error("second failure") }, {}],
+    });
+
+    await h.model.initialize();
+    expect(h.resolve).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(h.resolve).toHaveBeenCalledTimes(2);
+    expect(h.records).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.resolve).toHaveBeenCalledTimes(3);
+    expect(h.records).toHaveLength(3);
+    expect(h.model.getState().active).toMatchObject({ kind: "connected", metadata, snapshot });
+    expect(h.records.map((record) => record.id)).toEqual(["default", "default", "default"]);
+    h.model.dispose();
+  });
+
+  it("uses the approved base wait sequence and repeats the 30-second cap", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const h = createHarness({
+      connectionPlan: Array.from({ length: 8 }, (_, index) => ({ failure: new Error(`failure ${index}`) })),
+    });
+    const waits = [500, 1000, 2000, 5000, 10000, 30000, 30000] as const;
+
+    await h.model.initialize();
+    for (const [index, wait] of waits.entries()) {
+      const active = h.model.getState().active;
+      expect(active).toMatchObject({ kind: "reconnecting", phase: { kind: "waiting" } });
+      if (active.kind !== "reconnecting" || active.phase.kind !== "waiting")
+        throw new Error("expected waiting recovery");
+      expect(active.phase.retryAt - Date.now()).toBe(wait);
+      await vi.advanceTimersByTimeAsync(wait);
+      expect(h.records).toHaveLength(index + 2);
+    }
+    h.model.dispose();
+  });
+
+  it("jitter stays within plus or minus twenty percent and separates model schedules", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(Math, "random").mockReturnValueOnce(0).mockReturnValueOnce(1);
+    const first = createHarness({ connectionPlan: [{ failure: new Error("first") }] });
+    const second = createHarness({ connectionPlan: [{ failure: new Error("second") }] });
+
+    await first.model.initialize();
+    await second.model.initialize();
+
+    const firstActive = first.model.getState().active;
+    const secondActive = second.model.getState().active;
+    expect(firstActive).toMatchObject({ kind: "reconnecting", phase: { retryAt: 400 } });
+    expect(secondActive).toMatchObject({ kind: "reconnecting", phase: { retryAt: 600 } });
+    expect(firstActive).not.toEqual(secondActive);
+    first.model.dispose();
+    second.model.dispose();
+  });
+
+  it("retains one stale projection across failed retries", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const h = createHarness({ connectionPlan: [{}, { failure: new Error("reconnect failed") }] });
+
+    await h.model.initialize();
+    const initial = h.records[0];
+    if (initial === undefined) throw new Error("initial connection was not created");
+    initial.close({ kind: "transport", diagnostic: "socket closed" });
+    await vi.waitFor(() =>
+      expect(h.model.getState().active).toMatchObject({
+        kind: "reconnecting",
+        staleProjection: { metadata, snapshot },
+        phase: { kind: "waiting" },
+      }),
+    );
+    expect(h.model.getState().active).toMatchObject({ kind: "reconnecting", staleProjection: { metadata, snapshot } });
+    h.model.dispose();
+  });
+
+  it("replaces stale projection with a fresh snapshot and resets backoff after bootstrap", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const freshSnapshot = { ...snapshot, version: "2" };
+    const h = createHarness({
+      connectionPlan: [
+        {},
+        { failure: new Error("retry failed") },
+        { snapshot: freshSnapshot },
+        { failure: new Error("later retry failed") },
+      ],
+    });
+
+    await h.model.initialize();
+    h.records[0]?.close({ kind: "transport", diagnostic: "socket closed" });
+    await vi.waitFor(() =>
+      expect(h.model.getState().active).toMatchObject({ kind: "reconnecting", phase: { kind: "waiting" } }),
+    );
+    expect(h.model.getState().active).toMatchObject({ staleProjection: { snapshot } });
+    const firstRetry = h.model.getState().active;
+    if (firstRetry.kind !== "reconnecting" || firstRetry.phase.kind !== "waiting")
+      throw new Error("expected waiting recovery");
+    expect(firstRetry.phase.retryAt - Date.now()).toBeGreaterThanOrEqual(400);
+    expect(firstRetry.phase.retryAt - Date.now()).toBeLessThanOrEqual(600);
+    await vi.advanceTimersByTimeAsync(firstRetry.phase.retryAt - Date.now());
+    expect(h.model.getState().active).toMatchObject({ kind: "connected", metadata, snapshot: freshSnapshot });
+    h.records[2]?.close({ kind: "transport", diagnostic: "socket closed again" });
+    await vi.waitFor(() => expect(h.records).toHaveLength(4));
+    const laterRetry = h.model.getState().active;
+    if (laterRetry.kind !== "reconnecting" || laterRetry.phase.kind !== "waiting")
+      throw new Error("expected waiting recovery");
+    expect(laterRetry.phase.retryAt - Date.now()).toBeGreaterThanOrEqual(400);
+    expect(laterRetry.phase.retryAt - Date.now()).toBeLessThanOrEqual(600);
+    h.model.dispose();
+  });
+
+  it("explicit Retry cancels a pending attempt and starts a fresh flow", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const h = createHarness({
+      connectionPlan: [{ failure: new Error("initial failure") }, { auto: false }, {}],
+    });
+
+    await h.model.initialize();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(h.model.getState().active).toMatchObject({ kind: "reconnecting", phase: { kind: "attempting" } });
+    const pending = h.records[1];
+    if (pending === undefined) throw new Error("pending retry connection was not created");
+    await h.model.retry();
+    expect(pending.disposed).toBe(true);
+    expect(h.records).toHaveLength(3);
+    expect(h.model.getState().active).toMatchObject({ kind: "connected", metadata, snapshot });
+    pending.settle();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(h.records).toHaveLength(3);
+    h.model.dispose();
+  });
+
+  it("explicit Retry cancels a pending timer and resets the wait sequence", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const h = createHarness({
+      connectionPlan: [
+        { failure: new Error("initial failure") },
+        { failure: new Error("automatic retry failed") },
+        { failure: new Error("explicit retry failed") },
+        {},
+      ],
+    });
+
+    await h.model.initialize();
+    await vi.advanceTimersByTimeAsync(500);
+    const beforeRetry = h.model.getState().active;
+    if (beforeRetry.kind !== "reconnecting" || beforeRetry.phase.kind !== "waiting")
+      throw new Error("expected the second automatic wait");
+    expect(beforeRetry.phase.retryAt - Date.now()).toBe(1000);
+
+    await h.model.retry();
+    const afterRetry = h.model.getState().active;
+    if (afterRetry.kind !== "reconnecting" || afterRetry.phase.kind !== "waiting")
+      throw new Error("expected the restarted first wait");
+    expect(afterRetry.phase.retryAt - Date.now()).toBe(500);
+    expect(vi.getTimerCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(h.records).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.records).toHaveLength(4);
+    expect(h.model.getState().active).toMatchObject({ kind: "connected", metadata, snapshot });
+    h.model.dispose();
+  });
+
+  it("retains stale projection and suppresses automatic retry after live incompatibility", async () => {
+    vi.useFakeTimers();
+    const h = createHarness();
+
+    await h.model.initialize();
+    h.records[0]?.close({
+      kind: "incompatible",
+      diagnostic: "protocol changed",
+      version: "2",
+      protocol: 99,
+    });
+
+    expect(h.model.getState().active).toMatchObject({
+      kind: "incompatible",
+      staleProjection: { metadata, snapshot },
+      failure: { diagnostic: "protocol changed", version: "2", protocol: 99 },
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    h.model.dispose();
+  });
+
+  it.each([
+    ["reconnecting", { failure: new Error("initial failure") }],
+    ["incompatible", { failure: new HerdrConnectionFailureError({ kind: "incompatible", diagnostic: "unsupported" }) }],
+  ] as const)("selecting the already-selected %s Session explicitly restarts recovery", async (_kind, first) => {
+    const h = createHarness({ connectionPlan: [first, {}] });
+    await h.model.initialize();
+    expect(h.model.getState().active.kind).toBe(_kind);
+    await h.model.selectSession("default");
+    expect(h.records).toHaveLength(2);
+    expect(h.model.getState().active).toMatchObject({ kind: "connected", metadata, snapshot });
+    h.model.dispose();
+  });
+
+  it("suppresses automatic retry for incompatibility but permits explicit and configuration recovery", async () => {
+    vi.useFakeTimers();
+    const explicit = createHarness({
+      connectionPlan: [
+        { failure: new HerdrConnectionFailureError({ kind: "incompatible", diagnostic: "unsupported" }) },
+        {},
+      ],
+    });
+    await explicit.model.initialize();
+    expect(explicit.model.getState().active.kind).toBe("incompatible");
+    expect(vi.getTimerCount()).toBe(0);
+    await explicit.model.retry();
+    expect(explicit.model.getState().active).toMatchObject({ kind: "connected", metadata, snapshot });
+    explicit.model.dispose();
+
+    const configured = createHarness({
+      connectionPlan: [
+        { failure: new HerdrConnectionFailureError({ kind: "incompatible", diagnostic: "unsupported" }) },
+        {},
+      ],
+    });
+    await configured.model.initialize();
+    configured.setConfiguration({ ...configuration, executable: "other-herdr" });
+    await vi.waitFor(() => expect(configured.model.getState().active.kind).toBe("connected"));
+    expect(configured.records).toHaveLength(2);
+    configured.model.dispose();
+  });
+
+  it("cancels a live recovery attempt when selecting another Session", async () => {
+    const h = createHarness({
+      sessions: [defaultSession, workSession],
+      connectionPlan: [{}, { auto: false }, {}],
+    });
+    await h.model.initialize();
+    h.records[0]?.close({ kind: "transport", diagnostic: "socket closed" });
+    await vi.waitFor(() => expect(h.records).toHaveLength(2));
+    const staleAttempt = h.records[1];
+    if (staleAttempt === undefined) throw new Error("recovery attempt was not created");
+    await h.model.selectSession("work");
+    expect(staleAttempt.disposed).toBe(true);
+    expect(h.model.getState().active).toMatchObject({ kind: "connected", session: { id: "work" } });
+    staleAttempt.settle();
+    expect(h.model.getState().active).toMatchObject({ kind: "connected", session: { id: "work" } });
+    h.model.dispose();
+  });
+
+  it("cancels recovery on configuration refresh and suppresses late callbacks on disposal", async () => {
+    const h = createHarness({
+      configuredSession: "work",
+      sessions: [defaultSession, workSession],
+      connectionPlan: [{}, { auto: false }, {}, { auto: false }],
+    });
+    await h.model.initialize();
+    h.records[0]?.close({ kind: "transport", diagnostic: "socket closed" });
+    await vi.waitFor(() => expect(h.records).toHaveLength(2));
+    const staleAttempt = h.records[1];
+    if (staleAttempt === undefined) throw new Error("recovery attempt was not created");
+    h.setConfiguration({ ...configuration, executable: "other-herdr", session: "work" });
+    await vi.waitFor(() => expect(h.records).toHaveLength(3));
+    expect(staleAttempt.disposed).toBe(true);
+    expect(h.model.getState().active).toMatchObject({ kind: "connected", session: { id: "work" } });
+
+    h.records[2]?.close({ kind: "transport", diagnostic: "socket closed after refresh" });
+    await vi.waitFor(() => expect(h.records).toHaveLength(4));
+    const beforeLateCallback = h.model.getState();
+    const pendingAfterRefresh = h.records[3];
+    if (pendingAfterRefresh === undefined) throw new Error("post-refresh attempt was not created");
+    h.model.dispose();
+    expect(pendingAfterRefresh.disposed).toBe(true);
+    pendingAfterRefresh.settle();
+    expect(h.model.getState()).toBe(beforeLateCallback);
   });
 
   it("rejects late listing publication after disposal and removes configuration subscription", async () => {

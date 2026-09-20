@@ -35,6 +35,18 @@ export function statusModel(state: SessionsState): HerdrStatusModel {
         endpoint: active.endpoint,
         availableActions: standardActions,
       };
+    case "reconnecting":
+      return {
+        ...identity,
+        kind: "reconnecting",
+        diagnostic: failureDiagnostic(active.failure),
+        phase: active.phase.kind,
+        ...(active.phase.kind === "waiting" ? { retryAt: active.phase.retryAt } : {}),
+        ...(active.staleProjection === undefined ? {} : { version: active.staleProjection.metadata.version }),
+        ...(active.staleProjection === undefined ? {} : { protocol: active.staleProjection.metadata.protocol }),
+        ...(active.endpoint === undefined ? {} : { endpoint: active.endpoint }),
+        availableActions: standardActions,
+      };
     case "incompatible":
       return {
         ...identity,
@@ -42,16 +54,6 @@ export function statusModel(state: SessionsState): HerdrStatusModel {
         diagnostic: active.failure.diagnostic,
         ...(active.failure.version === undefined ? {} : { version: active.failure.version }),
         ...(active.failure.protocol === undefined ? {} : { protocol: active.failure.protocol }),
-        ...(active.endpoint === undefined ? {} : { endpoint: active.endpoint }),
-        availableActions: standardActions,
-      };
-    case "disconnected":
-      return {
-        ...identity,
-        kind: "disconnected",
-        diagnostic: failureDiagnostic(active.failure),
-        ...(active.metadata?.version === undefined ? {} : { version: active.metadata.version }),
-        ...(active.metadata?.protocol === undefined ? {} : { protocol: active.metadata.protocol }),
         ...(active.endpoint === undefined ? {} : { endpoint: active.endpoint }),
         availableActions: standardActions,
       };

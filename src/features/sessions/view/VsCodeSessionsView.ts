@@ -77,8 +77,8 @@ type RowState =
   | "resolving"
   | "connecting"
   | "connected"
-  | "incompatible"
-  | "disconnected";
+  | "reconnecting"
+  | "incompatible";
 
 function label(state: RowState): string {
   if (state === "selected-stopped") return "stopped";
@@ -87,9 +87,9 @@ function label(state: RowState): string {
 }
 function icon(state: RowState): string {
   if (state === "connected") return "pass-filled";
-  if (state === "connecting" || state === "resolving") return "loading~spin";
+  if (state === "connecting" || state === "resolving" || state === "reconnecting") return "loading~spin";
   if (state === "stopped" || state === "selected-stopped") return "circle-slash";
-  if (state === "start-failed" || state === "incompatible" || state === "disconnected") return "error";
+  if (state === "start-failed" || state === "incompatible") return "error";
   return "circle-filled";
 }
 function tooltip(id: string, isDefault: boolean, selected: boolean, current: RowState, state: SessionsState): string {
@@ -102,22 +102,26 @@ function tooltip(id: string, isDefault: boolean, selected: boolean, current: Row
   const active = state.active;
   if (!selected || active.kind === "unselected") return lines.join("\n");
   if (active.kind === "start-failed") lines.push(`Diagnostic: ${active.diagnostic}`);
-  if (active.kind === "connecting" || active.kind === "connected") lines.push(`Endpoint: ${active.endpoint}`);
+  if (active.kind === "connecting" || active.kind === "connected" || active.kind === "reconnecting")
+    if (active.endpoint !== undefined) lines.push(`Endpoint: ${active.endpoint}`);
   if (active.kind === "connected")
     lines.push(`Version: ${active.metadata.version}`, `Protocol: ${active.metadata.protocol}`);
+  if (active.kind === "reconnecting") {
+    lines.push(
+      `Diagnostic: ${failureDiagnostic(active.failure)}`,
+      ...(active.staleProjection === undefined ? [] : [`Version: ${active.staleProjection.metadata.version}`]),
+      ...(active.staleProjection === undefined ? [] : [`Protocol: ${active.staleProjection.metadata.protocol}`]),
+      ...(active.phase.kind === "waiting"
+        ? [`Next attempt: ${new Date(active.phase.retryAt).toLocaleTimeString()}`]
+        : []),
+    );
+  }
   if (active.kind === "incompatible")
     lines.push(
       `Diagnostic: ${active.failure.diagnostic}`,
       ...(active.endpoint ? [`Endpoint: ${active.endpoint}`] : []),
       ...(active.failure.version === undefined ? [] : [`Version: ${active.failure.version}`]),
       ...(active.failure.protocol === undefined ? [] : [`Protocol: ${active.failure.protocol}`]),
-    );
-  if (active.kind === "disconnected")
-    lines.push(
-      `Diagnostic: ${failureDiagnostic(active.failure)}`,
-      ...(active.endpoint ? [`Endpoint: ${active.endpoint}`] : []),
-      ...(active.metadata?.version === undefined ? [] : [`Version: ${active.metadata.version}`]),
-      ...(active.metadata?.protocol === undefined ? [] : [`Protocol: ${active.metadata.protocol}`]),
     );
   return lines.join("\n");
 }

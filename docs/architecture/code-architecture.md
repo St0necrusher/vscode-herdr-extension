@@ -63,6 +63,8 @@ This is an illustrative vocabulary, not a fixed layer list or mandatory director
 
 A model or store is the authoritative owner of a coherent part of a feature's mutable application state and transitions. A feature may have several when they own genuinely distinct state or lifecycles; place peer owners under a semantic plural directory when that makes the ownership graph clearer.
 
+Define each variant of a non-trivial state-machine discriminated union as a named type. Define the aggregate union by composing those variant names rather than inlining every record. Apply this to new and changed state-machine code; do not rewrite unrelated stable unions only for style.
+
 A feature with one coordinated state machine exposes one aggregate state and operation surface, even when the state has named slices. This lets the owner publish atomic transitions and keeps consumers from reconstructing authority across peer services.
 
 Split a state owner only when a distinct state, lifecycle, responsibility, or independent consumer exists. File size alone is not a boundary. Derived state is computed rather than copied into another mutable store.

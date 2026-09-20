@@ -130,6 +130,12 @@ function dependencies(options: { list?: () => Promise<never>; configurationFailu
 }
 
 suite("Sessions feature host bindings and lifecycle", () => {
+  suiteSetup(async () => {
+    const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
+    assert.ok(extension, "Extension is installed in the test host");
+    await extension.activate();
+  });
+
   test("Feature owns command registration, routes commands, and disposes all resources", async () => {
     await withNamespacedCommands(async (prefix, registered) => {
       const d = dependencies();
@@ -188,16 +194,25 @@ suite("Sessions feature host bindings and lifecycle", () => {
       harness.setState({
         ...initial,
         active: {
-          kind: "disconnected",
+          kind: "reconnecting",
           session: defaultSession,
           endpoint: "/tmp/default.sock",
-          metadata: { version: "0.9.1", protocol: 22 },
+          staleProjection: {
+            metadata: { version: "0.9.1", protocol: 22 },
+            snapshot: { version: "0.9.1", protocol: 22, spaces: [], herdrTabs: [], panes: [], layouts: [], agents: [] },
+          },
           failure: { kind: "transport", diagnostic: "socket closed" },
+          phase: { kind: "waiting", retryAt: Date.now() + 1000 },
         },
       });
-      const disconnectedMetadata = rowsFor(view, "default");
-      assert.match(tooltipText(disconnectedMetadata), /Version: 0.9.1/);
-      assert.match(tooltipText(disconnectedMetadata), /Protocol: 22/);
+      const reconnectingMetadata = rowsFor(view, "default");
+      assert.match(reconnectingMetadata.description as string, /reconnecting/);
+      assert.doesNotMatch(reconnectingMetadata.description as string, /disconnected/);
+      assert.match(tooltipText(reconnectingMetadata), /State: reconnecting/);
+      assert.match(tooltipText(reconnectingMetadata), /Diagnostic: socket closed/);
+      assert.match(tooltipText(reconnectingMetadata), /Version: 0.9.1/);
+      assert.match(tooltipText(reconnectingMetadata), /Protocol: 22/);
+      assert.match(tooltipText(reconnectingMetadata), /Next attempt:/);
 
       harness.setState({
         ...initial,

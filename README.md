@@ -2,7 +2,7 @@
 
 A local desktop VS Code client for Herdr.
 
-The extension discovers available Herdr Sessions and shows them in the **Sessions** View. Each row shows whether a Herdr Session is running, stopped, selected, connecting, connected, incompatible, or disconnected. Select a row to make that Herdr Session active; the selection is persisted and restored when possible.
+The extension discovers available Herdr Sessions and shows them in the **Sessions** View. Each row shows whether a Herdr Session is running, stopped, selected, connecting, connected, reconnecting, or incompatible. Select a row to make that Herdr Session active; the selection is persisted and restored when possible.
 
 Discovery runs during activation and can be refreshed from the Sessions View. Refreshing re-reads the configured Herdr executable and catalog, then restores the saved, configured, or default Herdr Session selection. The extension never starts or stops a Herdr Session automatically. To start one explicitly, select a stopped Herdr Session and choose **Herdr: Start Herdr** from the status actions. Start applies only to the currently selected stopped Herdr Session.
 
