@@ -1,4 +1,5 @@
-# Local coding-agent configuration
+# Local editor and coding-agent configuration
+.vscode/
 .agents/
 AGENTS.md
 docs/agents/
