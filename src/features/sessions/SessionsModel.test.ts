@@ -64,6 +64,7 @@ type HarnessOptions = Readonly<{
   list?: () => Promise<Awaited<ReturnType<HerdrSessionDirectory["list"]>>>;
   autoConnections?: boolean;
   connectionFailure?: unknown;
+  start?: () => ReturnType<HerdrSessionDirectory["start"]>;
   autoStorage?: boolean;
   storageFailure?: unknown;
 }>;
@@ -93,7 +94,7 @@ function createHarness(options: HarnessOptions = {}) {
   const logger = { info: vi.fn(), error: vi.fn(), show: vi.fn() };
   const records: ConnectionRecord[] = [];
   const list = options.list ?? (() => Promise.resolve(options.listResult ?? success(options.sessions)));
-  const start = vi.fn(() => Promise.resolve());
+  const start = vi.fn(options.start ?? (() => Promise.resolve()));
   const resolve = vi.fn((_nextConfiguration: HerdrConfiguration, id: string) =>
     Promise.resolve({ id, endpoint: `/tmp/${id}.sock` }),
   );
@@ -238,6 +239,48 @@ describe("SessionsModel", () => {
     await h.model.startSelectedSession();
     expect(h.start).toHaveBeenCalledWith(configuration, "work");
     expect(h.records).toHaveLength(1);
+  });
+
+  it("keeps a ready catalog when explicit Start fails and permits another selection", async () => {
+    const h = createHarness({ saved: "work", start: () => Promise.reject(new Error("start denied")) });
+    await h.model.initialize();
+    await h.model.startSelectedSession();
+
+    expect(h.model.getState()).toMatchObject({
+      catalog: { kind: "ready", sessions: allSessions },
+      active: { kind: "start-failed", session: { id: "work" }, diagnostic: "start denied" },
+    });
+
+    await h.model.selectSession("default");
+    expect(h.model.getState()).toMatchObject({
+      catalog: { kind: "ready" },
+      active: { kind: "connected", session: { id: "default" } },
+    });
+  });
+
+  it.each([
+    ["success", undefined],
+    ["failure", new Error("late Start failure")],
+  ] as const)("ignores stale explicit Start %s after selecting another Session", async (_outcome, failure) => {
+    const gate = deferred<undefined>();
+    const h = createHarness({ saved: "work", start: () => gate.promise });
+    await h.model.initialize();
+    const transitions: string[] = [];
+    h.model.onDidChange((state) => transitions.push(`${state.catalog.kind}:${state.active.kind}`));
+
+    const pendingStart = h.model.startSelectedSession();
+    await vi.waitFor(() => expect(h.start).toHaveBeenCalled());
+    await h.model.selectSession("default");
+    const afterSelection = transitions.length;
+    if (failure === undefined) gate.resolve(undefined);
+    else gate.reject(failure);
+    await pendingStart;
+
+    expect(h.model.getState()).toMatchObject({
+      catalog: { kind: "ready" },
+      active: { kind: "connected", session: { id: "default" } },
+    });
+    expect(transitions.slice(afterSelection)).toEqual([]);
   });
 
   it("serializes persistence writes and lets the latest selection win", async () => {

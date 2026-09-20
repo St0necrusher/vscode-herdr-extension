@@ -14,6 +14,21 @@ describe("statusModel", () => {
     expect(model.availableActions).toContain("start");
     expect(model.availableActions).toContain("retry");
   });
+  it("projects explicit Start failure as recoverable error without offering implicit Start", () => {
+    const state: SessionsState = {
+      configuration: base,
+      catalog: { kind: "ready", sessions: [{ id: "default", isDefault: true, availability: "stopped" }] },
+      active: {
+        kind: "start-failed",
+        session: { id: "default", isDefault: true, availability: "stopped" },
+        diagnostic: "permission denied",
+      },
+    };
+    expect(statusModel(state)).toMatchObject({ kind: "error", diagnostic: "permission denied" });
+    expect(statusModel(state).availableActions).toEqual(["retry", "open-settings", "show-diagnostics"]);
+    expect(statusModel(state).availableActions).not.toContain("start");
+  });
+
   it("retains diagnostics and connection metadata", () => {
     const state: SessionsState = {
       configuration: base,

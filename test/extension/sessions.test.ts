@@ -1,6 +1,8 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import { SessionsFeature } from "../../src/features/sessions/SessionsFeature.js";
+import { VsCodeSessionsView } from "../../src/features/sessions/view/VsCodeSessionsView.js";
+import type { SessionsState, SessionsStateSource } from "../../src/features/sessions/capabilities/index.js";
 
 let sequence = 0;
 const commandIds = [
@@ -31,6 +33,35 @@ async function withNamespacedCommands(
   } finally {
     vscode.commands.registerCommand = original;
   }
+}
+
+function stateSource(initial: SessionsState): { source: SessionsStateSource; setState(state: SessionsState): void } {
+  let state = initial;
+  const listeners = new Set<(next: SessionsState) => void>();
+  return {
+    source: {
+      getState: () => state,
+      onDidChange: (listener) => {
+        listeners.add(listener);
+        return { dispose: () => listeners.delete(listener) };
+      },
+    },
+    setState: (next) => {
+      state = next;
+      for (const listener of listeners) listener(next);
+    },
+  };
+}
+
+function tooltipText(item: vscode.TreeItem): string {
+  const tooltip = item.tooltip;
+  return typeof tooltip === "string" ? tooltip : (tooltip?.value ?? "");
+}
+
+function rowsFor(view: VsCodeSessionsView, id: string): vscode.TreeItem {
+  const row = view.getChildren().find((item) => item.id === id);
+  assert.ok(row);
+  return row;
 }
 
 function dependencies(options: { list?: () => Promise<never>; configurationFailure?: boolean } = {}) {
@@ -119,6 +150,69 @@ suite("Sessions feature host bindings and lifecycle", () => {
       const remaining = await vscode.commands.getCommands(true);
       assert.ok(commandIds.every((id) => !remaining.includes(prefix + id)));
     });
+  });
+
+  test("Sessions View keeps all rows visible, exposes Start diagnostics, and preserves selection intent", () => {
+    const defaultSession = { id: "default", isDefault: true, availability: "running" as const };
+    const workSession = { id: "work", isDefault: false, availability: "stopped" as const };
+    const initial: SessionsState = {
+      configuration: { executable: "herdr", session: "work" },
+      catalog: { kind: "ready", sessions: [defaultSession, workSession] },
+      active: { kind: "start-failed", session: workSession, diagnostic: "start denied" },
+    };
+    const harness = stateSource(initial);
+    const view = new VsCodeSessionsView(harness.source);
+    try {
+      const rows = view.getChildren();
+      assert.equal(rows.length, 2);
+      const selected = rows.find((row) => row.id === "work");
+      const other = rows.find((row) => row.id === "default");
+      assert.ok(selected);
+      assert.ok(other);
+      assert.match(tooltipText(selected), /Diagnostic: start denied/);
+      assert.equal(other.command?.command, "herdr.selectSession");
+
+      harness.setState({
+        ...initial,
+        active: {
+          kind: "incompatible",
+          session: defaultSession,
+          endpoint: "/tmp/default.sock",
+          failure: { kind: "incompatible", diagnostic: "unsupported", version: "0.9.1", protocol: 22 },
+        },
+      });
+      const compatibleMetadata = rowsFor(view, "default");
+      assert.match(tooltipText(compatibleMetadata), /Version: 0.9.1/);
+      assert.match(tooltipText(compatibleMetadata), /Protocol: 22/);
+
+      harness.setState({
+        ...initial,
+        active: {
+          kind: "disconnected",
+          session: defaultSession,
+          endpoint: "/tmp/default.sock",
+          metadata: { version: "0.9.1", protocol: 22 },
+          failure: { kind: "transport", diagnostic: "socket closed" },
+        },
+      });
+      const disconnectedMetadata = rowsFor(view, "default");
+      assert.match(tooltipText(disconnectedMetadata), /Version: 0.9.1/);
+      assert.match(tooltipText(disconnectedMetadata), /Protocol: 22/);
+
+      harness.setState({
+        ...initial,
+        active: {
+          kind: "incompatible",
+          session: defaultSession,
+          failure: { kind: "incompatible", diagnostic: "metadata unavailable" },
+        },
+      });
+      const unavailableMetadata = rowsFor(view, "default");
+      assert.doesNotMatch(tooltipText(unavailableMetadata), /Version:/);
+      assert.doesNotMatch(tooltipText(unavailableMetadata), /Protocol:/);
+    } finally {
+      view.dispose();
+    }
   });
 
   test("partial Feature command registration cleans earlier registrations and Views", async () => {

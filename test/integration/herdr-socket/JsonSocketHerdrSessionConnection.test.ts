@@ -205,6 +205,58 @@ async function waitFor<T>(read: () => T, assertion: (value: T) => void): Promise
 }
 
 describe("JSON Socket Herdr Session connection", () => {
+  it("bootstraps in protocol order, returns metadata, and closes transports without late projection events", async () => {
+    const order: string[] = [];
+    const connector = new ControlledConnector((transport, request) => {
+      order.push(request.method);
+      if (request.method === "ping") transport.respond(request, pong());
+      if (request.method === "events.subscribe") transport.respond(request, subscribeAck());
+      if (request.method === "session.snapshot") transport.respond(request, snapshotResult());
+    });
+    const replaceSnapshot = vi.fn();
+    const connectionClosed = vi.fn();
+    const projectionConsumer: HerdrSessionProjectionConsumer = { replaceSnapshot, connectionClosed };
+    const sessionConnection = connection(connector);
+
+    const metadata = await sessionConnection.bootstrap(projectionConsumer);
+
+    expect(order).toEqual(["ping", "events.subscribe", "session.snapshot"]);
+    expect(metadata).toMatchObject({ version: "0.9.1", protocol: 22, endpointProtocolGeneration: 1 });
+    expect(metadata.capabilities).toEqual({});
+    expect(replaceSnapshot).toHaveBeenCalledTimes(1);
+
+    const transports = [...connector.transports];
+    sessionConnection.dispose();
+    expect(transports.every((transport) => transport.disposed)).toBe(true);
+    const replacements = replaceSnapshot.mock.calls.length;
+    const subscriptionTransport = connector.transports[1];
+    if (subscriptionTransport === undefined) throw new Error("The retained subscription transport was not created.");
+    subscriptionTransport.emitEvent("workspace.updated");
+    expect(replaceSnapshot).toHaveBeenCalledTimes(replacements);
+    expect(connectionClosed).not.toHaveBeenCalled();
+  });
+
+  it("ignores unknown response IDs and preserves structured Herdr errors for the actual request", async () => {
+    const connector = new ControlledConnector((transport, request) => {
+      if (request.method === "ping") {
+        transport.emit({ id: "unknown-response", result: pong() });
+        transport.respond(request, pong());
+      }
+      if (request.method === "events.subscribe") transport.respond(request, subscribeAck());
+      if (request.method === "session.snapshot") {
+        transport.emit({ id: "unknown-response", result: snapshotResult() });
+        transport.emit({
+          id: request.id,
+          error: { code: "SNAPSHOT_FAILED", message: "snapshot unavailable", unknown_field: true },
+        });
+      }
+    });
+
+    await expect(connection(connector).bootstrap(consumer())).rejects.toMatchObject({
+      failure: { kind: "herdr-error", code: "SNAPSHOT_FAILED", message: "snapshot unavailable", operation: "snapshot" },
+    });
+  });
+
   it("bounds a pending socket connect by timeout", async () => {
     vi.useFakeTimers();
     try {
