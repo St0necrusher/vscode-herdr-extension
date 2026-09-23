@@ -73,6 +73,7 @@ export class PaneTreeItem extends vscode.TreeItem {
     this.id = `herdr.pane.${row.pane.id}`;
     if (singleton) this.description = row.tab.label;
     this.contextValue = singleton ? "herdr.panes.singleton" : "herdr.panes.pane";
+    this.command = { command: "herdr.openPane", title: "Open Pane", arguments: [row.pane.id] };
     this.iconPath = new vscode.ThemeIcon("terminal");
     this.tooltip = [
       `Pane: ${row.name}`,

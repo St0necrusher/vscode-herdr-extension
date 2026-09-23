@@ -28,7 +28,7 @@ await esbuild.build({
   outfile: resolve(root, "dist/extension.js"),
 });
 
-for (const entryPoint of ["activation.test.ts", "sessions.test.ts"]) {
+for (const entryPoint of ["activation.test.ts", "sessions.test.ts", "terminal-surfaces.test.ts"]) {
   await esbuild.build({
     ...commonOptions,
     entryPoints: [resolve(root, "test/extension", entryPoint)],

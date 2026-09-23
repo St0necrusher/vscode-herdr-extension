@@ -1,0 +1,62 @@
+#!/usr/bin/env node
+const { writeFileSync, writeSync } = require("node:fs");
+
+const args = process.argv.slice(2);
+const argsPath = process.env.HERDR_TERMINAL_OBSERVER_ARGS_FILE;
+if (argsPath !== undefined) writeFileSync(argsPath, JSON.stringify(args));
+
+const observeIndex = args.indexOf("observe");
+const terminalId = args[observeIndex + 1];
+const frame = (bytes, full) => ({ type: "terminal.frame", bytes: Buffer.from(bytes).toString("base64"), full });
+
+function writeFragmented(records) {
+  const output = Buffer.from(`${records.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
+  const fragmentSizes = [1, 4, 2, 7, 3, 5];
+  let offset = 0;
+  let fragment = 0;
+  const writeNext = () => {
+    if (offset >= output.length) {
+      process.exit(0);
+      return;
+    }
+    const size = fragmentSizes[fragment % fragmentSizes.length] ?? 1;
+    process.stdout.write(output.subarray(offset, offset + size));
+    offset += size;
+    fragment += 1;
+    setImmediate(writeNext);
+  };
+  writeNext();
+}
+
+if (terminalId === "fixture-stream") {
+  const euro = Buffer.from("€", "utf8");
+  writeFragmented([
+    { type: "future.record", value: { additive: true } },
+    frame(Buffer.from("\u001b[31mREADY\u001b[0m", "utf8"), true),
+    frame(euro.subarray(0, 1), false),
+    { type: "terminal.future", value: "ignored" },
+    frame(euro.subarray(1), false),
+    { type: "terminal.closed", reason: "fixture complete" },
+  ]);
+} else if (terminalId === "fixture-invalid-json") {
+  process.stdout.write("{invalid json}\n");
+  setInterval(() => undefined, 1_000);
+} else if (terminalId === "fixture-invalid-frame") {
+  process.stdout.write(`${JSON.stringify({ type: "terminal.frame", bytes: "bad base64!", full: true })}\n`);
+  setInterval(() => undefined, 1_000);
+} else if (terminalId === "fixture-invalid-closed") {
+  process.stdout.write(`${JSON.stringify({ type: "terminal.closed", reason: 42 })}\n`);
+  setInterval(() => undefined, 1_000);
+} else if (terminalId === "fixture-eof") {
+  process.stdout.write(`${JSON.stringify(frame(Buffer.from("before eof", "utf8"), true))}\n`, () => process.exit(0));
+} else if (terminalId === "fixture-closed-zero") {
+  writeSync(1, `${JSON.stringify({ type: "terminal.closed", reason: "clean exit" })}\n`);
+  process.exit(0);
+} else if (terminalId === "fixture-hang") {
+  const pidPath = process.env.HERDR_TERMINAL_OBSERVER_PID_FILE;
+  if (pidPath !== undefined) writeFileSync(pidPath, String(process.pid));
+  setInterval(() => undefined, 1_000);
+} else {
+  process.stderr.write(`Unknown fixture terminal: ${String(terminalId)}\n`);
+  process.exit(2);
+}

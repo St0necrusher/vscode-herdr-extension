@@ -53,6 +53,10 @@
         "command": "herdr.refreshSessions",
         "title": "Herdr: Refresh Sessions",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "herdr.openPane",
+        "title": "Herdr: Open Pane"
       }
     ],
     "viewsContainers": {

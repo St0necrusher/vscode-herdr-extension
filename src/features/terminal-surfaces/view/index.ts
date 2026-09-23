@@ -1,0 +1,1 @@
+export { VsCodeTerminalSurfaceView } from "./VsCodeTerminalSurfaceView";

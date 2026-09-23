@@ -1,0 +1,90 @@
+# Issue #14 — read-only Pane terminal editor
+
+**Status: approved, implemented, tested and independently reviewed on 2026-09-23. Ready for human review.**
+
+Requirements: [#14](https://github.com/St0necrusher/vscode-herdr-extension/issues/14), with parent [#9](https://github.com/St0necrusher/vscode-herdr-extension/issues/9); blocker #13 is closed. Architecture authority: [`code-architecture.md`](../../architecture/code-architecture.md); domain vocabulary: [`CONTEXT.md`](../../../CONTEXT.md). Evidence: [#2 resolution](https://github.com/St0necrusher/vscode-herdr-extension/issues/2#issuecomment-5688098798), [pinned prototype audit](prototype-boundary-audit.md) and [Herdr 0.9.0 observer research](herdr-observer-research.md). Do not copy the prototype's monolithic implementation.
+
+## Product goal and scope
+
+Click a Pane in the Panes View to open or refocus its *existing* server-owned terminal as a native VS Code editor-area terminal, initially and throughout this ticket **observer-only**. Show its current screen and live ANSI frames. Keep one editor surface per Herdr Session identity plus terminal ID, independent of the navigation Session/Space selected later. Unexpected observer-process loss reconnects while the surface is relevant; a disconnected editor belonging to another, inactive Session does not keep retrying in the background. Intentional editor disposal closes only that observer subprocess. A `terminal.closed` record ends the **observer stream**, but alone does not prove the server-owned Pane is gone. A fresh snapshot of that Session lacking the original terminal ID confirms that this editor is no longer attachable. No second PTY, no control/input forwarding, no Pane/Agent lifecycle mutation.
+
+#9 describes future focus-driven control, takeover, resize, Session/Space restoration from focused editors, and layout projection. These are **not #14**; the parent product direction does not silently enlarge this ticket. The user also described a later **live Tab-follow** action: when locally following a Herdr Tab, a Pane added there (for example by an Agent) should gain an editor from the current Session snapshot. This is a separate future stage that revisits #5's one-shot/no-live-projection decision. #14 retains the simple Pane-open action, including a visually flattened singleton; it adds no speculative Pane|Tab selection state. An externally closed Pane's already open editor should retain the last rendered frame with a concise inert explanation, consistent with #9, pending confirmation during design.
+
+## Proposed boundaries and dependency direction
+
+```text
+HerdrExtension (composition and disposal)
+├─ SessionsFeature ── ActiveSessionProjectionSource ──> NavigationFeature
+│                     │                            └─ PanesFeature / Panes View
+│                     └────────────────────────────> TerminalSurfacesFeature
+├─ TerminalSurfacesFeature <── PaneTerminalOpening ── PanesFeature
+│  ├─ open-surface registry (Session ID + terminal ID), editor lifecycle
+│  └─ native VS Code terminal View / Pseudoterminal (presentation and input indication)
+└─ Herdr CLI observer infrastructure ── official observe subprocess / NDJSON / ANSI bytes
+```
+
+- **Sessions** keeps sole authority for active projection, identity and freshness; **Navigation/Panes** derives current row/name and decides whether clicking that row is valid from its current readable projection. No terminal state enters Sessions or Navigation.
+- **TerminalSurfaces** is a separate top-level feature because an open terminal editor has its own lifecycle, can outlive selected Session or Space, and may later be opened from another workflow. It owns the keyed surface registry, opens/focuses the VS Code editor, and disposes individual client surfaces. It does not own Herdr's Pane or PTY.
+- **TerminalSurfaces** owns each surface's retry policy and timer because eligibility depends on its VS Code focus, Session selection and disposal. **Herdr infrastructure** owns one subprocess observation attempt at a time: spawn, record parsing, child cleanup and a typed end outcome; it does not schedule reconnect or render in VS Code. Protocol closure and exit status are classified independently. The user accepted this responsibility split.
+- **Terminal feature View** owns native VS Code `Pseudoterminal`, editor placement, Unicode-safe ANSI write, initial/reconnect screen reset (client-local display), terse read-only input indication and close event. Presentation does not gain authority over the server screen. The terminal feature owns surface registry and delegates host resources to its View, rather than introducing a second cache of frames.
+- **Extension** wires `PaneTerminalOpening` capability from terminal feature into Navigation/Panes and provides configured executable; it holds no presentation or Session-selection policy. No feature imports a sibling implementation.
+
+### Domain state and invariants
+
+`HerdrPane` is server-owned, with `id` and `terminalId` already available in the Sessions snapshot. The editor-surface key is `(Herdr Session ID, terminal ID)`; Pane ID is only the current attachment target and may change independently of terminal identity. An **observer attachment** is a client-owned, read-only process stream for one open editor. The observer's lifecycle is separate from the server-owned Pane/process/Agent. A protocol `terminal.closed` ends the observer stream regardless of CLI exit code; it does not alone establish permanent Pane closure. An unexpected process loss without that record is retryable; authoritative Pane removal is a separate signal from a fresh Session snapshot. No new mutable server-state copy is required: a keyed registry and one independently owned lifecycle state per open surface suffice. The observable surface variants are `connecting`, `live`, `disconnected` (`waiting` or `paused`), `ended` (fresh snapshot confirms the terminal ID is absent), and `faulted` (invalid observer output). `ended` and `faulted` retain the editor and final screen; they do not participate in automatic retry.
+
+The Panes View derives its row from the current Session projection; a click must not trust an obsolete TreeItem without checking current readable identity. Opening a Pane is an intent, not a persistent global Navigation selection; singleton rows remain Pane intents. Later Tab-follow may call the same narrow opening capability as it derives Tab membership from Sessions snapshots, but its local follow state and editor-ownership rules are not implemented in #14. Already open surfaces remain independently observable after navigation switches. **Correction from #12's approved contract:** opening or focusing a read-only observer is allowed from a retained stale projection; only creation, mutation, input and control require connected authority. The observer may not connect until Herdr returns. Pinned Herdr 0.9.0 source shows a full stop/restore allocates a **new terminal ID** and does not retain the old Pane process; attaching that replacement would be a separate product decision, not ordinary reconnect to the same terminal.
+
+### Primary data flow
+
+1. A Pane row (singleton or grouped child) invokes the Navigation-owned `herdr.openPane` command with its Pane identity. `PanesFeature` rereads its current readable model state instead of trusting all data captured in an old TreeItem, resolves the current Session ID, Pane ID, terminal ID and display name, then invokes the narrow `PaneTerminalOpening` operation. If the Pane is absent or another Session has replaced that model state, nothing opens. A group heading is not a Pane target.
+2. TerminalSurfaces looks up `(sessionId, terminalId)`. If present, its existing editor is shown; it does not spawn a second observer. Otherwise it creates one native `TerminalLocation.Editor` editor with a Pseudoterminal and starts one CLI observer of the Pane in its named Herdr Session, using the configured executable.
+3. The infrastructure reader parses independent newline-delimited protocol records and emits decoded ANSI frames. The View writes the first full frame and later frames to the native terminal. Across transport retry, it waits for a fresh `full=true` frame, clears local viewport **and** scrollback, then writes the fresh frame; no private frame cache or second PTY.
+4. A `terminal.closed` record ends the current stream even if process exit code is 0; whether it represents a transient server shutdown or permanent Pane removal must be determined separately. Preserve the last display while the outcome is unknown. A fresh connected snapshot for the same Session lacking this terminal ID confirms the old editor's target is gone: retain its final screen, stop retries and do not silently attach to a new terminal after restart. If the target has not been confirmed gone, retry the same ID while its Session is selected in Navigation or that terminal editor is focused: immediately, then after 0.5/1/2/5/10/30 seconds with ±20% jitter, capped at repeating 30-second attempts. If neither is true, cancel the retry timer; a still-live observer is not stopped merely because Navigation changes Session. Return to the Session or editor focus resumes attempts. Unknown record types are diagnosed and ignored so an additive protocol record does not destroy the surface. Invalid JSON or an invalid known frame makes the attempt `faulted`, terminates/reaps its child and stops automatic retry; an explicit later Pane click may retry the existing surface without creating a duplicate editor.
+5. Observer input is not forwarded to Herdr. The View writes at most one concise local line for a read-only input attempt and one concise line when entering reconnecting, paused, ended or faulted state; it does not create toast noise. A successful reconnect clears these client-local lines with the viewport/scrollback reset before installing the fresh full frame. On user editor close (`Pseudoterminal.close()`) or extension disposal, cancel retry, terminate and reap only the observer child, dispose subscriptions/emitters, remove the key from the registry, and leave Herdr Pane/PTY/process/Agent alive. Do **not** fire `Pseudoterminal.onDidClose` merely because the CLI stream ended or the server Pane disappeared: that host event would close the editor and discard its inspectable final screen.
+
+### Public seams
+
+- `PaneTerminalOpening.openPane({sessionId, paneId, terminalId, name})`: an intent capability at the top-level nearest common owner; reusing the identity pair is the terminal feature's invariant. The command belongs to `PanesFeature` as the row's user intent; the opener owns editor/resource policy.
+- A narrow CLI observer factory/attempt interface crossing feature–infrastructure: start **one** observation of a named Session and terminal ID with the current executable and initial dimensions; publish ordered ANSI frame and terminal-closed/transport-loss outcomes; dispose/terminate the attempt. It exposes no child-process objects, private Herdr protocol, VS Code objects or retry policy.
+- `ActiveSessionProjectionSource` remains the Sessions-owned source of current active Session identity, freshness and snapshot. The terminal feature may consume that same narrow capability to determine whether an editor's Session is selected and whether a fresh snapshot confirms the original terminal's disappearance; editor focus comes from its VS Code View. No all-Sessions projection or new Sessions API for terminal streaming. Executable selection uses the existing configuration source, without moving Herdr configuration into Panes.
+- Internal View-to-feature seam: create/show/write/reset an editor plus close, input and active-terminal changes. It remains private to the feature; the View owns VS Code registrations and never decides retry or server lifecycle.
+
+### Approximate file locations (not implementation inventory)
+
+```text
+src/capabilities/                 [changed] narrow PaneTerminalOpening and observer contracts at common owners
+src/features/navigation/panes/    [changed] command registration, live row validation and Pane click intent
+  view/VsCodePanesView.ts           [changed] actionable Pane rows, not group headings
+src/features/terminal-surfaces/    [new] feature-owned registry and independent per-surface lifecycle
+  view/                            [new] native VS Code editor terminal / Pseudoterminal adapter
+src/infrastructure/herdr/cli/      [new/changed] one supported observe attempt, NDJSON/ANSI and child cleanup
+src/extension/HerdrExtension.ts    [changed] explicit wiring and reverse disposal
+package.json                       [changed] command contribution
+... colocated/controlled subprocess and Extension Host tests, only after separate test authorization
+```
+
+Likely direct files are `TerminalSurfacesFeature.ts`, one per-surface lifecycle object beside it, and a `view/` adapter; create subgroups only if implementation reveals multiple real peer responsibilities. Avoid a generic terminal service, wrapper chains, a duplicate Sessions projection, or prototype-file transplantation. The accepted feature–infrastructure split keeps reconnect policy out of the CLI adapter.
+
+## Verification scenarios
+
+| Priority | Observable behavior / protected requirement | Stable seam and level | Why existing coverage is insufficient |
+| --- | --- | --- | --- |
+| Critical | Click grouped or singleton Pane; first open creates an editor, second click focuses the same `(Session, terminal ID)` surface; same terminal ID in another Session is distinct; Session/Space navigation change does not close it. | Panes command → terminal feature / behavioral + Extension Host | #13 tests only navigation rendering, no open editor/registry. |
+| Critical | Official observer fixture emits initial full and subsequent ANSI frames with color and split UTF-8 Unicode; View displays them in order. | Controlled child-process stream / adapter integration, plus targeted host rendering | Socket tests do not cover CLI streams or native editor display. |
+| Critical | Protocol `terminal.closed` with exit 0 is parsed before classifying stream completion; transient stream closure and confirmed Pane removal have different outcomes. Invalid JSON/known frames fault and reap the attempt without an automatic loop; unknown additive records do not interrupt valid later frames. | Observer stream + terminal lifecycle / adapter integration + behavioral | Prototype observed the exit-0 trap but did not establish production parsing/retry policy. |
+| Critical | After unexpected loss, bounded backoff creates a new observer only while the Session or editor is active; switching away pauses retries without closing a live observer, returning resumes them. A successful retry waits for a fresh full frame, clears local viewport/scrollback and installs it; closing cancels retry and kills only client child. | Observer/terminal feature / adapter integration + behavioral | Prototype found stale artifacts; #12 reconnect tests apply to JSON socket, not this process. |
+| Critical | Input never reaches the Pane; a concise read-only indication appears. Closing the editor detaches without stopping Herdr Pane or its process. | Terminal editor / host + controlled observer fixture | Existing Views have no Pseudoterminal or child lifecycle. |
+| Optional | Longer reconnect/backoff sequence, multiple independent editors, terminal renumbering with same terminal ID, zero-byte/partial stdout records. | Feature and subprocess integration | Worth adding only after supported/reachable cases are confirmed. |
+| Excluded | Live Tab-follow selection and editor-set synchronization, controller/input/resize/takeover behavior, real Agent lifecycle, private binary protocol, exact subprocess implementation order, third-party terminal emulator internals, speculative compatibility versions. | Out of #14 scope | Live Tab-follow is a later product stage; no current #14 contract for these paths. |
+
+The authorized critical test set is complete. Evidence and deliberate limits are recorded in [`test-report.md`](test-report.md); independent findings and the authorized post-review test correction are recorded in [`review-report.md`](review-report.md). Optional scenarios remain excluded.
+
+## Resolved decisions and approval
+
+1. Agreed presentation: one concise terminal-local line per relevant state transition or first read-only input attempt; detailed diagnostics remain in the Herdr Output channel and normal recovery creates no toast notifications.
+2. Agreed: retries use the Sessions cadence (immediate, then 0.5/1/2/5/10/30 seconds with ±20% jitter and a 30-second cap) only while the surface is relevant. A fully restored Pane with a **new** terminal ID is opened only by another click; the old editor preserves its last screen. `terminal.closed` reasons are not a documented lifecycle enum. While another Session is selected and the old editor is unfocused, no repeated observer attempts or per-Session snapshot acquisition are required; later focus or navigation return can resume attempts. A long-unreachable target remains in the concise terminal-local reconnecting or paused state until authoritative absence is known.
+3. Official docs establish the read-only stream and `terminal.closed` stream-end meaning; the agreed malformed-output policy is fatal for the current attempt with no automatic retry, while additive unknown record types are logged and ignored. Prototype and pinned source observations remain implementation evidence, not public guarantees.
+4. The installed VS Code contract confirms that host invocation of `Pseudoterminal.close()` reports user editor closure, while firing `onDidClose` asks VS Code to close the terminal. Stream loss and server-side Pane removal therefore must not fire `onDidClose`, preserving the final screen.
+
+**Approval:** The user explicitly approved this architecture, production implementation, the critical test-authoring phase and the post-review test correction on 2026-09-23. Production and tests are complete and ready for human review. Staging, commit and push remain unauthorized.

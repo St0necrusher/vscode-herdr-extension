@@ -1,3 +1,4 @@
+import type { PaneTerminalOpening } from "@capabilities/terminalSurfaces";
 import type { ActiveSessionProjectionSource } from "@capabilities/sessions";
 import { NavigationContextModel } from "./NavigationContextModel";
 import { PanesFeature } from "./panes";
@@ -5,6 +6,7 @@ import { SpacesFeature } from "./spaces";
 
 export type NavigationFeatureDependencies = Readonly<{
   sessionProjection: ActiveSessionProjectionSource;
+  paneTerminalOpening: PaneTerminalOpening;
 }>;
 
 export class NavigationFeature {
@@ -16,7 +18,7 @@ export class NavigationFeature {
   constructor(dependencies: NavigationFeatureDependencies) {
     const context = new NavigationContextModel(dependencies.sessionProjection);
     const spaces = new SpacesFeature(context, context);
-    const panes = new PanesFeature(context);
+    const panes = new PanesFeature(context, dependencies.paneTerminalOpening);
     this.context = context;
     this.spaces = spaces;
     this.panes = panes;
