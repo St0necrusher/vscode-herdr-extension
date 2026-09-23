@@ -16,6 +16,7 @@ export type {
   HerdrSessionSnapshot,
 } from "./snapshot";
 export type { HerdrSessionListResult, HerdrSessionDirectory } from "./directory";
+export type { ActiveSessionProjectionState, ActiveSessionProjectionSource } from "./activeSessionProjection";
 export {
   HerdrConnectionFailureError,
   type HerdrConnectionFailure,

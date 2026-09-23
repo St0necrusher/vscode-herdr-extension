@@ -1,4 +1,5 @@
 import type * as vscode from "vscode";
+import { NavigationFeature } from "@features/navigation";
 import { SessionsFeature } from "@features/sessions";
 import {
   HerdrCliSessionDirectory,
@@ -11,6 +12,7 @@ import { VsCodeHerdrConfiguration, VsCodeHerdrLogger } from "@infrastructure/vsc
 export class HerdrExtension implements vscode.Disposable {
   private readonly logger: VsCodeHerdrLogger;
   private readonly sessions: SessionsFeature;
+  private readonly navigation: NavigationFeature;
   private disposed = false;
 
   constructor(context: vscode.ExtensionContext) {
@@ -26,6 +28,7 @@ export class HerdrExtension implements vscode.Disposable {
         storage: context.workspaceState,
         logger,
       });
+      this.navigation = new NavigationFeature({ sessionProjection: this.sessions });
     } catch (error) {
       logger.dispose();
       throw error;
@@ -44,6 +47,7 @@ export class HerdrExtension implements vscode.Disposable {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.navigation.dispose();
     this.sessions.dispose();
     this.logger.dispose();
   }

@@ -46,6 +46,10 @@
         "title": "Herdr: Select Herdr Session"
       },
       {
+        "command": "herdr.selectSpace",
+        "title": "Herdr: Select Herdr Space"
+      },
+      {
         "command": "herdr.refreshSessions",
         "title": "Herdr: Refresh Sessions",
         "icon": "$(refresh)"
@@ -65,6 +69,14 @@
         {
           "id": "herdr.sessions",
           "name": "Sessions"
+        },
+        {
+          "id": "herdr.spaces",
+          "name": "Spaces"
+        },
+        {
+          "id": "herdr.panes",
+          "name": "Panes"
         }
       ]
     },

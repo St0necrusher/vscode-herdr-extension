@@ -2,7 +2,7 @@ import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 
 suite("Herdr extension", () => {
-  test("activates and registers lifecycle recovery commands", async () => {
+  test("activates and registers Space selection", async () => {
     const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
     assert.ok(extension, "Extension is installed in the test host");
 
@@ -15,6 +15,7 @@ suite("Herdr extension", () => {
     assert.ok(commands.includes("herdr.selectExecutable"));
     assert.ok(commands.includes("herdr.openSettings"));
     assert.ok(commands.includes("herdr.selectSession"));
+    assert.ok(commands.includes("herdr.selectSpace"));
     assert.ok(commands.includes("herdr.refreshSessions"));
   });
 });

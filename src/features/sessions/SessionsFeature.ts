@@ -1,12 +1,14 @@
 import * as vscode from "vscode";
 import type { HerdrLogger } from "@capabilities/runtime";
 import type {
+  ActiveSessionProjectionSource,
+  ActiveSessionProjectionState,
   HerdrConfigurationActions,
   HerdrConfigurationSource,
   HerdrSessionConnectionFactory,
   HerdrSessionDirectory,
 } from "@capabilities/sessions";
-import type { PersistentKeyValueStorage } from "./capabilities";
+import type { PersistentKeyValueStorage, SessionsState } from "./capabilities";
 import { SessionsModel } from "./SessionsModel";
 import { VsCodeSessionsView } from "./view";
 import { StatusFeature } from "./status";
@@ -20,7 +22,7 @@ export type SessionsFeatureDependencies = Readonly<{
   logger: HerdrLogger;
 }>;
 
-export class SessionsFeature {
+export class SessionsFeature implements ActiveSessionProjectionSource {
   private readonly model: SessionsModel;
   private readonly view: VsCodeSessionsView;
   private readonly status: StatusFeature;
@@ -63,6 +65,14 @@ export class SessionsFeature {
     }
   }
 
+  getActiveSessionProjection(): ActiveSessionProjectionState {
+    return activeSessionProjection(this.model.getState());
+  }
+
+  onDidChangeActiveSessionProjection(listener: (state: ActiveSessionProjectionState) => void): { dispose(): void } {
+    return this.model.onDidChange((state) => listener(activeSessionProjection(state)));
+  }
+
   async initialize(): Promise<void> {
     if (this.disposed) return;
     try {
@@ -81,4 +91,29 @@ export class SessionsFeature {
     this.view.dispose();
     this.model.dispose();
   }
+}
+
+function activeSessionProjection(state: SessionsState): ActiveSessionProjectionState {
+  const active = state.active;
+  if (active.kind === "connected") {
+    return { kind: "connected", sessionId: active.session.id, snapshot: active.snapshot };
+  }
+  if (active.kind === "reconnecting" && active.staleProjection !== undefined) {
+    return {
+      kind: "stale",
+      sessionId: active.session.id,
+      reason: "reconnecting",
+      snapshot: active.staleProjection.snapshot,
+    };
+  }
+  if (active.kind === "incompatible" && active.staleProjection !== undefined) {
+    return {
+      kind: "stale",
+      sessionId: active.session.id,
+      reason: "incompatible",
+      snapshot: active.staleProjection.snapshot,
+    };
+  }
+  const sessionId = active.kind === "unselected" ? undefined : active.session.id;
+  return sessionId === undefined ? { kind: "unavailable" } : { kind: "unavailable", sessionId };
 }
