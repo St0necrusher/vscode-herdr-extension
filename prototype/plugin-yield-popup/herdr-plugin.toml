@@ -1,0 +1,21 @@
+# THROWAWAY: popup requests that the VS Code prototype release its owned attach.
+id = "local.vscode-yield-popup-probe"
+name = "VS Code Yield Popup Probe"
+version = "0.0.1"
+min_herdr_version = "0.9.0"
+description = "Temporary VS Code-owned attach Yield popup for RootShell"
+platforms = ["macos"]
+
+[[panes]]
+id = "confirm"
+title = "VS Code Yield request (PROTOTYPE)"
+placement = "popup"
+width = 60
+height = 12
+command = ["node", "popup.cjs"]
+
+[[actions]]
+id = "open"
+title = "Open temporary yield popup probe"
+contexts = ["workspace", "pane"]
+command = ["node", "open.cjs"]

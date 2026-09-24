@@ -1,122 +1,72 @@
 {
-  "name": "vscode-herdr-extension",
-  "displayName": "Herdr",
-  "description": "Navigate and interact with local Herdr sessions from VS Code.",
-  "version": "0.0.1",
-  "publisher": "St0necrusher",
+  "name": "herdr-direct-attach-handoff-prototype",
+  "displayName": "Herdr Direct Attach Handoff Prototype",
+  "description": "THROWAWAY prototype for switching one VS Code terminal surface between Herdr observation and official direct attach.",
+  "version": "0.0.0",
   "private": true,
   "license": "MIT",
-  "prettier": {
-    "printWidth": 120
-  },
   "engines": {
     "vscode": "^1.100.0"
   },
-  "categories": [
-    "Other"
-  ],
-  "main": "./dist/extension.js",
+  "main": "./prototype/direct-attach-handoff/extension.js",
   "activationEvents": [
-    "onStartupFinished"
+    "onCommand:herdrPrototype.openDirectAttachHandoff",
+    "onCommand:herdrPrototype.yieldControl",
+    "onCommand:herdrPrototype.takeControl"
   ],
   "contributes": {
     "commands": [
       {
-        "command": "herdr.showStatusActions",
-        "title": "Herdr: Show Status Actions"
+        "command": "herdrPrototype.openDirectAttachHandoff",
+        "title": "Herdr Prototype: Open Direct-Attach Handoff"
       },
       {
-        "command": "herdr.retryDiscovery",
-        "title": "Herdr: Retry Discovery"
+        "command": "herdrPrototype.yieldControl",
+        "title": "Herdr Prototype: Yield Control"
       },
       {
-        "command": "herdr.start",
-        "title": "Herdr: Start Herdr"
-      },
-      {
-        "command": "herdr.selectExecutable",
-        "title": "Herdr: Select Herdr Executable"
-      },
-      {
-        "command": "herdr.openSettings",
-        "title": "Herdr: Open Settings"
-      },
-      {
-        "command": "herdr.selectSession",
-        "title": "Herdr: Select Herdr Session"
-      },
-      {
-        "command": "herdr.selectSpace",
-        "title": "Herdr: Select Herdr Space"
-      },
-      {
-        "command": "herdr.refreshSessions",
-        "title": "Herdr: Refresh Sessions",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "herdr.openPane",
-        "title": "Herdr: Open Pane"
+        "command": "herdrPrototype.takeControl",
+        "title": "Herdr Prototype: Take Control"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "herdr",
-          "title": "Herdr",
-          "icon": "media/herdr.svg"
-        }
-      ]
-    },
-    "views": {
-      "herdr": [
-        {
-          "id": "herdr.sessions",
-          "name": "Sessions"
-        },
-        {
-          "id": "herdr.spaces",
-          "name": "Spaces"
-        },
-        {
-          "id": "herdr.panes",
-          "name": "Panes"
-        }
-      ]
-    },
-    "menus": {
-      "view/title": [
-        {
-          "command": "herdr.refreshSessions",
-          "when": "view == herdr.sessions",
-          "group": "navigation"
-        }
-      ]
-    },
     "configuration": {
-      "title": "Herdr",
+      "title": "Herdr Direct Attach Handoff Prototype",
       "properties": {
-        "herdr.executable": {
+        "herdrPrototype.binary": {
           "type": "string",
           "default": "herdr",
           "description": "Path to the Herdr executable."
         },
-        "herdr.session": {
+        "herdrPrototype.session": {
           "type": "string",
-          "default": "default",
-          "description": "Initial Herdr Session preference/fallback when no valid saved per-workspace/window selection exists; use default for the default Session. This setting does not start a Session automatically."
+          "default": "",
+          "description": "Optional named Herdr Session. Leave empty for the default Session."
+        },
+        "herdrPrototype.autoYieldOnBlur": {
+          "type": "boolean",
+          "default": true,
+          "description": "Immediately stop direct attach when the terminal or VS Code window loses focus."
+        },
+        "herdrPrototype.autoTakeOnFocus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start direct attach when this prototype terminal gains focus."
+        },
+        "herdrPrototype.idleReleaseMs": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 600000,
+          "description": "Release direct attach after this many milliseconds without local terminal input, resize, or focus activity. Set to 0 to disable inactivity Yield."
         }
       }
     }
   },
   "scripts": {
-    "build": "npm run typecheck && node esbuild.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src test",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "test": "vitest run",
-    "test:extension": "npm run build && vscode-test --config .vscode-test.mjs"
+    "check:prototype": "node --check prototype/direct-attach-handoff/extension.js"
+  },
+  "dependencies": {
+    "node-pty": "1.2.0-beta.13"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
