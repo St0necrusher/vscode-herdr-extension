@@ -1,6 +1,7 @@
 # Local editor and coding-agent configuration
 .vscode/
 .agents/
+.claude/
 AGENTS.md
 docs/agents/
 skills-lock.json
