@@ -1,5 +1,6 @@
 import type { HerdrSessionSnapshot } from "./snapshot";
 import type { HerdrResolvedSession, HerdrSessionMetadata } from "./session";
+import type { HerdrPaneMovedEvent } from "./sessionEvents";
 
 export type HerdrConnectionFailure =
   | Readonly<{ kind: "transport"; diagnostic: string }>
@@ -31,6 +32,7 @@ export class HerdrConnectionFailureError extends Error {
 export interface HerdrSessionProjectionConsumer {
   replaceSnapshot(snapshot: HerdrSessionSnapshot): void;
   connectionClosed(failure: HerdrConnectionFailure): void;
+  paneMoved?(event: HerdrPaneMovedEvent): void;
 }
 
 export interface HerdrSessionConnection {

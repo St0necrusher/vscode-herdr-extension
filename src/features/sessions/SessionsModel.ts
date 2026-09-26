@@ -8,6 +8,8 @@ import type {
   HerdrSessionConnectionFactory,
   HerdrSessionDescriptor,
   HerdrSessionDirectory,
+  HerdrSessionEventMap,
+  HerdrPaneMovedEvent,
   HerdrSessionMetadata,
   HerdrSessionSnapshot,
 } from "@capabilities/sessions";
@@ -36,6 +38,7 @@ interface RecoveryContext {
 
 export class SessionsModel implements SessionsStateSource, SessionsOperations {
   private readonly listeners = new Set<(state: SessionsState) => void>();
+  private readonly paneMovedListeners = new Set<(event: HerdrSessionEventMap["pane.moved"]) => void>();
   private readonly directory: HerdrSessionDirectory;
   private readonly connectionFactory: HerdrSessionConnectionFactory;
   private readonly configuration: HerdrConfigurationSource;
@@ -84,6 +87,12 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
     if (this.disposed) return { dispose: () => undefined };
     this.listeners.add(listener);
     return { dispose: () => this.listeners.delete(listener) };
+  }
+
+  subscribe(eventName: "pane.moved", listener: (event: HerdrSessionEventMap["pane.moved"]) => void): Disposable {
+    if (this.disposed) return { dispose: () => undefined };
+    this.paneMovedListeners.add(listener);
+    return { dispose: () => this.paneMovedListeners.delete(listener) };
   }
 
   async refresh(): Promise<void> {
@@ -190,6 +199,7 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
     this.cancelReconnect();
     this.disposeConnection();
     this.listeners.clear();
+    this.paneMovedListeners.clear();
   }
 
   private async reconcileSelection(
@@ -305,6 +315,10 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
           if (!this.isCurrentAttempt(generation, attempt) || this.connection !== connection) return;
           snapshot = next;
           if (this.state.active.kind === "connected") this.publishCurrent({ ...this.state.active, snapshot: next });
+        },
+        paneMoved: (event: HerdrPaneMovedEvent): void => {
+          if (!this.isCurrentAttempt(generation, attempt) || this.connection !== connection) return;
+          this.publishPaneMoved(event);
         },
         connectionClosed: (failure: HerdrConnectionFailure): void => {
           if (!this.isCurrentAttempt(generation, attempt) || this.connection !== connection) return;
@@ -428,6 +442,16 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
 
   private publishCurrent(active: ActiveSessionState): void {
     this.publish({ ...this.state, active });
+  }
+
+  private publishPaneMoved(event: HerdrPaneMovedEvent): void {
+    [...this.paneMovedListeners].forEach((listener) => {
+      try {
+        listener(event);
+      } catch (error) {
+        this.logger.error("A Sessions observer failed.", error);
+      }
+    });
   }
 
   private publish(state: SessionsState): void {

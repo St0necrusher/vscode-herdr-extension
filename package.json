@@ -107,7 +107,25 @@
           "description": "Initial Herdr Session preference/fallback when no valid saved per-workspace/window selection exists; use default for the default Session. This setting does not start a Session automatically."
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "key": "up",
+        "command": "workbench.action.terminal.sendSequence",
+        "args": {
+          "text": "\u001b]herdr;arrow-up\u0007"
+        },
+        "when": "terminalFocus && herdr.activeTerminalIsPane && !terminalFindFocused"
+      },
+      {
+        "key": "down",
+        "command": "workbench.action.terminal.sendSequence",
+        "args": {
+          "text": "\u001b]herdr;arrow-down\u0007"
+        },
+        "when": "terminalFocus && herdr.activeTerminalIsPane && !terminalFindFocused"
+      }
+    ]
   },
   "scripts": {
     "build": "npm run typecheck && node esbuild.mjs",
@@ -136,5 +154,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.44.1",
     "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "node-pty": "1.2.0-beta.13"
   }
 }

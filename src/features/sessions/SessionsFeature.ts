@@ -3,6 +3,9 @@ import type { HerdrLogger } from "@capabilities/runtime";
 import type {
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
+  HerdrSessionEventMap,
+  HerdrSessionEventName,
+  HerdrSessionEventSource,
   HerdrConfigurationActions,
   HerdrConfigurationSource,
   HerdrSessionConnectionFactory,
@@ -22,7 +25,7 @@ export type SessionsFeatureDependencies = Readonly<{
   logger: HerdrLogger;
 }>;
 
-export class SessionsFeature implements ActiveSessionProjectionSource {
+export class SessionsFeature implements ActiveSessionProjectionSource, HerdrSessionEventSource {
   private readonly model: SessionsModel;
   private readonly view: VsCodeSessionsView;
   private readonly status: StatusFeature;
@@ -71,6 +74,13 @@ export class SessionsFeature implements ActiveSessionProjectionSource {
 
   onDidChangeActiveSessionProjection(listener: (state: ActiveSessionProjectionState) => void): { dispose(): void } {
     return this.model.onDidChange((state) => listener(activeSessionProjection(state)));
+  }
+
+  subscribe<TEventName extends HerdrSessionEventName>(
+    eventName: TEventName,
+    listener: (event: HerdrSessionEventMap[TEventName]) => void,
+  ): { dispose(): void } {
+    return this.model.subscribe(eventName, listener);
   }
 
   async initialize(): Promise<void> {

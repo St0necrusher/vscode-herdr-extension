@@ -24,3 +24,9 @@ export {
   type HerdrSessionConnection,
   type HerdrSessionConnectionFactory,
 } from "./connection";
+export type {
+  HerdrPaneMovedEvent,
+  HerdrSessionEventMap,
+  HerdrSessionEventName,
+  HerdrSessionEventSource,
+} from "./sessionEvents";

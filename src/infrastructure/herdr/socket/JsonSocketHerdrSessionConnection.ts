@@ -1,6 +1,7 @@
 import { HerdrConnectionFailureError } from "@capabilities/sessions";
 import type {
   HerdrConnectionFailure,
+  HerdrPaneMovedEvent,
   HerdrResolvedSession,
   HerdrSessionConnection,
   HerdrSessionMetadata,
@@ -10,11 +11,12 @@ import type {
 import type { HerdrLogger } from "@capabilities/runtime";
 import {
   invalidResponse,
+  parsePaneMovedPayload,
   parsePongResult,
   requireResultType,
   type HerdrProtocolRecord,
 } from "./protocol/HerdrProtocol";
-import { parseSnapshotResult } from "./protocol/HerdrSessionSnapshotDecoder";
+import { parseHerdrPane, parseSnapshotResult } from "./protocol/HerdrSessionSnapshotDecoder";
 import { subscriptionsForPanes, validateEventMessage } from "./protocol/HerdrSubscriptions";
 import type { HerdrSocketConnector, HerdrSocketTransport } from "./NodeHerdrSocketConnector";
 import { asFailure, JsonSocketClient } from "./JsonSocketClient";
@@ -200,6 +202,15 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
     if (this.disposed) return;
     try {
       if (!validateEventMessage(message)) return;
+      const paneMoved = parsePaneMovedPayload(message);
+      if (paneMoved !== undefined) {
+        const event: HerdrPaneMovedEvent = {
+          sessionId: this.session.id,
+          previousPaneId: paneMoved.previousPaneId,
+          currentPane: parseHerdrPane(paneMoved.pane),
+        };
+        this.consumer?.paneMoved?.(event);
+      }
       this.dirty = true;
       if (this.ready && this.reconciliation === undefined && this.debounceTimer === undefined) {
         this.debounceTimer = setTimeout(() => {

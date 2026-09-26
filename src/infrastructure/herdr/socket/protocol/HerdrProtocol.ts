@@ -9,6 +9,21 @@ export function requireResultType(result: HerdrProtocolRecord, expected: string)
   if (result.type !== expected) throw invalidResponse(`Unexpected Herdr response; expected ${expected}.`);
 }
 
+type HerdrPaneMovedPayload = Readonly<{
+  previousPaneId: string;
+  pane: unknown;
+}>;
+
+export function parsePaneMovedPayload(message: HerdrProtocolRecord): HerdrPaneMovedPayload | undefined {
+  if (message.event !== "pane.moved" && message.event !== "pane_moved") return undefined;
+  if (!isRecord(message.data)) throw invalidResponse("Herdr returned invalid pane.moved event data.");
+  const previousPaneId = message.data.previous_pane_id;
+  if (typeof previousPaneId !== "string" || previousPaneId.length === 0) {
+    throw invalidResponse("Herdr returned invalid pane.moved identity data.");
+  }
+  return { previousPaneId, pane: message.data.pane };
+}
+
 export function parsePongResult(result: HerdrProtocolRecord): HerdrSessionMetadata {
   requireResultType(result, "pong");
   const version = requiredString(result, "version", "ping");

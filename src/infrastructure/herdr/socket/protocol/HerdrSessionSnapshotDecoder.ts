@@ -34,7 +34,7 @@ export function parseSnapshotResult(result: HerdrProtocolRecord, metadata: Herdr
 
   const spaces = requiredArray(raw, "workspaces", "snapshot").map((value) => parseSpace(value));
   const herdrTabs = requiredArray(raw, "tabs", "snapshot").map((value) => parseTab(value));
-  const panes = requiredArray(raw, "panes", "snapshot").map((value) => parsePane(value));
+  const panes = requiredArray(raw, "panes", "snapshot").map((value) => parseHerdrPane(value));
   const layouts = requiredArray(raw, "layouts", "snapshot").map((value) => parseLayout(value));
   const agents = requiredArray(raw, "agents", "snapshot").map((value) => parseAgent(value));
 
@@ -126,7 +126,7 @@ function parseTab(value: unknown): HerdrTab {
   };
 }
 
-function parsePane(value: unknown): HerdrPane {
+export function parseHerdrPane(value: unknown): HerdrPane {
   const record = object(value, "Pane");
   const cwd = optionalString(record, "cwd", "Pane");
   const foregroundCwd = optionalString(record, "foreground_cwd", "Pane");

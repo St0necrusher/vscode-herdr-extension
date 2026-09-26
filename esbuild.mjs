@@ -11,7 +11,7 @@ const commonOptions = {
   format: "cjs",
   platform: "node",
   target: "node20",
-  external: ["vscode"],
+  external: ["vscode", "node-pty"],
   sourcemap: true,
   alias: {
     "@capabilities": resolve(sourceRoot, "capabilities"),
@@ -28,7 +28,7 @@ await esbuild.build({
   outfile: resolve(root, "dist/extension.js"),
 });
 
-for (const entryPoint of ["activation.test.ts", "sessions.test.ts", "terminal-surfaces.test.ts"]) {
+for (const entryPoint of ["activation.test.ts", "sessions.test.ts", "pane-command.test.ts"]) {
   await esbuild.build({
     ...commonOptions,
     entryPoints: [resolve(root, "test/extension", entryPoint)],
