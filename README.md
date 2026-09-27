@@ -14,8 +14,12 @@ A compact status item reports discovery and connection state and provides recove
 - **Herdr: Refresh Sessions** — rediscover Herdr Sessions and restore selection
 - **Herdr: Retry Discovery** — retry discovery or reconnect the selected Herdr Session
 - **Herdr: Start Herdr** — start the explicitly selected stopped Herdr Session
+- **Herdr: Install Mobile Takeover Plugin**
+- **Herdr: Remove Mobile Takeover Plugin**
 - **Herdr: Select Herdr Executable**
 - **Herdr: Open Settings**
+
+Mobile Takeover requires `node` on the Herdr server's `PATH`. Run **Herdr: Remove Mobile Takeover Plugin** before uninstalling this extension.
 
 Diagnostics are written to the **Herdr** Output channel.
 

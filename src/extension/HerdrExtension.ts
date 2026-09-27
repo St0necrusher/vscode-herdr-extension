@@ -1,4 +1,4 @@
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
 import { NavigationFeature } from "@features/navigation";
 import { SessionsFeature } from "@features/sessions";
 import {
@@ -12,6 +12,8 @@ import {
   PaneEditorFocusTracker,
   PaneEditorSelectionModel,
   PaneTerminalSurfaceManager,
+  TakeoverPluginRegistration,
+  TakeoverPopupHost,
   VsCodePaneTerminalSurface,
 } from "@infrastructure/pane-editors";
 import { VsCodeHerdrConfiguration, VsCodeHerdrLogger } from "@infrastructure/vscode";
@@ -23,6 +25,8 @@ export class HerdrExtension implements vscode.Disposable {
   private readonly paneEditorFocusTracker: PaneEditorFocusTracker;
   private readonly paneTerminalSurfaceManager: PaneTerminalSurfaceManager;
   private readonly navigation: NavigationFeature;
+  private readonly takeoverPopupHost: TakeoverPopupHost;
+  private readonly takeoverPluginRegistration: TakeoverPluginRegistration;
   private disposed = false;
 
   constructor(context: vscode.ExtensionContext) {
@@ -32,8 +36,18 @@ export class HerdrExtension implements vscode.Disposable {
     let paneEditorFocusTracker: PaneEditorFocusTracker | undefined;
     let paneTerminalSurfaceManager: PaneTerminalSurfaceManager | undefined;
     let navigation: NavigationFeature | undefined;
+    let takeoverPopupHost: TakeoverPopupHost | undefined;
+    let takeoverPluginRegistration: TakeoverPluginRegistration | undefined;
     try {
       const configuration = new VsCodeHerdrConfiguration();
+      takeoverPluginRegistration = new TakeoverPluginRegistration(
+        configuration,
+        logger,
+        context.asAbsolutePath("dist/herdr-plugin"),
+        vscode.Uri.joinPath(context.globalStorageUri, "herdr-plugin").fsPath,
+      );
+      const popupHost = new TakeoverPopupHost(configuration, takeoverPluginRegistration, logger);
+      takeoverPopupHost = popupHost;
       const sessionOwner = new SessionsFeature({
         directory: new HerdrCliSessionDirectory(new NodeProcessRunner()),
         connectionFactory: new JsonSocketHerdrSessionConnectionFactory(logger, new NodeHerdrSocketConnector()),
@@ -61,6 +75,7 @@ export class HerdrExtension implements vscode.Disposable {
             sessionOwner,
             focusTracker,
             paneClients,
+            popupHost,
             logger,
           ),
       });
@@ -76,18 +91,23 @@ export class HerdrExtension implements vscode.Disposable {
       this.paneEditorFocusTracker = focusTracker;
       this.paneTerminalSurfaceManager = surfaceManager;
       this.navigation = navigationFeature;
+      this.takeoverPopupHost = popupHost;
+      this.takeoverPluginRegistration = takeoverPluginRegistration;
     } catch (error) {
       navigation?.dispose();
       paneTerminalSurfaceManager?.dispose();
+      takeoverPopupHost?.dispose();
       paneEditorFocusTracker?.dispose();
       paneEditorSelection?.dispose();
       sessions?.dispose();
+      takeoverPluginRegistration?.dispose();
       logger.dispose();
       throw error;
     }
   }
 
   async initialize(): Promise<void> {
+    void this.takeoverPluginRegistration.initialize();
     try {
       await this.sessions.initialize();
     } catch (error) {
@@ -101,9 +121,11 @@ export class HerdrExtension implements vscode.Disposable {
     this.disposed = true;
     this.navigation.dispose();
     this.paneTerminalSurfaceManager.dispose();
+    this.takeoverPopupHost.dispose();
     this.paneEditorFocusTracker.dispose();
     this.paneEditorSelection.dispose();
     this.sessions.dispose();
+    this.takeoverPluginRegistration.dispose();
     this.logger.dispose();
   }
 }

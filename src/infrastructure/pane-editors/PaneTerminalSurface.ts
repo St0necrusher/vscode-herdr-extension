@@ -7,8 +7,9 @@ import type { PaneAttach } from "./HerdrPaneAttach";
 import type { PaneObserver } from "./HerdrPaneObserver";
 import type { SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import type { PaneOutputSink } from "./PaneOutputSink";
-import { observerFailurePlaceholder, paneName, paneTarget } from "./paneTarget";
+import { observerFailurePlaceholder, paneName, paneTarget, type PaneTarget } from "./paneTarget";
 import { desiredClient, type AttachIntent, type DesiredClient, type PaneEditorVisibility } from "./paneClientPolicy";
+import type { TakeoverOffer, TakeoverOffers } from "./takeover";
 
 export interface PaneTerminalSurface {
   readonly terminal: vscode.Terminal;
@@ -24,6 +25,8 @@ export interface PaneTerminalSurfaceFactory {
 }
 
 const SCREEN_RESET = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1049l\x1b[3J\x1b[2J\x1b[H";
+const DISPLACED_OBSERVER_MODES_ON = "\x1b[?1000h\x1b[?1006h";
+const DISPLACED_OBSERVER_MODES_OFF = "\x1b[?1000l\x1b[?1006l";
 const OBSERVER_RESIZE_DEBOUNCE_MS = 120;
 // Keyboard ↑/↓ arrive as these markers (package.json keybindings), so bare arrows can only be xterm.js wheel emulation in the alternate screen.
 const ARROW_UP_MARKER = "\x1b]herdr;arrow-up\x07";
@@ -44,6 +47,44 @@ interface AttachedClient {
   request: PaneClientRequest;
 }
 type PaneClientState = IdleClient | ObservingClient | ObserverFailedClient | AttachedClient;
+type DisplacedInputClassification = "local-intent" | "ignored" | "other";
+
+function isTakeoverEligible(
+  client: PaneClientState,
+  visibility: PaneEditorVisibility,
+  target: PaneTarget,
+  projection: ActiveSessionProjectionState,
+  selection: SelectedPaneEditor,
+): client is AttachedClient {
+  return (
+    client.kind === "attached" &&
+    visibility === "focused" &&
+    target.kind === "live" &&
+    projection.kind === "connected" &&
+    projection.snapshot.focusedPaneId === selection.paneId
+  );
+}
+
+function isDisplacedObserving(client: PaneClientState, attachIntent: AttachIntent): boolean {
+  return attachIntent === "displaced" && client.kind === "observing";
+}
+
+function classifyDisplacedInput(input: string): DisplacedInputClassification {
+  const reportPattern = /\x1b\[<(\d+);\d+;\d+([Mm])|\x1b\[[IO]|\x1b(?:\[|O)[AB]/g; // eslint-disable-line no-control-regex
+  const reports = Array.from(input.matchAll(reportPattern));
+  const reportsCoverWholeInput = reports.length > 0 && reports.map((report) => report[0]).join("") === input;
+  if (!reportsCoverWholeInput) return "other";
+
+  const containsLocalIntent = reports.some((report) => {
+    const mouseAction = report[2];
+    const isMousePress = mouseAction === "M";
+    const mouseButton = report[1];
+    const isWheel = mouseButton !== undefined && (Number(mouseButton) & 64) !== 0;
+    const isNonWheelPress = isMousePress && !isWheel;
+    return isNonWheelPress;
+  });
+  return containsLocalIntent ? "local-intent" : "ignored";
+}
 
 type ClosedHost = Readonly<{ kind: "closed" }>;
 type OpenHost = Readonly<{ kind: "open"; dimensions: vscode.TerminalDimensions | undefined }>;
@@ -63,7 +104,9 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
   private host: PseudoterminalHost = { kind: "closed" };
   private client: PaneClientState = { kind: "idle" };
   private stoppingAttach: Promise<void> | undefined;
+  private takeoverOffer: { client: AttachedClient; offer: TakeoverOffer } | undefined;
   private attachIntent: AttachIntent = "wanted";
+  private displacedObserverModesEnabled = false;
   private visiblePlaceholder: string | undefined;
   private publishedName: string | undefined;
   private paneNameVisible = false;
@@ -76,6 +119,7 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
     projectionSource: ActiveSessionProjectionSource,
     private readonly focusTracker: PaneEditorFocusTracker,
     private readonly paneClients: PaneClientFactory,
+    private readonly takeoverOffers: TakeoverOffers,
     private readonly logger: HerdrLogger,
   ) {
     this.selection = selection;
@@ -146,12 +190,14 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
     if (this.host.kind !== "open") return;
     this.visiblePlaceholder = undefined;
     this.writeEmitter.fire(`${SCREEN_RESET}${data}`);
+    this.syncDisplacedObserverModes(true);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.releaseClient();
+    this.retractTakeoverOffer();
     this.projectionSubscription.dispose();
     this.focusSubscription.dispose();
     this.terminal.dispose();
@@ -213,12 +259,27 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
       if (this.visiblePlaceholder !== undefined) {
         this.visiblePlaceholder = undefined;
         this.writeEmitter.fire(SCREEN_RESET);
+        this.syncDisplacedObserverModes(true);
       }
       return;
     }
     if (placeholder === this.visiblePlaceholder) return;
     this.visiblePlaceholder = placeholder;
     this.writeEmitter.fire(`${SCREEN_RESET}${placeholder}`);
+    this.syncDisplacedObserverModes(true);
+  }
+
+  private syncDisplacedObserverModes(afterScreenReset = false): void {
+    const displacedObserving = isDisplacedObserving(this.client, this.attachIntent);
+    const shouldEnableModes = displacedObserving && (!this.displacedObserverModesEnabled || afterScreenReset);
+    const shouldDisableModes = !displacedObserving && this.displacedObserverModesEnabled;
+    if (shouldEnableModes) {
+      this.displacedObserverModesEnabled = true;
+      this.writeEmitter.fire(DISPLACED_OBSERVER_MODES_ON);
+    } else if (shouldDisableModes) {
+      this.displacedObserverModesEnabled = false;
+      this.writeEmitter.fire(DISPLACED_OBSERVER_MODES_OFF);
+    }
   }
 
   private converge(): void {
@@ -239,6 +300,42 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
       if (desired.kind === "attach" && this.stoppingAttach === undefined) this.startAttach(desired.request);
     }
     this.render();
+    this.syncTakeoverOffer(target);
+    this.syncDisplacedObserverModes();
+  }
+
+  private syncTakeoverOffer(target: PaneTarget): void {
+    const client = this.client;
+    const eligible = isTakeoverEligible(client, this.visibility, target, this.projection, this.selection);
+    const currentOffer = this.takeoverOffer;
+    const shouldRetractCurrentOffer = currentOffer !== undefined && (currentOffer.client !== client || !eligible);
+    if (shouldRetractCurrentOffer) this.retractTakeoverOffer();
+    if (!eligible || this.takeoverOffer !== undefined) return;
+
+    const offer = this.takeoverOffers.offer({
+      sessionId: this.selection.sessionId,
+      paneId: this.selection.paneId,
+      onConfirm: () => this.yieldToTakeover(client),
+    });
+    this.takeoverOffer = { client, offer };
+  }
+
+  private yieldToTakeover(client: AttachedClient): void {
+    const currentTarget = paneTarget(this.projection, this.selection, this.movedPane);
+    const canYield =
+      !this.disposed &&
+      this.client === client &&
+      isTakeoverEligible(this.client, this.visibility, currentTarget, this.projection, this.selection);
+    if (!canYield) return;
+    this.attachIntent = "displaced";
+    this.converge();
+  }
+
+  private retractTakeoverOffer(): void {
+    const currentOffer = this.takeoverOffer;
+    if (currentOffer === undefined) return;
+    this.takeoverOffer = undefined;
+    currentOffer.offer.retract();
   }
 
   private satisfies(desired: DesiredClient): boolean {
@@ -391,6 +488,17 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
   }
 
   private handleInput(input: string): void {
+    const displacedObserving = isDisplacedObserving(this.client, this.attachIntent);
+    if (displacedObserving) {
+      const inputClassification = classifyDisplacedInput(input);
+      if (inputClassification === "local-intent") {
+        this.attachIntent = "wanted";
+        this.converge();
+        return;
+      }
+      if (inputClassification === "ignored") return;
+    }
+
     const data = this.translateInput(input);
     if (data.length === 0) return;
     const client = this.client;
