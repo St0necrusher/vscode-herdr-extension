@@ -24,6 +24,6 @@
     "skipLibCheck": true,
     "types": ["node", "vscode", "mocha"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "include": ["src/**/*.ts", "test/**/*.ts", "herdr-plugin/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
