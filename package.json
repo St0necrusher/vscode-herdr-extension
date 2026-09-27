@@ -130,7 +130,7 @@
   "scripts": {
     "build": "npm run typecheck && node esbuild.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src test",
+    "lint": "eslint src test herdr-plugin",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",

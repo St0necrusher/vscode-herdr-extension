@@ -1,0 +1,14 @@
+id = "st0necrusher.vscode-herdr-takeover"
+name = "VS Code Herdr Takeover"
+version = "__PACKAGE_VERSION__"
+min_herdr_version = "0.9.0"
+description = "Offer mobile takeover of a Pane controlled by VS Code."
+platforms = ["macos"]
+
+[[panes]]
+id = "takeover"
+title = "VS Code Pane takeover"
+placement = "popup"
+width = "100%"
+height = "100%"
+command = ["node", "takeover-popup.js"]

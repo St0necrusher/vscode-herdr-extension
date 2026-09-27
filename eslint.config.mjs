@@ -46,6 +46,7 @@ export default tseslint.config(
         element("feature", "src/features/*", ["feature"]),
         element("infrastructure", "src/infrastructure/*", ["owner"]),
         element("extension", "src/extension"),
+        element("herdr-plugin", "herdr-plugin"),
         element("extension-test", "test/extension"),
         element("integration-test", "test/integration"),
       ],
