@@ -12,6 +12,7 @@ import type { PaneOutputSink } from "./PaneOutputSink";
 import { PaneEditorFocusTracker } from "./PaneEditorFocusTracker";
 import { PaneEditorSelectionModel, type SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import { VsCodePaneTerminalSurface } from "./PaneTerminalSurface";
+import type { TakeoverOffers } from "./takeover";
 
 const vscodeStub = vi.hoisted(() => {
   class MockEventEmitter<T> {
@@ -111,7 +112,7 @@ function pane(id: string, terminalId: string, terminalTitle = `Pane ${id}`): Her
   };
 }
 
-function snapshot(panes: readonly HerdrPane[]): HerdrSessionSnapshot {
+function snapshot(panes: readonly HerdrPane[], focusedPaneId = panes[0]?.id): HerdrSessionSnapshot {
   return {
     version: "1",
     protocol: 1,
@@ -120,15 +121,24 @@ function snapshot(panes: readonly HerdrPane[]): HerdrSessionSnapshot {
     panes,
     layouts: [],
     agents: [],
+    ...(focusedPaneId === undefined ? {} : { focusedPaneId }),
   };
 }
 
-function connected(nextSessionId: string, panes: readonly HerdrPane[]): ActiveSessionProjectionState {
-  return { kind: "connected", sessionId: nextSessionId, snapshot: snapshot(panes) };
+function connected(
+  nextSessionId: string,
+  panes: readonly HerdrPane[],
+  focusedPaneId = panes[0]?.id,
+): ActiveSessionProjectionState {
+  return { kind: "connected", sessionId: nextSessionId, snapshot: snapshot(panes, focusedPaneId) };
 }
 
-function stale(nextSessionId: string, panes: readonly HerdrPane[]): ActiveSessionProjectionState {
-  return { kind: "stale", sessionId: nextSessionId, reason: "reconnecting", snapshot: snapshot(panes) };
+function stale(
+  nextSessionId: string,
+  panes: readonly HerdrPane[],
+  focusedPaneId = panes[0]?.id,
+): ActiveSessionProjectionState {
+  return { kind: "stale", sessionId: nextSessionId, reason: "reconnecting", snapshot: snapshot(panes, focusedPaneId) };
 }
 
 function isRunning(client: FakePaneClient): boolean {
@@ -195,6 +205,29 @@ function createFakeClient(kind: FakePaneClient["kind"], request: PaneClientReque
     resize: (columns, rows) => client.resizes.push({ columns, rows }),
   };
   return client;
+}
+
+interface RecordedTakeoverOffer {
+  readonly sessionId: string;
+  readonly paneId: string;
+  readonly onConfirm: () => void;
+  retractCount: number;
+}
+
+function createTakeoverOffers() {
+  const offers: RecordedTakeoverOffer[] = [];
+  const capability: TakeoverOffers = {
+    offer: (request) => {
+      const recordedOffer: RecordedTakeoverOffer = { ...request, retractCount: 0 };
+      offers.push(recordedOffer);
+      return {
+        retract: () => {
+          recordedOffer.retractCount += 1;
+        },
+      };
+    },
+  };
+  return { capability, offers };
 }
 
 function createPaneClients() {
@@ -264,6 +297,7 @@ function createHarness(
   const focusTracker = new PaneEditorFocusTracker(selection);
   const projection = createProjectionSource(options.initialProjection ?? connected(sessionId, [initialPane]));
   const paneClients = createPaneClients();
+  const takeoverOffers = createTakeoverOffers();
   const logger: HerdrLogger = { info: vi.fn(), error: vi.fn(), show: vi.fn() };
   const surfaces: {
     surface: VsCodePaneTerminalSurface;
@@ -280,7 +314,7 @@ function createHarness(
       projection.source,
       focusTracker,
       paneClients.factory,
-      { offer: () => ({ retract: () => undefined }) },
+      takeoverOffers.capability,
       logger,
     );
     const terminalRecord = vscodeStub.terminals.at(-1);
@@ -326,7 +360,7 @@ function createHarness(
   };
   harnessCleanups.push(cleanup);
 
-  return { selection, projection, paneClients, running, onlyRunning, createSurface };
+  return { selection, projection, paneClients, takeoverOffers, running, onlyRunning, createSurface };
 }
 
 function expectPlaceholderHeading(writes: readonly string[], heading: string): void {
@@ -678,5 +712,211 @@ describe("VsCodePaneTerminalSurface disposal (O5)", () => {
     expect(harness.running()).toEqual([]);
     expect(harness.paneClients.attaches).toHaveLength(1);
     expect(harness.paneClients.observers).toHaveLength(0);
+  });
+});
+
+describe("VsCodePaneTerminalSurface mobile takeover (A1–A4)", () => {
+  it("A1 offers once only while attached, focused, selected, live, and Herdr-focused", () => {
+    const otherPane = pane("pane-2", "terminal-2");
+    const harness = createHarness({
+      initialProjection: connected(sessionId, [initialPane, otherPane], initialPane.id),
+      initiallyFocused: false,
+    });
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+
+    expect(harness.running()).toEqual([{ kind: "observe", terminalId: initialPane.terminalId, ...initialDimensions }]);
+    expect(harness.takeoverOffers.offers).toHaveLength(0);
+
+    harness.projection.setState(connected(sessionId, [initialPane, otherPane], otherPane.id));
+    vscodeStub.setWindowFocused(true);
+    expect(harness.running()).toEqual([{ kind: "attach", terminalId: initialPane.terminalId, ...initialDimensions }]);
+    expect(harness.takeoverOffers.offers).toHaveLength(0);
+
+    harness.projection.setState(connected(sessionId, [initialPane, otherPane], initialPane.id));
+    expect(harness.takeoverOffers.offers).toHaveLength(1);
+    expect(harness.takeoverOffers.offers[0]).toMatchObject({ sessionId, paneId: initialPane.id });
+
+    surface.pty.setDimensions?.({ columns: 90, rows: 30 });
+    harness.projection.setState(connected(sessionId, [initialPane, otherPane], initialPane.id));
+    expect(harness.takeoverOffers.offers).toHaveLength(1);
+  });
+
+  it("A2 retracts on window blur and selecting another editor, then offers again when focus returns", async () => {
+    const harness = createHarness();
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    const firstOffer = harness.takeoverOffers.offers[0];
+    assert(firstOffer);
+    const firstAttach = harness.onlyRunning("attach");
+
+    vscodeStub.setWindowFocused(false);
+    expect(firstOffer.retractCount).toBe(1);
+
+    vscodeStub.setWindowFocused(true);
+    firstAttach.settleStop();
+    await vi.waitFor(() => expect(harness.takeoverOffers.offers).toHaveLength(2));
+    const secondOffer = harness.takeoverOffers.offers[1];
+    assert(secondOffer);
+    const secondAttach = harness.onlyRunning("attach");
+    const otherSelection = { sessionId, paneId: "pane-2" };
+
+    harness.selection.select(otherSelection);
+    harness.selection.deselect(initialSelection);
+    expect(secondOffer.retractCount).toBe(1);
+
+    harness.selection.deselect(otherSelection);
+    harness.selection.select(initialSelection);
+    secondAttach.settleStop();
+    await vi.waitFor(() => expect(harness.takeoverOffers.offers).toHaveLength(3));
+  });
+
+  it("A2 retracts when Herdr focuses another Pane or the projection becomes stale", async () => {
+    const otherPane = pane("pane-2", "terminal-2");
+    const panes = [initialPane, otherPane];
+    const harness = createHarness({ initialProjection: connected(sessionId, panes, initialPane.id) });
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    const firstOffer = harness.takeoverOffers.offers[0];
+    assert(firstOffer);
+
+    harness.projection.setState(connected(sessionId, panes, otherPane.id));
+    expect(firstOffer.retractCount).toBe(1);
+
+    harness.projection.setState(connected(sessionId, panes, initialPane.id));
+    expect(harness.takeoverOffers.offers).toHaveLength(2);
+    const secondOffer = harness.takeoverOffers.offers[1];
+    assert(secondOffer);
+    const attach = harness.onlyRunning("attach");
+
+    harness.projection.setState(stale(sessionId, panes, initialPane.id));
+    expect(secondOffer.retractCount).toBe(1);
+
+    harness.projection.setState(connected(sessionId, panes, initialPane.id));
+    attach.settleStop();
+    await vi.waitFor(() => expect(harness.takeoverOffers.offers).toHaveLength(3));
+  });
+
+  it("A2 retracts on attach displacement and disposal, then offers for a new attach", async () => {
+    const harness = createHarness();
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    const firstOffer = harness.takeoverOffers.offers[0];
+    assert(firstOffer);
+
+    harness.onlyRunning("attach").complete();
+    await vi.waitFor(() => {
+      expect(firstOffer.retractCount).toBe(1);
+      expect(harness.running()).toEqual([
+        { kind: "observe", terminalId: initialPane.terminalId, ...initialDimensions },
+      ]);
+    });
+
+    surface.pty.handleInput?.("local input");
+    expect(harness.takeoverOffers.offers).toHaveLength(2);
+    const secondOffer = harness.takeoverOffers.offers[1];
+    assert(secondOffer);
+
+    surface.surface.dispose();
+    expect(secondOffer.retractCount).toBe(1);
+  });
+
+  it("A3 yields to an observer, preserves mouse modes across screen resets, and reacquires only on local intent", async () => {
+    const harness = createHarness();
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    const firstOffer = harness.takeoverOffers.offers[0];
+    assert(firstOffer);
+    const firstAttach = harness.onlyRunning("attach");
+
+    firstOffer.onConfirm();
+    expect(firstAttach.stopRequested).toBe(true);
+    expect(harness.running()).toEqual([{ kind: "observe", terminalId: initialPane.terminalId, ...initialDimensions }]);
+    expect(firstOffer.retractCount).toBe(1);
+    expect(harness.paneClients.attaches).toHaveLength(1);
+    expect(surface.writes.at(-1)).toBe("\x1b[?1000h\x1b[?1006h");
+
+    firstAttach.settleStop();
+    await vi.waitFor(() =>
+      expect(harness.running()).toEqual([
+        { kind: "observe", terminalId: initialPane.terminalId, ...initialDimensions },
+      ]),
+    );
+    const displacedObserver = harness.onlyRunning("observe");
+    displacedObserver.sink.replace("observer full frame");
+    expect(surface.writes.at(-2)).toContain("observer full frame");
+    expect(surface.writes.at(-1)).toBe("\x1b[?1000h\x1b[?1006h");
+
+    ["\x1b[<64;1;1M", "\x1b[<0;5;5m", "\x1b[I", "\x1b[O", "\x1b[A", "\x1bOB"].forEach((input) =>
+      surface.pty.handleInput?.(input),
+    );
+    expect(harness.paneClients.attaches).toHaveLength(1);
+    expect(harness.running()).toEqual([{ kind: "observe", terminalId: initialPane.terminalId, ...initialDimensions }]);
+
+    surface.pty.handleInput?.("\x1b[<0;5;5M");
+    expect(harness.paneClients.attaches).toHaveLength(2);
+    const mouseAttach = harness.onlyRunning("attach");
+    expect(mouseAttach.inputs).toEqual([]);
+    expect(harness.takeoverOffers.offers).toHaveLength(2);
+    expect(surface.writes.at(-1)).toBe("\x1b[?1000l\x1b[?1006l");
+
+    const secondOffer = harness.takeoverOffers.offers[1];
+    assert(secondOffer);
+    secondOffer.onConfirm();
+    expect(mouseAttach.stopRequested).toBe(true);
+    mouseAttach.settleStop();
+    await vi.waitFor(() =>
+      expect(harness.running()).toEqual([
+        { kind: "observe", terminalId: initialPane.terminalId, ...initialDimensions },
+      ]),
+    );
+
+    surface.pty.handleInput?.("keyboard while displaced\r");
+    const keyboardAttach = harness.onlyRunning("attach");
+    expect(keyboardAttach.inputs).toEqual(["keyboard while displaced\r"]);
+    expect(harness.takeoverOffers.offers).toHaveLength(3);
+  });
+
+  it("A4 ignores confirms from an old attach, after D1 is lost, and after disposal", async () => {
+    const otherPane = pane("pane-2", "terminal-2");
+    const panes = [initialPane, otherPane];
+    const harness = createHarness({ initialProjection: connected(sessionId, panes, initialPane.id) });
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    const oldOffer = harness.takeoverOffers.offers[0];
+    assert(oldOffer);
+
+    harness.onlyRunning("attach").complete();
+    await vi.waitFor(() => expect(oldOffer.retractCount).toBe(1));
+    surface.pty.handleInput?.("reattach");
+    const currentAttach = harness.onlyRunning("attach");
+    const currentOffer = harness.takeoverOffers.offers[1];
+    assert(currentOffer);
+    oldOffer.onConfirm();
+    expect(currentAttach.stopRequested).toBe(false);
+    expect(harness.running()).toEqual([{ kind: "attach", terminalId: initialPane.terminalId, ...initialDimensions }]);
+
+    harness.projection.setState(connected(sessionId, panes, otherPane.id));
+    expect(currentOffer.retractCount).toBe(1);
+    currentOffer.onConfirm();
+    expect(currentAttach.stopRequested).toBe(false);
+    expect(harness.running()).toEqual([{ kind: "attach", terminalId: initialPane.terminalId, ...initialDimensions }]);
+
+    harness.projection.setState(connected(sessionId, panes, initialPane.id));
+    const finalOffer = harness.takeoverOffers.offers[2];
+    assert(finalOffer);
+    const attachCount = harness.paneClients.attaches.length;
+    const observerCount = harness.paneClients.observers.length;
+    surface.surface.dispose();
+    expect(finalOffer.retractCount).toBe(1);
+    finalOffer.onConfirm();
+    expect(harness.paneClients.attaches).toHaveLength(attachCount);
+    expect(harness.paneClients.observers).toHaveLength(observerCount);
   });
 });
