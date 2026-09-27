@@ -95,17 +95,18 @@ describe("PanesModel", () => {
     const fallbackTab = tab("tab-fallback", spaceA.id, "Fallback Tab");
     const foreignTab = tab("tab-foreign", spaceB.id, "Foreign Tab");
     const singlePane = pane("pane-single", singleTab.id, spaceA.id, { label: "Manual Pane" });
-    const groupDisplayPane = pane("pane-display", groupTab.id, spaceA.id);
-    const groupNamePane = pane("pane-name", groupTab.id, spaceA.id);
-    const titlePane = pane("pane-title", titleTab.id, spaceA.id);
+    const groupDisplayPane = pane("pane-display", groupTab.id, spaceA.id, { terminalTitle: "⠋ Terminal Name" });
+    const groupNamePane = pane("pane-name", groupTab.id, spaceA.id, { label: "Label", terminalTitle: "Title loses" });
+    const titlePane = pane("pane-title", titleTab.id, spaceA.id, { terminalTitle: "Terminal Title" });
     const fallbackPane = pane("pane-fallback", fallbackTab.id, spaceA.id);
     const foreignPane = pane("pane-foreign", foreignTab.id, spaceB.id, { label: "Foreign Pane" });
     const panes = [singlePane, groupNamePane, groupDisplayPane, titlePane, fallbackPane, foreignPane];
     const agents = [
-      agent(singlePane.id, singleTab.id, spaceA.id, { name: "Agent name should lose" }),
-      agent(groupNamePane.id, groupTab.id, spaceA.id, { name: "Agent Name", displayAgent: "Display should lose" }),
-      agent(groupDisplayPane.id, groupTab.id, spaceA.id, { displayAgent: "Display Agent", title: "Title should lose" }),
-      agent(titlePane.id, titleTab.id, spaceA.id, { title: "Agent Title" }),
+      agent(singlePane.id, singleTab.id, spaceA.id, { name: "Agent name is ignored" }),
+      agent(fallbackPane.id, fallbackTab.id, spaceA.id, {
+        name: "Agent name is ignored",
+        title: "Agent title is ignored",
+      }),
     ];
     const initialSnapshot = snapshot(
       [spaceA, spaceB],
@@ -138,19 +139,25 @@ describe("PanesModel", () => {
     expect(singleton.pane).toBe(singlePane);
     expect(singleton.tab).toBe(singleTab);
     expect(singleton.name).toBe("Manual Pane");
+    expect(singleton.title).toBe("Single Tab");
+    expect(singleton.description).toBe("Manual Pane");
 
     const group = connected.items[1];
     if (group?.kind !== "group") throw new Error("expected grouped item");
     expect(group.tab).toBe(groupTab);
     expect(group.panes.map((row) => row.pane.id)).toEqual(["pane-name", "pane-display"]);
-    expect(group.panes.map((row) => row.name)).toEqual(["Agent Name", "Display Agent"]);
+    expect(group.panes.map((row) => row.name)).toEqual(["Label", "⠋ Terminal Name"]);
 
     const title = connected.items[2];
     if (title?.kind !== "singleton") throw new Error("expected title singleton");
-    expect(title.name).toBe("Agent Title");
+    expect(title.name).toBe("Terminal Title");
+    expect(title.title).toBe("Title Tab");
+    expect(title.description).toBe("Terminal Title");
     const fallback = connected.items[3];
     if (fallback?.kind !== "singleton") throw new Error("expected fallback singleton");
     expect(fallback.name).toBe("Pane pane-fallback");
+    expect(fallback.title).toBe("Fallback Tab");
+    expect(fallback.description).toBeUndefined();
     expect(connected.items.some((item) => item.tab.id === foreignTab.id)).toBe(false);
 
     harness.setState({
@@ -195,5 +202,55 @@ describe("PanesModel", () => {
     expect(model.getState()).toEqual({ kind: "unavailable" });
 
     model.dispose();
+  });
+
+  it("names a singleton from its Tab name, Pane label, and terminal name", () => {
+    const space1 = space("space-1");
+    const cases: readonly [
+      label: string,
+      tabName: string,
+      overrides: Partial<HerdrPane>,
+      title: string,
+      description?: string,
+    ][] = [
+      ["label equal to Tab name", "Build", { label: "Build", terminalTitle: "⠋ build" }, "Build"],
+      ["label different from Tab name", "Build", { label: "Watcher", terminalTitle: "⠋ build" }, "Build", "Watcher"],
+      [
+        "trimmed terminal name equal to Tab name",
+        "claude",
+        { terminalTitle: "✳ claude", terminalTitleStripped: "claude" },
+        "✳ claude",
+      ],
+      [
+        "trimmed terminal name different from Tab name",
+        "Build",
+        { terminalTitle: "✳ claude", terminalTitleStripped: "claude" },
+        "Build",
+        "✳ claude",
+      ],
+      [
+        "case-sensitive comparison",
+        "Claude",
+        { terminalTitle: "✳ claude", terminalTitleStripped: "claude" },
+        "Claude",
+        "✳ claude",
+      ],
+    ];
+    for (const [name, tabName, overrides, title, description] of cases) {
+      const singleTab = tab("tab-1", space1.id, tabName);
+      const model = new PanesModel(
+        contextSource({
+          kind: "connected",
+          sessionId: "session-1",
+          snapshot: snapshot([space1], [singleTab], [pane("pane-1", singleTab.id, space1.id, overrides)], []),
+          selectedSpaceId: space1.id,
+        }).source,
+      );
+      const state = model.getState();
+      const item = state.kind === "connected" ? state.items[0] : undefined;
+      if (item?.kind !== "singleton") throw new Error(`expected singleton for ${name}`);
+      expect({ name, title: item.title, description: item.description }).toEqual({ name, title, description });
+      model.dispose();
+    }
   });
 });

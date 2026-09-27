@@ -1,5 +1,12 @@
 import * as vscode from "vscode";
-import type { PaneNavigationGroup, PaneNavigationItem, PaneNavigationRow, PanesModel, PanesState } from "../PanesModel";
+import type {
+  PaneNavigationGroup,
+  PaneNavigationItem,
+  PaneNavigationRow,
+  PaneNavigationSingleton,
+  PanesModel,
+  PanesState,
+} from "../PanesModel";
 
 export type PanesTreeItem = PanesGroupTreeItem | PaneTreeItem;
 
@@ -68,10 +75,12 @@ export class PanesGroupTreeItem extends vscode.TreeItem {
 }
 
 export class PaneTreeItem extends vscode.TreeItem {
-  constructor(row: PaneNavigationRow, singleton = false) {
-    super(row.name, vscode.TreeItemCollapsibleState.None);
+  constructor(row: PaneNavigationRow | PaneNavigationSingleton) {
+    const singleton = "kind" in row;
+    const title = singleton ? row.title : row.name;
+    super(title, vscode.TreeItemCollapsibleState.None);
     this.id = `herdr.pane.${row.pane.id}`;
-    if (singleton) this.description = row.tab.label;
+    if (singleton && row.description !== undefined) this.description = row.description;
     this.contextValue = singleton ? "herdr.panes.singleton" : "herdr.panes.pane";
     this.command = { command: "herdr.openPane", title: "Open Pane", arguments: [row.pane.id] };
     this.iconPath = new vscode.ThemeIcon("terminal");
@@ -83,13 +92,13 @@ export class PaneTreeItem extends vscode.TreeItem {
       `Tab ID: ${row.tab.id}`,
     ].join("\n");
     this.accessibilityInformation = {
-      label: singleton ? `${row.name}, ${row.tab.label}` : row.name,
+      label: singleton && row.description !== undefined ? `${title}, ${row.description}` : title,
     };
   }
 }
 
 function treeItem(item: PaneNavigationItem, expanded: ReadonlyMap<string, boolean>): PanesTreeItem {
-  if (item.kind === "singleton") return new PaneTreeItem(item, true);
+  if (item.kind === "singleton") return new PaneTreeItem(item);
   const group = new PanesGroupTreeItem(item);
   if (expanded.get(item.tab.id) === false) group.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
   return group;

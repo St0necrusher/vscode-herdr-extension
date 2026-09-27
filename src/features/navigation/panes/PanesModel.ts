@@ -1,4 +1,4 @@
-import type { HerdrAgent, HerdrPane, HerdrSpace, HerdrTab } from "@capabilities/sessions";
+import type { HerdrPane, HerdrSpace, HerdrTab } from "@capabilities/sessions";
 import type { NavigationContextSource } from "../capabilities";
 
 export type PaneNavigationRow = Readonly<{
@@ -16,6 +16,8 @@ export type PaneNavigationGroup = Readonly<{
 export type PaneNavigationSingleton = PaneNavigationRow &
   Readonly<{
     kind: "singleton";
+    title: string;
+    description?: string;
   }>;
 
 export type PaneNavigationItem = PaneNavigationGroup | PaneNavigationSingleton;
@@ -85,13 +87,11 @@ export class PanesModel {
     const panes = context.snapshot.panes.filter((pane) => pane.spaceId === selectedSpaceId);
     const items: PaneNavigationItem[] = [];
     for (const tab of tabs) {
-      const tabPanes = panes
-        .filter((pane) => pane.herdrTabId === tab.id)
-        .map((pane) => paneRow(pane, tab, context.snapshot.agents));
+      const tabPanes = panes.filter((pane) => pane.herdrTabId === tab.id).map((pane) => paneRow(pane, tab));
       if (tabPanes.length > 1) items.push({ kind: "group", tab, panes: tabPanes });
       else if (tabPanes.length === 1) {
         const singleton = tabPanes[0];
-        if (singleton !== undefined) items.push({ ...singleton, kind: "singleton" });
+        if (singleton !== undefined) items.push(singletonItem(singleton));
       }
     }
     return context.kind === "connected"
@@ -113,19 +113,23 @@ export class PanesModel {
   }
 }
 
-function paneRow(pane: HerdrPane, tab: HerdrTab, agents: readonly HerdrAgent[]): PaneNavigationRow {
-  const agent = agents.find((candidate) => candidate.paneId === pane.id);
-  return { pane, tab, name: paneName(pane, agent) };
+function paneRow(pane: HerdrPane, tab: HerdrTab): PaneNavigationRow {
+  return { pane, tab, name: nonEmpty(pane.label) ?? nonEmpty(pane.terminalTitle) ?? `Pane ${pane.id}` };
 }
 
-function paneName(pane: HerdrPane, agent: HerdrAgent | undefined): string {
-  return (
-    nonEmpty(pane.label) ??
-    nonEmpty(agent?.name) ??
-    nonEmpty(agent?.displayAgent) ??
-    nonEmpty(agent?.title) ??
-    `Pane ${pane.id}`
-  );
+function singletonItem(row: PaneNavigationRow): PaneNavigationSingleton {
+  const tabName = row.tab.label;
+  const label = nonEmpty(row.pane.label);
+  const terminalName = nonEmpty(row.pane.terminalTitle);
+  if (label !== undefined) {
+    return label === tabName
+      ? { ...row, kind: "singleton", title: label }
+      : { ...row, kind: "singleton", title: tabName, description: label };
+  }
+  if (terminalName === undefined) return { ...row, kind: "singleton", title: tabName };
+  return row.pane.terminalTitleStripped === tabName
+    ? { ...row, kind: "singleton", title: terminalName }
+    : { ...row, kind: "singleton", title: tabName, description: terminalName };
 }
 
 function nonEmpty(value: string | undefined): string | undefined {
