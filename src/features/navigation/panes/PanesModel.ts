@@ -118,18 +118,10 @@ function paneRow(pane: HerdrPane, tab: HerdrTab): PaneNavigationRow {
 }
 
 function singletonItem(row: PaneNavigationRow): PaneNavigationSingleton {
-  const tabName = row.tab.label;
-  const label = nonEmpty(row.pane.label);
-  const terminalName = nonEmpty(row.pane.terminalTitle);
-  if (label !== undefined) {
-    return label === tabName
-      ? { ...row, kind: "singleton", title: label }
-      : { ...row, kind: "singleton", title: tabName, description: label };
-  }
-  if (terminalName === undefined) return { ...row, kind: "singleton", title: tabName };
-  return row.pane.terminalTitleStripped === tabName
-    ? { ...row, kind: "singleton", title: terminalName }
-    : { ...row, kind: "singleton", title: tabName, description: terminalName };
+  const paneName = nonEmpty(row.pane.label) ?? nonEmpty(row.pane.terminalTitle);
+  return paneName === undefined
+    ? { ...row, kind: "singleton", title: row.tab.label }
+    : { ...row, kind: "singleton", title: row.tab.label, description: paneName };
 }
 
 function nonEmpty(value: string | undefined): string | undefined {

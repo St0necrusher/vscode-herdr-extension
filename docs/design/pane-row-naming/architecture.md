@@ -11,11 +11,17 @@ Terms: *Tab name* = `HerdrTab.label`; *Pane label* = `HerdrPane.label`; *termina
 1. Tab with several Panes (group):
    - group row primary = Tab name (unchanged);
    - each Pane row primary = Pane label, else terminal name.
-2. Tab with one Pane (singleton row):
+2. Tab with one Pane (singleton row) — **amended 2026-09-27, see below**:
    - Pane label set and equal to Tab name → primary = label, no secondary;
    - Pane label set and different → primary = Tab name, secondary = label;
    - no label, Tab name equals trimmed terminal name → primary = terminal name, no secondary;
    - no label, otherwise → primary = Tab name, secondary = terminal name.
+
+### Amendment (2026-09-27, after manual review)
+
+Tab and Pane names are no longer merged when they match. A singleton row always shows primary = Tab name,
+secondary = Pane label, else terminal name; no secondary when neither is set. `terminalTitleStripped` is no longer used.
+This supersedes the four rule-2 branches above and decision 3.
 
 ## Design
 

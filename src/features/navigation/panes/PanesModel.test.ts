@@ -204,39 +204,20 @@ describe("PanesModel", () => {
     model.dispose();
   });
 
-  it("names a singleton from its Tab name, Pane label, and terminal name", () => {
+  it("names a singleton from its Tab name with the Pane label or terminal name as secondary text", () => {
     const space1 = space("space-1");
-    const cases: readonly [
-      label: string,
-      tabName: string,
-      overrides: Partial<HerdrPane>,
-      title: string,
-      description?: string,
-    ][] = [
+    const cases: readonly [label: string, tabName: string, overrides: Partial<HerdrPane>, description?: string][] = [
       ["label equal to Tab name", "Build", { label: "Build", terminalTitle: "⠋ build" }, "Build"],
-      ["label different from Tab name", "Build", { label: "Watcher", terminalTitle: "⠋ build" }, "Build", "Watcher"],
+      ["label different from Tab name", "Build", { label: "Watcher", terminalTitle: "⠋ build" }, "Watcher"],
       [
         "trimmed terminal name equal to Tab name",
         "claude",
         { terminalTitle: "✳ claude", terminalTitleStripped: "claude" },
         "✳ claude",
       ],
-      [
-        "trimmed terminal name different from Tab name",
-        "Build",
-        { terminalTitle: "✳ claude", terminalTitleStripped: "claude" },
-        "Build",
-        "✳ claude",
-      ],
-      [
-        "case-sensitive comparison",
-        "Claude",
-        { terminalTitle: "✳ claude", terminalTitleStripped: "claude" },
-        "Claude",
-        "✳ claude",
-      ],
+      ["no label or terminal name", "Build", {}],
     ];
-    for (const [name, tabName, overrides, title, description] of cases) {
+    for (const [name, tabName, overrides, description] of cases) {
       const singleTab = tab("tab-1", space1.id, tabName);
       const model = new PanesModel(
         contextSource({
@@ -249,7 +230,7 @@ describe("PanesModel", () => {
       const state = model.getState();
       const item = state.kind === "connected" ? state.items[0] : undefined;
       if (item?.kind !== "singleton") throw new Error(`expected singleton for ${name}`);
-      expect({ name, title: item.title, description: item.description }).toEqual({ name, title, description });
+      expect({ name, title: item.title, description: item.description }).toEqual({ name, title: tabName, description });
       model.dispose();
     }
   });
