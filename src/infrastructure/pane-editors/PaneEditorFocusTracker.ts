@@ -20,22 +20,27 @@ export type FocusChangeEvent = FocusedPaneEditorEvent | HiddenPaneEditorEvent | 
 
 export type PaneEditorFocusListener = (event: FocusChangeEvent) => void;
 
+export interface WindowFocusSource {
+  readonly state: { readonly focused: boolean };
+  onDidChangeWindowState(listener: (state: { readonly focused: boolean }) => void): { dispose(): void };
+}
+
 export class PaneEditorFocusTracker {
   private readonly selectedPaneIdsBySession = new Map<string, Set<string>>();
   private readonly listenersBySession = new Map<string, Map<string, Set<PaneEditorFocusListener>>>();
   private readonly selectionSubscriptions: readonly { dispose(): void }[];
-  private readonly windowStateSubscription: vscode.Disposable;
+  private readonly windowStateSubscription: { dispose(): void };
   private windowFocused: boolean;
   private disposed = false;
 
-  constructor(selection: PaneEditorSelection) {
-    this.windowFocused = vscode.window.state.focused;
+  constructor(selection: PaneEditorSelection, window: WindowFocusSource = vscode.window) {
+    this.windowFocused = window.state.focused;
     this.selectionSubscriptions = [
       selection.subscribe("selected", (event) => this.handleSelected(event.selection)),
       selection.subscribe("deselected", (event) => this.handleDeselected(event.selection)),
       selection.subscribe("moved", (event) => this.handleMoved(event.previous, event.current)),
     ];
-    this.windowStateSubscription = vscode.window.onDidChangeWindowState((state) => {
+    this.windowStateSubscription = window.onDidChangeWindowState((state) => {
       this.handleWindowFocusChanged(state.focused);
     });
   }

@@ -86,7 +86,6 @@ suite("Pane editors in VS Code", () => {
     const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
     assert.ok(extension, "Extension is installed in the test host");
     await extension.activate();
-    assert.ok(vscode.window.state.focused, "the VS Code test host window is focused");
   });
 
   test("C7 opens, binds, hides, and reveals one Pane editor", async () => {
@@ -159,8 +158,8 @@ suite("Pane editors in VS Code", () => {
       await vscode.commands.executeCommand("workbench.action.moveEditorToRightGroup");
       const moved = await waitForPaneTab(harness.expectedTabLabel, (located) => located.group !== original.group);
       await waitForPaneClient(harness.clients, "C8 moved Pane tab");
-
-      assert.equal(moved.tab.label, harness.expectedTabLabel, "the moved tab is rebound and shows the Pane title");
+      // Rebinding briefly publishes the terminal name before the Pane title returns.
+      await waitFor(() => moved.tab.label === harness.expectedTabLabel, "the moved tab to show the Pane title again");
       assert.equal(paneTabs(harness.expectedTabLabel).length, 1);
       assert.ok(vscode.window.terminals.includes(terminal), "the original VS Code terminal remains open");
       assert.equal(createdTerminals(harness).length, 1, "moving the tab does not create another terminal");
@@ -224,7 +223,9 @@ async function withPaneEditorHarness(run: (harness: PaneEditorHarness) => Promis
     onDidChangeActiveSessionProjection: () => ({ dispose: () => undefined }),
   };
   const selection = new PaneEditorSelectionModel();
-  const focusTracker = new PaneEditorFocusTracker(selection);
+  // Pane clients attach only in a focused window; the OS decides whether the test host window gets focus.
+  const focusedWindow = { state: { focused: true }, onDidChangeWindowState: () => ({ dispose: () => undefined }) };
+  const focusTracker = new PaneEditorFocusTracker(selection, focusedWindow);
   const clients = new FakePaneClientFactory();
   const closedTerminals = new Set<vscode.Terminal>();
   const terminalCloseSubscription = vscode.window.onDidCloseTerminal((terminal) => closedTerminals.add(terminal));
