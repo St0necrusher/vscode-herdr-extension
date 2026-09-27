@@ -280,6 +280,7 @@ function createHarness(
       projection.source,
       focusTracker,
       paneClients.factory,
+      { offer: () => ({ retract: () => undefined }) },
       logger,
     );
     const terminalRecord = vscodeStub.terminals.at(-1);

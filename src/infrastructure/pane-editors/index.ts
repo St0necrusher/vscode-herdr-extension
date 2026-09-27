@@ -1,4 +1,5 @@
 export { PaneEditorFocusTracker, type FocusChangeEvent, type PaneEditorFocusListener } from "./PaneEditorFocusTracker";
+export { TakeoverPluginRegistration, TakeoverPopupHost } from "./takeover";
 
 export {
   PaneEditorSelectionModel,

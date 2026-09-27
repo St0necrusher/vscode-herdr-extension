@@ -237,6 +237,7 @@ async function withPaneEditorHarness(run: (harness: PaneEditorHarness) => Promis
         projectionSource,
         focusTracker,
         clients,
+        { offer: () => ({ retract: () => undefined }) },
         logger,
       ),
   });

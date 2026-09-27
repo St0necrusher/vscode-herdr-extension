@@ -22,6 +22,14 @@
   "contributes": {
     "commands": [
       {
+        "command": "herdr.installMobileTakeoverPlugin",
+        "title": "Herdr: Install Mobile Takeover Plugin"
+      },
+      {
+        "command": "herdr.removeMobileTakeoverPlugin",
+        "title": "Herdr: Remove Mobile Takeover Plugin"
+      },
+      {
         "command": "herdr.showStatusActions",
         "title": "Herdr: Show Status Actions"
       },
