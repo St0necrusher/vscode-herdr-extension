@@ -107,20 +107,12 @@ function treeItem(item: PaneNavigationItem, expanded: ReadonlyMap<string, boolea
 function setMessage(view: vscode.TreeView<PanesTreeItem>, state: PanesState): void {
   let message: string | undefined;
   if (state.kind === "unavailable") {
-    message = state.sessionId === undefined ? "No active Herdr Session" : "Herdr Session is not readable";
+    message = "Herdr Session is not connected";
   } else if (state.kind === "no-space") {
-    message = state.freshness === "connected" ? "Select a Space to browse Panes" : staleMessage(state.freshness.reason);
-  } else if (state.kind === "stale") {
-    message = staleMessage(state.reason);
+    message = "Select a Space to browse Panes";
   } else if (state.items.length === 0) {
     message = "No Panes in this Space";
   }
-  if (message === undefined) delete view.message;
-  else view.message = message;
-}
-
-function staleMessage(reason: "reconnecting" | "incompatible"): string {
-  return reason === "reconnecting"
-    ? "Reconnecting — showing last known state"
-    : "Incompatible Session — showing last known state";
+  // Assign rather than delete: TreeView.message is an accessor, and VS Code clears it with "".
+  view.message = message ?? "";
 }

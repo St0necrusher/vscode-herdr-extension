@@ -105,11 +105,11 @@ The navigation View does not introduce foreground-process inspection or use vola
 ### Stale projection — agreed
 
 - During reconnect or incompatibility, Spaces and Panes continue to render the retained stale snapshot.
-- Each affected View shows one compact View-level message: `Reconnecting — showing last known state` or the corresponding incompatible-state copy. Rows are not individually decorated as stale.
+- Neither View shows a stale message over rows; the Sessions View and status bar already report reconnecting or incompatible Session state. Rows are not individually decorated as stale.
 - Local Space selection remains available against the readable stale projection because it changes only this VS Code navigation context.
 - Server-side mutations and control remain unavailable unless Session authority is `connected`. Issue #13 adds no such server action, but its semantic feature states expose connected-versus-stale authority so later menus cannot mistake readable data for mutable authority.
 - A fresh snapshot preserves the local selection if that Space still exists. If not, the model chooses the fresh server-focused Space, then the first server Space, then none.
-- Without a connected or retained stale projection, both Views show an appropriate View-level state message and no server rows.
+- View-level messages appear only when a View has no rows: `Herdr Session is not connected` without a connected or retained stale projection, otherwise the empty-state copy (`No Spaces in this Herdr Session`, `Select a Space to browse Panes`, `No Panes in this Space`).
 
 ## Detailed architecture
 

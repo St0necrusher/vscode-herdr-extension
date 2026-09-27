@@ -64,20 +64,10 @@ export class SpaceTreeItem extends vscode.TreeItem {
 function setMessage(view: vscode.TreeView<SpaceTreeItem>, state: SpacesState): void {
   const message =
     state.kind === "unavailable"
-      ? state.sessionId === undefined
-        ? "No active Herdr Session"
-        : "Herdr Session is not readable"
-      : state.kind === "stale"
-        ? staleMessage(state.reason)
-        : state.spaces.length === 0
-          ? "No Spaces in this Herdr Session"
-          : undefined;
-  if (message === undefined) delete view.message;
-  else view.message = message;
-}
-
-function staleMessage(reason: "reconnecting" | "incompatible"): string {
-  return reason === "reconnecting"
-    ? "Reconnecting — showing last known state"
-    : "Incompatible Session — showing last known state";
+      ? "Herdr Session is not connected"
+      : state.spaces.length === 0
+        ? "No Spaces in this Herdr Session"
+        : undefined;
+  // Assign rather than delete: TreeView.message is an accessor, and VS Code clears it with "".
+  view.message = message ?? "";
 }
