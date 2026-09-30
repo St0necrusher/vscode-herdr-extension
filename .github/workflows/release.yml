@@ -1,0 +1,30 @@
+name: Release
+
+# main only receives commits whose CI passed on an up-to-date branch, so this workflow does not rerun the tests.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency: release-latest
+
+jobs:
+  latest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run package
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest herdr.vsix --prerelease --target "$GITHUB_SHA" \
+            --title "Latest main build" \
+            --notes "Built from $GITHUB_SHA. Install with: code --install-extension herdr.vsix --force"
