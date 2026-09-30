@@ -23,3 +23,29 @@ jobs:
           path: .vscode-test
           key: vscode-test-${{ runner.os }}
       - run: xvfb-run -a npm run test:extension
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: herdr-vsix
+          path: herdr.vsix
+
+  # Keeps one `latest` pre-release whose herdr.vsix is the build of the newest main commit.
+  release:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency: release-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: herdr-vsix
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest herdr.vsix --prerelease --target "$GITHUB_SHA" \
+            --title "Latest main build" \
+            --notes "Built from $GITHUB_SHA. Install with: code --install-extension herdr.vsix --force"
