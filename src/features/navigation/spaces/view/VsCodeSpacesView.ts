@@ -12,9 +12,34 @@ export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>,
     this.view = vscode.window.createTreeView("herdr.spaces", { treeDataProvider: this });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
+      setSpaceCreationEnabled(state);
       this.changes.fire(undefined);
     });
-    setMessage(this.view, model.getState());
+    const state = model.getState();
+    setMessage(this.view, state);
+    setSpaceCreationEnabled(state);
+  }
+
+  async chooseSpaceFolder(): Promise<string | undefined> {
+    const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+    if (workspaceFolders.length === 0) {
+      void vscode.window.showErrorMessage("Open a folder to create a Herdr Space.");
+      return undefined;
+    }
+    if (workspaceFolders.length === 1) return workspaceFolders[0]?.uri.fsPath;
+
+    const selected = await vscode.window.showWorkspaceFolderPick({
+      placeHolder: "Choose a folder for the new Herdr Space",
+    });
+    return selected?.uri.fsPath;
+  }
+
+  showSpaceCreationError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not create Space: ${errorMessage(error)}`);
+  }
+
+  showCreatedSpaceOpenError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Space was created but its Pane could not be opened: ${errorMessage(error)}`);
   }
 
   getTreeItem(item: SpaceTreeItem): vscode.TreeItem {
@@ -59,6 +84,14 @@ export class SpaceTreeItem extends vscode.TreeItem {
       arguments: [space.id],
     };
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function setSpaceCreationEnabled(state: SpacesState): void {
+  void vscode.commands.executeCommand("setContext", "herdr.spaceCreationEnabled", state.kind === "connected");
 }
 
 function setMessage(view: vscode.TreeView<SpaceTreeItem>, state: SpacesState): void {

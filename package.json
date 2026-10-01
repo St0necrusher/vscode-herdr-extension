@@ -65,6 +65,30 @@
       {
         "command": "herdr.openPane",
         "title": "Herdr: Open Pane"
+      },
+      {
+        "command": "herdr.createSpace",
+        "title": "Herdr: New Space",
+        "icon": "$(add)",
+        "enablement": "herdr.spaceCreationEnabled"
+      },
+      {
+        "command": "herdr.createPane",
+        "title": "Herdr: New Pane",
+        "icon": "$(add)",
+        "enablement": "herdr.paneCreationEnabled"
+      },
+      {
+        "command": "herdr.splitPaneRight",
+        "title": "Herdr: Split Pane Right",
+        "icon": "$(split-horizontal)",
+        "enablement": "herdr.paneCreationEnabled"
+      },
+      {
+        "command": "herdr.splitPaneDown",
+        "title": "Herdr: Split Pane Down",
+        "icon": "$(split-vertical)",
+        "enablement": "herdr.paneCreationEnabled"
       }
     ],
     "viewsContainers": {
@@ -98,6 +122,38 @@
           "command": "herdr.refreshSessions",
           "when": "view == herdr.sessions",
           "group": "navigation"
+        },
+        {
+          "command": "herdr.createSpace",
+          "when": "view == herdr.spaces",
+          "group": "navigation"
+        },
+        {
+          "command": "herdr.createPane",
+          "when": "view == herdr.panes",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "herdr.splitPaneRight",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)$/",
+          "group": "split@1"
+        },
+        {
+          "command": "herdr.splitPaneDown",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)$/",
+          "group": "split@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "herdr.splitPaneRight",
+          "when": "false"
+        },
+        {
+          "command": "herdr.splitPaneDown",
+          "when": "false"
         }
       ]
     },

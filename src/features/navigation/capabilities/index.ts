@@ -31,3 +31,7 @@ export interface NavigationContextSource {
 export interface SpaceSelectionOperations {
   selectSpace(spaceId: string): void;
 }
+
+export interface NavigationPaneOpening {
+  openPane(paneId: string): void;
+}

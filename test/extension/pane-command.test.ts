@@ -127,11 +127,19 @@ async function withPanesFeature(
   };
 
   try {
-    feature = new PanesFeature(context, {
-      openPane: (request) => {
-        requests.push(request);
+    feature = new PanesFeature(
+      context,
+      {
+        openPane: (request) => {
+          requests.push(request);
+        },
       },
-    });
+      {
+        createSpace: () => Promise.reject(new Error("not used")),
+        createPane: () => Promise.reject(new Error("not used")),
+        splitPane: () => Promise.reject(new Error("not used")),
+      },
+    );
     assert.ok(provider);
     await run(prefix, provider, context, requests);
   } finally {

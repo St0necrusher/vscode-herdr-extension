@@ -17,6 +17,15 @@ export type {
 } from "./snapshot";
 export type { HerdrSessionListResult, HerdrSessionDirectory } from "./directory";
 export type { ActiveSessionProjectionState, ActiveSessionProjectionSource } from "./activeSessionProjection";
+export type {
+  ActiveSessionCreation,
+  CreatedPane,
+  CreatedSpace,
+  CreatePaneRequest,
+  CreateSpaceRequest,
+  SplitDirection,
+  SplitPaneRequest,
+} from "./creation";
 export {
   HerdrConnectionFailureError,
   type HerdrConnectionFailure,

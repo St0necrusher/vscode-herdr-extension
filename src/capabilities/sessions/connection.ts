@@ -1,6 +1,7 @@
 import type { HerdrSessionSnapshot } from "./snapshot";
 import type { HerdrResolvedSession, HerdrSessionMetadata } from "./session";
 import type { HerdrPaneMovedEvent } from "./sessionEvents";
+import type { CreatedPane, CreatedSpace, SplitDirection } from "./creation";
 
 export type HerdrConnectionFailure =
   | Readonly<{ kind: "transport"; diagnostic: string }>
@@ -37,6 +38,9 @@ export interface HerdrSessionProjectionConsumer {
 
 export interface HerdrSessionConnection {
   bootstrap(consumer: HerdrSessionProjectionConsumer): Promise<HerdrSessionMetadata>;
+  createSpace(cwd: string): Promise<CreatedSpace>;
+  createPane(spaceId: string): Promise<CreatedPane>;
+  splitPane(paneId: string, direction: SplitDirection): Promise<CreatedPane>;
   dispose(): void;
 }
 

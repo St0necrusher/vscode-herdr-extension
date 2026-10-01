@@ -1,5 +1,5 @@
 import { HerdrConnectionFailureError } from "@capabilities/sessions";
-import type { HerdrSessionMetadata } from "@capabilities/sessions";
+import type { CreatedPane, CreatedSpace, HerdrSessionMetadata } from "@capabilities/sessions";
 export type HerdrProtocolRecord = Record<string, unknown>;
 
 export const supportedProtocol = 22;
@@ -22,6 +22,28 @@ export function parsePaneMovedPayload(message: HerdrProtocolRecord): HerdrPaneMo
     throw invalidResponse("Herdr returned invalid pane.moved identity data.");
   }
   return { previousPaneId, pane: message.data.pane };
+}
+
+export function parseWorkspaceCreatedResult(result: HerdrProtocolRecord): CreatedSpace {
+  requireResultType(result, "workspace_created");
+  if (!isRecord(result.workspace)) throw invalidResponse("Herdr returned an invalid created Space.");
+  if (!isRecord(result.root_pane)) throw invalidResponse("Herdr returned an invalid created root Pane.");
+  return {
+    spaceId: requiredString(result.workspace, "workspace_id", "created Space"),
+    paneId: requiredString(result.root_pane, "pane_id", "created root Pane"),
+  };
+}
+
+export function parseTabCreatedResult(result: HerdrProtocolRecord): CreatedPane {
+  requireResultType(result, "tab_created");
+  if (!isRecord(result.root_pane)) throw invalidResponse("Herdr returned an invalid created root Pane.");
+  return { paneId: requiredString(result.root_pane, "pane_id", "created root Pane") };
+}
+
+export function parsePaneInfoResult(result: HerdrProtocolRecord): CreatedPane {
+  requireResultType(result, "pane_info");
+  if (!isRecord(result.pane)) throw invalidResponse("Herdr returned an invalid created Pane.");
+  return { paneId: requiredString(result.pane, "pane_id", "created Pane") };
 }
 
 export function parsePongResult(result: HerdrProtocolRecord): HerdrSessionMetadata {

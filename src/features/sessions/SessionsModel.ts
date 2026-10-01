@@ -1,5 +1,10 @@
 import type { HerdrLogger } from "@capabilities/runtime";
 import type {
+  CreatedPane,
+  CreatedSpace,
+  CreatePaneRequest,
+  CreateSpaceRequest,
+  SplitPaneRequest,
   HerdrConfiguration,
   HerdrConfigurationSource,
   HerdrConnectionFailure,
@@ -81,6 +86,18 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
 
   getState(): SessionsState {
     return this.state;
+  }
+
+  async createSpace(request: CreateSpaceRequest): Promise<CreatedSpace> {
+    return this.creationConnection(request.sessionId).createSpace(request.cwd);
+  }
+
+  async createPane(request: CreatePaneRequest): Promise<CreatedPane> {
+    return this.creationConnection(request.sessionId).createPane(request.spaceId);
+  }
+
+  async splitPane(request: SplitPaneRequest): Promise<CreatedPane> {
+    return this.creationConnection(request.sessionId).splitPane(request.paneId, request.direction);
   }
 
   onDidChange(listener: (state: SessionsState) => void): Disposable {
@@ -499,6 +516,15 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
   private disposeConnection(): void {
     this.connection?.dispose();
     this.connection = undefined;
+  }
+
+  private creationConnection(sessionId: string): HerdrSessionConnection {
+    const active = this.state.active;
+    if (active.kind !== "connected") throw new Error("Herdr Session is not connected.");
+    if (active.session.id !== sessionId) throw new Error("Herdr Session changed.");
+    const connection = this.connection;
+    if (connection === undefined) throw new Error("Herdr Session is not connected.");
+    return connection;
   }
 }
 

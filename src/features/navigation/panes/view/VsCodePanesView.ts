@@ -24,6 +24,7 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     this.view = vscode.window.createTreeView("herdr.panes", { treeDataProvider: this });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
+      setPaneCreationEnabled(state);
       this.changes.fire(undefined);
     });
     this.expansionSubscription = this.view.onDidExpandElement((event) => {
@@ -34,7 +35,9 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
       if (event.element instanceof PanesGroupTreeItem && event.element.id !== undefined)
         this.expanded.set(event.element.id, false);
     });
-    setMessage(this.view, model.getState());
+    const state = model.getState();
+    setMessage(this.view, state);
+    setPaneCreationEnabled(state);
   }
 
   getTreeItem(item: PanesTreeItem): vscode.TreeItem {
@@ -48,6 +51,18 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     setMessage(this.view, state);
     if (state.kind === "unavailable" || state.kind === "no-space") return [];
     return state.items.map((item) => treeItem(item, this.expanded));
+  }
+
+  showPaneCreationError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not create Pane: ${errorMessage(error)}`);
+  }
+
+  showPaneSplitError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not split Pane: ${errorMessage(error)}`);
+  }
+
+  showCreatedPaneOpenError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Pane was created but could not be opened: ${errorMessage(error)}`);
   }
 
   dispose(): void {
@@ -75,11 +90,14 @@ export class PanesGroupTreeItem extends vscode.TreeItem {
 }
 
 export class PaneTreeItem extends vscode.TreeItem {
+  readonly paneId: string;
+
   constructor(row: PaneNavigationRow | PaneNavigationSingleton) {
     const singleton = "kind" in row;
     const title = singleton ? row.title : row.name;
     super(title, vscode.TreeItemCollapsibleState.None);
-    this.id = `herdr.pane.${row.pane.id}`;
+    this.paneId = row.pane.id;
+    this.id = `herdr.pane.${this.paneId}`;
     if (singleton && row.description !== undefined) this.description = row.description;
     this.contextValue = singleton ? "herdr.panes.singleton" : "herdr.panes.pane";
     this.command = { command: "herdr.openPane", title: "Open Pane", arguments: [row.pane.id] };
@@ -102,6 +120,14 @@ function treeItem(item: PaneNavigationItem, expanded: ReadonlyMap<string, boolea
   const group = new PanesGroupTreeItem(item);
   if (expanded.get(item.tab.id) === false) group.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
   return group;
+}
+
+function setPaneCreationEnabled(state: PanesState): void {
+  void vscode.commands.executeCommand("setContext", "herdr.paneCreationEnabled", state.kind === "connected");
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function setMessage(view: vscode.TreeView<PanesTreeItem>, state: PanesState): void {

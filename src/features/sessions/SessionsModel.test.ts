@@ -143,6 +143,9 @@ function createHarness(options: HarnessOptions = {}) {
           if (plan?.auto !== false && options.autoConnections !== false) record.settle();
           return bootstrap.promise;
         },
+        createSpace: () => Promise.reject(new Error("not used")),
+        createPane: () => Promise.reject(new Error("not used")),
+        splitPane: () => Promise.reject(new Error("not used")),
         dispose: () => {
           record.disposed = true;
         },

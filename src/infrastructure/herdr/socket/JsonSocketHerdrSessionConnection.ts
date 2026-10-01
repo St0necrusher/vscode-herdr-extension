@@ -1,5 +1,7 @@
 import { HerdrConnectionFailureError } from "@capabilities/sessions";
 import type {
+  CreatedPane,
+  CreatedSpace,
   HerdrConnectionFailure,
   HerdrPaneMovedEvent,
   HerdrResolvedSession,
@@ -7,12 +9,16 @@ import type {
   HerdrSessionMetadata,
   HerdrSessionProjectionConsumer,
   HerdrSessionSnapshot,
+  SplitDirection,
 } from "@capabilities/sessions";
 import type { HerdrLogger } from "@capabilities/runtime";
 import {
   invalidResponse,
+  parsePaneInfoResult,
   parsePaneMovedPayload,
   parsePongResult,
+  parseTabCreatedResult,
+  parseWorkspaceCreatedResult,
   requireResultType,
   type HerdrProtocolRecord,
 } from "./protocol/HerdrProtocol";
@@ -63,7 +69,11 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
     this.consumer = consumer;
 
     try {
-      const metadata = parsePongResult(await this.requestOnce("ping", {}, "ping"));
+      const metadata = parsePongResult(
+        await this.requestOnce("ping", {}).catch((error: unknown) => {
+          throw asFailure(error, "ping");
+        }),
+      );
       this.metadata = metadata;
       this.subscription = await this.openSubscription([]);
       this.subscriptionPaneIds = [];
@@ -85,6 +95,26 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
     }
   }
 
+  async createSpace(cwd: string): Promise<CreatedSpace> {
+    const result = parseWorkspaceCreatedResult(await this.requestOnce("workspace.create", { cwd, focus: false }));
+    await this.publishSnapshotAfterCreation();
+    return result;
+  }
+
+  async createPane(spaceId: string): Promise<CreatedPane> {
+    const result = parseTabCreatedResult(await this.requestOnce("tab.create", { workspace_id: spaceId, focus: false }));
+    await this.publishSnapshotAfterCreation();
+    return result;
+  }
+
+  async splitPane(paneId: string, direction: SplitDirection): Promise<CreatedPane> {
+    const result = parsePaneInfoResult(
+      await this.requestOnce("pane.split", { target_pane_id: paneId, direction, focus: false }),
+    );
+    await this.publishSnapshotAfterCreation();
+    return result;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -104,9 +134,8 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
   }
 
   private async requestOnce(
-    method: "ping" | "session.snapshot",
+    method: "ping" | "session.snapshot" | "workspace.create" | "tab.create" | "pane.split",
     params: Readonly<Record<string, unknown>>,
-    operation: "ping" | "snapshot",
   ): Promise<HerdrProtocolRecord> {
     let client: JsonSocketClient | undefined;
     try {
@@ -115,8 +144,6 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
         () => undefined,
       );
       return await client.request(method, params);
-    } catch (error) {
-      throw asFailure(error, operation);
     } finally {
       if (client !== undefined) this.removeClient(client);
     }
@@ -179,7 +206,9 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
   private async runReconciliation(): Promise<void> {
     while (!this.disposed && this.dirty) {
       this.dirty = false;
-      const result = await this.requestOnce("session.snapshot", {}, "snapshot");
+      const result = await this.requestOnce("session.snapshot", {}).catch((error: unknown) => {
+        throw asFailure(error, "snapshot");
+      });
       if (this.metadata === undefined) throw invalidResponse("Herdr snapshot arrived before ping metadata.");
       const snapshot = parseSnapshotResult(result, this.metadata);
       this.latestSnapshot = snapshot;
@@ -187,6 +216,20 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
       if (await this.synchronizeSubscriptions(paneIds(snapshot))) {
         this.dirty = true;
       }
+    }
+  }
+
+  private async publishSnapshotAfterCreation(): Promise<void> {
+    try {
+      this.dirty = true;
+      const shouldReconcileAgain = (): boolean => this.dirty && !this.disposed;
+      do {
+        await this.reconcileSnapshots();
+      } while (shouldReconcileAgain());
+      if (this.disposed) throw new Error("Herdr Session connection is disposed.");
+    } catch (error) {
+      this.failConnection(error, "snapshot");
+      throw error;
     }
   }
 

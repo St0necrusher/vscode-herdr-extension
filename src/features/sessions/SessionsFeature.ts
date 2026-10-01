@@ -1,6 +1,12 @@
 import * as vscode from "vscode";
 import type { HerdrLogger } from "@capabilities/runtime";
 import type {
+  ActiveSessionCreation,
+  CreatedPane,
+  CreatedSpace,
+  CreatePaneRequest,
+  CreateSpaceRequest,
+  SplitPaneRequest,
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
   HerdrSessionEventMap,
@@ -25,7 +31,7 @@ export type SessionsFeatureDependencies = Readonly<{
   logger: HerdrLogger;
 }>;
 
-export class SessionsFeature implements ActiveSessionProjectionSource, HerdrSessionEventSource {
+export class SessionsFeature implements ActiveSessionProjectionSource, HerdrSessionEventSource, ActiveSessionCreation {
   private readonly model: SessionsModel;
   private readonly view: VsCodeSessionsView;
   private readonly status: StatusFeature;
@@ -70,6 +76,18 @@ export class SessionsFeature implements ActiveSessionProjectionSource, HerdrSess
 
   getActiveSessionProjection(): ActiveSessionProjectionState {
     return activeSessionProjection(this.model.getState());
+  }
+
+  createSpace(request: CreateSpaceRequest): Promise<CreatedSpace> {
+    return this.model.createSpace(request);
+  }
+
+  createPane(request: CreatePaneRequest): Promise<CreatedPane> {
+    return this.model.createPane(request);
+  }
+
+  splitPane(request: SplitPaneRequest): Promise<CreatedPane> {
+    return this.model.splitPane(request);
   }
 
   onDidChangeActiveSessionProjection(listener: (state: ActiveSessionProjectionState) => void): { dispose(): void } {
