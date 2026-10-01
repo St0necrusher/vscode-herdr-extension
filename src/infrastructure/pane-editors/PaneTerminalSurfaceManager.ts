@@ -4,18 +4,11 @@ import type { HerdrPaneMovedEvent, HerdrSessionEventSource } from "@capabilities
 import type { PaneEditorSelection, SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import type { PaneTerminalSurface, PaneTerminalSurfaceFactory } from "./PaneTerminalSurface";
 
-type PendingTab = Readonly<{ kind: "pending" }>;
-type BoundTab = Readonly<{ kind: "bound"; tab: vscode.Tab }>;
-// A group move passes through "lost" until the replacement tab binds. Closing a tab after a group move leaves it
-// "lost" for good: VS Code keeps the terminal without a tab, and neither show() nor dispose() reaches it.
-type LostTab = Readonly<{ kind: "lost" }>;
-type TabBinding = PendingTab | BoundTab | LostTab;
-
 interface ManagedPaneSurface {
   selection: SelectedPaneEditor;
   readonly terminalName: string;
   readonly surface: PaneTerminalSurface;
-  tabBinding: TabBinding;
+  tab: vscode.Tab | undefined;
 }
 
 export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
@@ -32,7 +25,6 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
     this.subscriptions = [
       sessionEvents.subscribe("pane.moved", (event) => this.handlePaneMoved(event)),
       tabGroups.onDidChangeTabs(() => this.handleTabsChanged()),
-      vscode.window.onDidCloseTerminal((terminal) => this.handleTerminalClosed(terminal)),
       vscode.window.onDidChangeActiveTerminal(() => this.updateActiveTerminalContext()),
     ];
     this.updateActiveTerminalContext();
@@ -41,21 +33,20 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
   openPane(request: PaneTerminalOpenRequest): void {
     const selection = { sessionId: request.sessionId, paneId: request.paneId };
     const existing = this.getSurface(selection);
-    if (existing !== undefined && existing.tabBinding.kind !== "lost") {
-      const binding = existing.tabBinding;
-      const surfaceIsAlreadyActive = binding.kind === "bound" && this.isActiveTab(binding.tab);
+    if (existing !== undefined) {
+      const surfaceIsAlreadyActive = existing.tab !== undefined && this.isActiveTab(existing.tab);
       if (surfaceIsAlreadyActive) return;
       existing.surface.reveal();
       this.reconcileTabBindings();
       return;
     }
-    if (existing !== undefined) this.closeSurface(existing);
 
     const viewColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
     const terminalName = this.terminalName(selection);
     const surface = this.surfaceFactory.create(selection, viewColumn, terminalName);
-    const managed: ManagedPaneSurface = { selection, terminalName, surface, tabBinding: { kind: "pending" } };
+    const managed: ManagedPaneSurface = { selection, terminalName, surface, tab: undefined };
     this.setSurface(selection, managed);
+    surface.onDidClose(() => this.handleSurfaceClosed(managed));
     surface.reveal();
     this.reconcileTabBindings();
   }
@@ -87,12 +78,7 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
     managed.surface.move(event.currentPane);
   }
 
-  private handleTerminalClosed(terminal: vscode.Terminal): void {
-    const managed = this.allSurfaces().find((candidate) => candidate.surface.terminal === terminal);
-    if (managed !== undefined) this.closeSurface(managed);
-  }
-
-  private closeSurface(managed: ManagedPaneSurface): void {
+  private handleSurfaceClosed(managed: ManagedPaneSurface): void {
     this.removeSurface(managed.selection);
     this.selection.deselect(managed.selection);
     managed.surface.dispose();
@@ -117,26 +103,22 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
     const tabs = groups.flatMap((group) => group.tabs);
 
     this.allSurfaces().forEach((managed) => {
-      const binding = managed.tabBinding;
-      if (binding.kind === "bound" && tabs.includes(binding.tab)) return;
-
-      const tab = tabs.find(
-        (tab) => tab.input instanceof vscode.TabInputTerminal && tab.label === managed.terminalName,
-      );
-      if (tab !== undefined) {
-        managed.tabBinding = { kind: "bound", tab };
-        managed.surface.showPaneName();
-      } else if (binding.kind === "bound") {
-        managed.tabBinding = { kind: "lost" };
-        this.selection.deselect(managed.selection);
-        managed.surface.hidePaneName();
+      if (managed.tab === undefined || !tabs.includes(managed.tab)) {
+        const wasBound = managed.tab !== undefined;
+        managed.tab = tabs.find(
+          (tab) => tab.input instanceof vscode.TabInputTerminal && tab.label === managed.terminalName,
+        );
+        if (!wasBound && managed.tab !== undefined) managed.surface.showPaneName();
+        if (wasBound && managed.tab === undefined) {
+          this.selection.deselect(managed.selection);
+          managed.surface.hidePaneName();
+        }
       }
     });
 
     this.allSurfaces().forEach((managed) => {
-      const binding = managed.tabBinding;
-      if (binding.kind === "bound") {
-        if (groups.some((group) => group.activeTab === binding.tab)) {
+      if (managed.tab !== undefined) {
+        if (groups.some((group) => group.activeTab === managed.tab)) {
           this.selection.select(managed.selection);
         } else {
           this.selection.deselect(managed.selection);
