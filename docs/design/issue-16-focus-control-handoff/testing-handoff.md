@@ -38,7 +38,7 @@ Handoff from the coordinating session `claude-issue16` (Herdr pane w3:p19) on 20
 - `PaneEditorSelectionModel.ts`: select/deselect/move events, idempotence; no `vscode`.
 - `PaneEditorFocusTracker.ts`: Selection × window focus → per-identity `FocusChangeEvent`, immediate current event, dedupe, move semantics; uses `vscode.window` focus.
 - `PaneTerminalSurface.ts`: `converge()` over facts; client lifecycle via `PaneClientFactory` (a real injected seam: fake observer/attach objects that honor the contract — synchronous create may throw, one `completion` that always resolves, idempotent `stop()`); input translation (arrow markers, DECCKM, bare arrows → SGR wheel); attach intent (`wanted | displaced | failed`), single warning; stopping attach serializes the next attach; placeholders; name publication. Uses `vscode.window.createTerminal`.
-- `PaneTerminalSurfaceManager.ts`: `openPane` create/reveal/no-op, tab binding by temporary name, Selection writes, `pane.moved`, dispose on `onDidCloseTerminal`, re-binding after a cross-group tab move, `herdr.activeTerminalIsPane` context key.
+- `PaneTerminalSurfaceManager.ts`: `openPane` create/reveal/no-op, tab binding by temporary name, Selection writes, `pane.moved`, dispose on `Pseudoterminal.close()`, re-binding after a cross-group tab move, `herdr.activeTerminalIsPane` context key.
 - `HerdrPaneObserver.ts` / `HerdrPaneAttach.ts`: real process boundaries (herdr CLI, node-pty).
 
 ## Behavior decided during manual testing (treat as accepted)

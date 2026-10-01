@@ -13,6 +13,7 @@ import type { TakeoverOffer, TakeoverOffers } from "./takeover";
 
 export interface PaneTerminalSurface {
   readonly terminal: vscode.Terminal;
+  readonly onDidClose: vscode.Event<void>;
   reveal(): void;
   move(pane: HerdrPane): void;
   showPaneName(): void;
@@ -93,6 +94,8 @@ type PseudoterminalHost = ClosedHost | OpenHost;
 export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutputSink {
   private readonly writeEmitter = new vscode.EventEmitter<string>();
   private readonly nameEmitter = new vscode.EventEmitter<string>();
+  private readonly closeEmitter = new vscode.EventEmitter<void>();
+  readonly onDidClose = this.closeEmitter.event;
   private readonly projectionSubscription: { dispose(): void };
   readonly terminal: vscode.Terminal;
   private applicationCursor = false;
@@ -136,7 +139,8 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
         this.publishPaneName();
         this.converge();
       },
-      close: () => undefined,
+      // VS Code closes the terminal here even when it skips onDidCloseTerminal (closing a tab after a group move).
+      close: () => this.closeEmitter.fire(),
       setDimensions: (dimensions) => this.updateDimensions(dimensions),
     };
 
@@ -203,6 +207,7 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
     this.terminal.dispose();
     this.writeEmitter.dispose();
     this.nameEmitter.dispose();
+    this.closeEmitter.dispose();
   }
 
   private subscribeToFocus(): { dispose(): void } {
