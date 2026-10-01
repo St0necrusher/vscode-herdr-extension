@@ -9,6 +9,8 @@ interface ManagedPaneSurface {
   readonly terminalName: string;
   readonly surface: PaneTerminalSurface;
   tab: vscode.Tab | undefined;
+  // VS Code can drop a terminal editor's tab without closing the terminal (closing it after a group move), and show() cannot bring it back.
+  lostTab: boolean;
 }
 
 export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
@@ -34,18 +36,19 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
   openPane(request: PaneTerminalOpenRequest): void {
     const selection = { sessionId: request.sessionId, paneId: request.paneId };
     const existing = this.getSurface(selection);
-    if (existing !== undefined) {
+    if (existing !== undefined && !existing.lostTab) {
       const surfaceIsAlreadyActive = existing.tab !== undefined && this.isActiveTab(existing.tab);
       if (surfaceIsAlreadyActive) return;
       existing.surface.reveal();
       this.reconcileTabBindings();
       return;
     }
+    if (existing !== undefined) this.closeSurface(existing);
 
     const viewColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
     const terminalName = this.terminalName(selection);
     const surface = this.surfaceFactory.create(selection, viewColumn, terminalName);
-    const managed: ManagedPaneSurface = { selection, terminalName, surface, tab: undefined };
+    const managed: ManagedPaneSurface = { selection, terminalName, surface, tab: undefined, lostTab: false };
     this.setSurface(selection, managed);
     surface.reveal();
     this.reconcileTabBindings();
@@ -80,8 +83,10 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
 
   private handleTerminalClosed(terminal: vscode.Terminal): void {
     const managed = this.allSurfaces().find((candidate) => candidate.surface.terminal === terminal);
-    if (managed === undefined) return;
+    if (managed !== undefined) this.closeSurface(managed);
+  }
 
+  private closeSurface(managed: ManagedPaneSurface): void {
     this.removeSurface(managed.selection);
     this.selection.deselect(managed.selection);
     managed.surface.dispose();
@@ -111,6 +116,7 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
         managed.tab = tabs.find(
           (tab) => tab.input instanceof vscode.TabInputTerminal && tab.label === managed.terminalName,
         );
+        managed.lostTab = managed.tab === undefined && (wasBound || managed.lostTab);
         if (!wasBound && managed.tab !== undefined) managed.surface.showPaneName();
         if (wasBound && managed.tab === undefined) {
           this.selection.deselect(managed.selection);

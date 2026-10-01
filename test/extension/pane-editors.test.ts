@@ -188,6 +188,32 @@ suite("Pane editors in VS Code", () => {
       assert.equal(paneTabs(harness.expectedTabLabel).length, 1);
     });
   });
+
+  test("C10 closing a Pane tab after moving groups lets a later open create a fresh terminal", async () => {
+    await withPaneEditorHarness(async (harness) => {
+      harness.manager.openPane(harness.request);
+      const original = await waitForPaneTab(harness.expectedTabLabel);
+      const movedTerminal = onlyCreatedTerminal(harness);
+      await waitForPaneClient(harness.clients, "C10 initial Pane tab");
+
+      await vscode.commands.executeCommand("workbench.action.moveEditorToRightGroup");
+      const moved = await waitForPaneTab(harness.expectedTabLabel, (located) => located.group !== original.group);
+      await waitForPaneClient(harness.clients, "C10 moved Pane tab");
+
+      // VS Code keeps a moved terminal open when its tab closes; only the tab disappears.
+      await vscode.window.tabGroups.close(moved.tab);
+      await waitFor(() => paneTabs(harness.expectedTabLabel).length === 0, "the moved Pane tab to close");
+      await waitFor(() => runningClients(harness.clients).length === 0, "the closed Pane client to stop");
+
+      harness.manager.openPane(harness.request);
+      await waitForPaneTab(harness.expectedTabLabel);
+      await waitForPaneClient(harness.clients, "C10 reopened Pane tab");
+      // VS Code ignores dispose() for the tabless terminal, so it stays listed; only its Surface is released.
+      const reopenedTerminals = createdTerminals(harness).filter((terminal) => terminal !== movedTerminal);
+      assert.equal(reopenedTerminals.length, 1, "opening the tabless Pane creates a fresh terminal");
+      assert.equal(paneTabs(harness.expectedTabLabel).length, 1);
+    });
+  });
 });
 
 async function withPaneEditorHarness(run: (harness: PaneEditorHarness) => Promise<void>): Promise<void> {
