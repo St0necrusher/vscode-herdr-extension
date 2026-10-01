@@ -4,13 +4,18 @@ import type { HerdrPaneMovedEvent, HerdrSessionEventSource } from "@capabilities
 import type { PaneEditorSelection, SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import type { PaneTerminalSurface, PaneTerminalSurfaceFactory } from "./PaneTerminalSurface";
 
+type PendingTab = Readonly<{ kind: "pending" }>;
+type BoundTab = Readonly<{ kind: "bound"; tab: vscode.Tab }>;
+// A group move passes through "lost" until the replacement tab binds. Closing a tab after a group move leaves it
+// "lost" for good: VS Code keeps the terminal without a tab, and neither show() nor dispose() reaches it.
+type LostTab = Readonly<{ kind: "lost" }>;
+type TabBinding = PendingTab | BoundTab | LostTab;
+
 interface ManagedPaneSurface {
   selection: SelectedPaneEditor;
   readonly terminalName: string;
   readonly surface: PaneTerminalSurface;
-  tab: vscode.Tab | undefined;
-  // VS Code can drop a terminal editor's tab without closing the terminal (closing it after a group move), and show() cannot bring it back.
-  lostTab: boolean;
+  tabBinding: TabBinding;
 }
 
 export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
@@ -36,8 +41,9 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
   openPane(request: PaneTerminalOpenRequest): void {
     const selection = { sessionId: request.sessionId, paneId: request.paneId };
     const existing = this.getSurface(selection);
-    if (existing !== undefined && !existing.lostTab) {
-      const surfaceIsAlreadyActive = existing.tab !== undefined && this.isActiveTab(existing.tab);
+    if (existing !== undefined && existing.tabBinding.kind !== "lost") {
+      const binding = existing.tabBinding;
+      const surfaceIsAlreadyActive = binding.kind === "bound" && this.isActiveTab(binding.tab);
       if (surfaceIsAlreadyActive) return;
       existing.surface.reveal();
       this.reconcileTabBindings();
@@ -48,7 +54,7 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
     const viewColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
     const terminalName = this.terminalName(selection);
     const surface = this.surfaceFactory.create(selection, viewColumn, terminalName);
-    const managed: ManagedPaneSurface = { selection, terminalName, surface, tab: undefined, lostTab: false };
+    const managed: ManagedPaneSurface = { selection, terminalName, surface, tabBinding: { kind: "pending" } };
     this.setSurface(selection, managed);
     surface.reveal();
     this.reconcileTabBindings();
@@ -111,23 +117,26 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
     const tabs = groups.flatMap((group) => group.tabs);
 
     this.allSurfaces().forEach((managed) => {
-      if (managed.tab === undefined || !tabs.includes(managed.tab)) {
-        const wasBound = managed.tab !== undefined;
-        managed.tab = tabs.find(
-          (tab) => tab.input instanceof vscode.TabInputTerminal && tab.label === managed.terminalName,
-        );
-        managed.lostTab = managed.tab === undefined && (wasBound || managed.lostTab);
-        if (!wasBound && managed.tab !== undefined) managed.surface.showPaneName();
-        if (wasBound && managed.tab === undefined) {
-          this.selection.deselect(managed.selection);
-          managed.surface.hidePaneName();
-        }
+      const binding = managed.tabBinding;
+      if (binding.kind === "bound" && tabs.includes(binding.tab)) return;
+
+      const tab = tabs.find(
+        (tab) => tab.input instanceof vscode.TabInputTerminal && tab.label === managed.terminalName,
+      );
+      if (tab !== undefined) {
+        managed.tabBinding = { kind: "bound", tab };
+        managed.surface.showPaneName();
+      } else if (binding.kind === "bound") {
+        managed.tabBinding = { kind: "lost" };
+        this.selection.deselect(managed.selection);
+        managed.surface.hidePaneName();
       }
     });
 
     this.allSurfaces().forEach((managed) => {
-      if (managed.tab !== undefined) {
-        if (groups.some((group) => group.activeTab === managed.tab)) {
+      const binding = managed.tabBinding;
+      if (binding.kind === "bound") {
+        if (groups.some((group) => group.activeTab === binding.tab)) {
           this.selection.select(managed.selection);
         } else {
           this.selection.deselect(managed.selection);
