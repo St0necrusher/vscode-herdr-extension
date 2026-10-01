@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
+  CreatedPane,
+  CreatedSpace,
   HerdrConfiguration,
   HerdrConnectionFailure,
   HerdrResolvedSession,
@@ -9,6 +11,7 @@ import type {
   HerdrSessionMetadata,
   HerdrSessionSnapshot,
   HerdrSessionDescriptor,
+  SplitDirection,
 } from "@capabilities/sessions";
 import { HerdrConnectionFailureError } from "@capabilities/sessions";
 import type { PersistentKeyValueStorage } from "./capabilities";
@@ -30,6 +33,8 @@ const workSession: HerdrSessionDescriptor = {
 const stoppedSession: HerdrSessionDescriptor = { id: "work", isDefault: false, availability: "stopped" };
 const allSessions = [defaultSession, stoppedSession] as const;
 const metadata: HerdrSessionMetadata = { version: "1", protocol: 1 };
+const createdSpace: CreatedSpace = { spaceId: "created-space", paneId: "root-pane" };
+const createdPane: CreatedPane = { paneId: "created-pane" };
 const snapshot: HerdrSessionSnapshot = {
   version: "1",
   protocol: 1,
@@ -46,9 +51,15 @@ interface Deferred<T> {
   reject(error: unknown): void;
 }
 
+type CreationCall =
+  | Readonly<{ operation: "createSpace"; cwd: string }>
+  | Readonly<{ operation: "createPane"; spaceId: string }>
+  | Readonly<{ operation: "splitPane"; paneId: string; direction: SplitDirection }>;
+
 interface ConnectionRecord {
   id: string;
   disposed: boolean;
+  creationCalls: CreationCall[];
   consumer?: Parameters<HerdrSessionConnection["bootstrap"]>[0];
   settle(): void;
   fail(error: unknown): void;
@@ -125,6 +136,7 @@ function createHarness(options: HarnessOptions = {}) {
       const record: ConnectionRecord = {
         id: resolved.id,
         disposed: false,
+        creationCalls: [],
         settle: () => {
           record.replaceSnapshot(plan?.snapshot ?? snapshot);
           bootstrap.resolve(metadata);
@@ -143,9 +155,18 @@ function createHarness(options: HarnessOptions = {}) {
           if (plan?.auto !== false && options.autoConnections !== false) record.settle();
           return bootstrap.promise;
         },
-        createSpace: () => Promise.reject(new Error("not used")),
-        createPane: () => Promise.reject(new Error("not used")),
-        splitPane: () => Promise.reject(new Error("not used")),
+        createSpace: (cwd) => {
+          record.creationCalls.push({ operation: "createSpace", cwd });
+          return Promise.resolve(createdSpace);
+        },
+        createPane: (spaceId) => {
+          record.creationCalls.push({ operation: "createPane", spaceId });
+          return Promise.resolve(createdPane);
+        },
+        splitPane: (paneId, direction) => {
+          record.creationCalls.push({ operation: "splitPane", paneId, direction });
+          return Promise.resolve(createdPane);
+        },
         dispose: () => {
           record.disposed = true;
         },
@@ -378,6 +399,61 @@ describe("SessionsModel", () => {
     record.settle();
     await initialization;
     expect(h.model.getState().active).toMatchObject({ kind: "connected", metadata, snapshot });
+  });
+
+  it.each([
+    ["Stale after a live connection closes", "reconnecting"],
+    ["incompatible after a live connection closes", "incompatible"],
+    ["connected to a different Herdr Session than the request", "different-session"],
+  ] as const)("rejects Session creation without a connection call when %s", async (_scenario, transition) => {
+    const h = createHarness({ sessions: [defaultSession, workSession] });
+    await h.model.initialize();
+    const initialConnection = h.records[0];
+    if (initialConnection === undefined) throw new Error("default connection was not created");
+
+    switch (transition) {
+      case "reconnecting":
+        initialConnection.close({ kind: "transport", diagnostic: "socket closed" });
+        expect(h.model.getState().active.kind).toBe("reconnecting");
+        break;
+      case "incompatible":
+        initialConnection.close({
+          kind: "incompatible",
+          diagnostic: "protocol changed",
+          version: "2",
+          protocol: 99,
+        });
+        expect(h.model.getState().active.kind).toBe("incompatible");
+        break;
+      case "different-session":
+        await h.model.selectSession("work");
+        expect(h.model.getState().active).toMatchObject({ kind: "connected", session: { id: "work" } });
+        break;
+    }
+
+    await expect(h.model.createPane({ sessionId: "default", spaceId: "space-1" })).rejects.toThrow();
+    expect(h.records.flatMap((record) => record.creationCalls)).toEqual([]);
+    h.model.dispose();
+  });
+
+  it("delegates creation to the connected Herdr Session and returns its results", async () => {
+    const h = createHarness();
+    await h.model.initialize();
+    const connection = h.records[0];
+    if (connection === undefined) throw new Error("default connection was not created");
+
+    await expect(h.model.createSpace({ sessionId: "default", cwd: "/workspace/repo" })).resolves.toBe(createdSpace);
+    await expect(h.model.createPane({ sessionId: "default", spaceId: "space-1" })).resolves.toBe(createdPane);
+    await expect(h.model.splitPane({ sessionId: "default", paneId: "pane-1", direction: "right" })).resolves.toBe(
+      createdPane,
+    );
+
+    expect(connection.creationCalls).toEqual([
+      { operation: "createSpace", cwd: "/workspace/repo" },
+      { operation: "createPane", spaceId: "space-1" },
+      { operation: "splitPane", paneId: "pane-1", direction: "right" },
+    ]);
+    h.model.dispose();
   });
 
   it.each([

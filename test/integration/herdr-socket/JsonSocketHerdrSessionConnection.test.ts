@@ -193,6 +193,30 @@ function snapshotResult(paneIds: readonly string[] = []): Record<string, unknown
   };
 }
 
+function tabCreatedResult(paneId: string): Record<string, unknown> {
+  return {
+    type: "tab_created",
+    tab: {
+      tab_id: "tab-created",
+      workspace_id: "space-1",
+      number: 2,
+      label: "Tab",
+      focused: false,
+      pane_count: 1,
+      agent_status: "idle",
+    },
+    root_pane: {
+      pane_id: paneId,
+      terminal_id: `terminal-${paneId}`,
+      workspace_id: "space-1",
+      tab_id: "tab-created",
+      focused: false,
+      agent_status: "idle",
+      revision: 0,
+    },
+  };
+}
+
 function subscribeAck(): Record<string, unknown> {
   return { type: "subscription_started", unknown_ack_field: "ignored" };
 }
@@ -200,6 +224,83 @@ function subscribeAck(): Record<string, unknown> {
 async function waitFor<T>(read: () => T, assertion: (value: T) => void): Promise<void> {
   await vi.waitFor(() => assertion(read()), { timeout: 1_000, interval: 1 });
 }
+
+type CreationScenario = Readonly<{
+  name: string;
+  method: string;
+  params: Readonly<Record<string, unknown>>;
+  response: Record<string, unknown>;
+  expected: unknown;
+  invoke: (sessionConnection: HerdrSessionConnection) => Promise<unknown>;
+}>;
+
+const creationScenarios: readonly CreationScenario[] = [
+  {
+    name: "createSpace",
+    method: "workspace.create",
+    params: { cwd: "/work/new-space", focus: false },
+    response: {
+      type: "workspace_created",
+      workspace: {
+        workspace_id: "space-created",
+        number: 2,
+        label: "New Space",
+        focused: false,
+        pane_count: 1,
+        tab_count: 1,
+        active_tab_id: "tab-created",
+        agent_status: "idle",
+      },
+      tab: {
+        tab_id: "tab-created",
+        workspace_id: "space-created",
+        number: 1,
+        label: "Tab",
+        focused: false,
+        pane_count: 1,
+        agent_status: "idle",
+      },
+      root_pane: {
+        pane_id: "pane-created",
+        terminal_id: "terminal-created",
+        workspace_id: "space-created",
+        tab_id: "tab-created",
+        focused: false,
+        agent_status: "idle",
+        revision: 0,
+      },
+    },
+    expected: { spaceId: "space-created", paneId: "pane-created" },
+    invoke: (sessionConnection) => sessionConnection.createSpace("/work/new-space"),
+  },
+  {
+    name: "createPane",
+    method: "tab.create",
+    params: { workspace_id: "space-1", focus: false },
+    response: tabCreatedResult("pane-created"),
+    expected: { paneId: "pane-created" },
+    invoke: (sessionConnection) => sessionConnection.createPane("space-1"),
+  },
+  {
+    name: "splitPane",
+    method: "pane.split",
+    params: { target_pane_id: "pane-1", direction: "down", focus: false },
+    response: {
+      type: "pane_info",
+      pane: {
+        pane_id: "pane-split",
+        terminal_id: "terminal-split",
+        workspace_id: "space-1",
+        tab_id: "tab-1",
+        focused: false,
+        agent_status: "idle",
+        revision: 1,
+      },
+    },
+    expected: { paneId: "pane-split" },
+    invoke: (sessionConnection) => sessionConnection.splitPane("pane-1", "down"),
+  },
+];
 
 describe("JSON Socket Herdr Session connection", () => {
   it("bootstraps in protocol order, returns metadata, and closes transports without late projection events", async () => {
@@ -408,6 +509,214 @@ describe("JSON Socket Herdr Session connection", () => {
 
     expect(replaceSnapshot).toHaveBeenCalledTimes(2);
     expect(oldSubscription.disposed).toBe(true);
+  });
+
+  it.each(creationScenarios)("$name sends its exact Herdr request and returns server identities", async (scenario) => {
+    const connector = new ControlledConnector((transport, request) => {
+      if (request.method === "ping") transport.respond(request, pong());
+      if (request.method === "events.subscribe") transport.respond(request, subscribeAck());
+      if (request.method === "session.snapshot") transport.respond(request, snapshotResult());
+      if (request.method === scenario.method) transport.respond(request, scenario.response);
+    });
+    const sessionConnection = connection(connector);
+
+    await sessionConnection.bootstrap(consumer());
+    const result = await scenario.invoke(sessionConnection);
+
+    expect(result).toEqual(scenario.expected);
+    const creationRequests = connector.requests
+      .filter(({ request }) => request.method === scenario.method)
+      .map(({ request }) => ({ method: request.method, params: request.params }));
+    expect(creationRequests).toEqual([{ method: scenario.method, params: scenario.params }]);
+    sessionConnection.dispose();
+  });
+
+  it("waits for a post-response snapshot to publish the created Pane before resolving", async () => {
+    let snapshotRequestCount = 0;
+    let heldSnapshot: { transport: ControlledTransport; request: Request } | undefined;
+    let createdPaneSnapshot: { transport: ControlledTransport; request: Request } | undefined;
+    let stabilizingSnapshot: { transport: ControlledTransport; request: Request } | undefined;
+    let creationRequest: { transport: ControlledTransport; request: Request } | undefined;
+    let createdPaneSubscription: { transport: ControlledTransport; request: Request } | undefined;
+    const connector = new ControlledConnector((transport, request) => {
+      if (request.method === "ping") transport.respond(request, pong());
+      if (request.method === "events.subscribe") {
+        const subscriptions = request.params.subscriptions;
+        const isCreatedPaneSubscription = (value: unknown): boolean => {
+          if (isRecord(value)) return value.pane_id === "pane-created";
+          return false;
+        };
+        const includesCreatedPane = Array.isArray(subscriptions) && subscriptions.some(isCreatedPaneSubscription);
+        if (includesCreatedPane) createdPaneSubscription = { transport, request };
+        else transport.respond(request, subscribeAck());
+      }
+      if (request.method === "session.snapshot") {
+        snapshotRequestCount += 1;
+        if (snapshotRequestCount === 1) transport.respond(request, snapshotResult());
+        else if (snapshotRequestCount === 2) heldSnapshot = { transport, request };
+        else if (snapshotRequestCount === 3) createdPaneSnapshot = { transport, request };
+        else stabilizingSnapshot = { transport, request };
+      }
+      if (request.method === "tab.create") creationRequest = { transport, request };
+    });
+    const replaceSnapshot = vi.fn<HerdrSessionProjectionConsumer["replaceSnapshot"]>();
+    const projectionConsumer: HerdrSessionProjectionConsumer = { replaceSnapshot, connectionClosed: vi.fn() };
+    const sessionConnection = connection(connector);
+    await sessionConnection.bootstrap(projectionConsumer);
+
+    const subscription = connector.transports[1];
+    if (subscription === undefined) throw new Error("The initial subscription transport was not created.");
+    subscription.emitEvent("workspace.updated");
+    await waitFor(
+      () => heldSnapshot,
+      (request) => expect(request).toBeDefined(),
+    );
+
+    let creationSettled = false;
+    let panePublishedWhenCreationResolved = false;
+    const creationPromise = sessionConnection.createPane("space-1").then(
+      (result) => {
+        creationSettled = true;
+        const createdPaneWasPublished = replaceSnapshot.mock.calls.some(([snapshot]) =>
+          snapshot.panes.some((pane) => pane.id === "pane-created"),
+        );
+        panePublishedWhenCreationResolved = createdPaneWasPublished;
+        return result;
+      },
+      (error: unknown) => {
+        creationSettled = true;
+        throw error;
+      },
+    );
+    await waitFor(
+      () => creationRequest,
+      (request) => expect(request).toBeDefined(),
+    );
+    if (creationRequest === undefined) throw new Error("The tab creation request was not captured.");
+    creationRequest.transport.respond(creationRequest.request, tabCreatedResult("pane-created"));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(creationSettled).toBe(false);
+
+    if (heldSnapshot === undefined) throw new Error("The pre-creation snapshot request was not held.");
+    heldSnapshot.transport.respond(heldSnapshot.request, snapshotResult());
+    await waitFor(
+      () => createdPaneSnapshot,
+      (request) => expect(request).toBeDefined(),
+    );
+    expect(creationSettled).toBe(false);
+
+    if (createdPaneSnapshot === undefined) throw new Error("The post-creation snapshot request was not created.");
+    createdPaneSnapshot.transport.respond(createdPaneSnapshot.request, snapshotResult(["pane-created"]));
+    await waitFor(
+      () => createdPaneSubscription,
+      (request) => expect(request).toBeDefined(),
+    );
+    if (createdPaneSubscription === undefined) throw new Error("The created Pane subscription was not requested.");
+    createdPaneSubscription.transport.respond(createdPaneSubscription.request, subscribeAck());
+
+    await waitFor(
+      () => stabilizingSnapshot,
+      (request) => expect(request).toBeDefined(),
+    );
+    if (stabilizingSnapshot === undefined) throw new Error("The stabilizing snapshot request was not created.");
+    stabilizingSnapshot.transport.respond(stabilizingSnapshot.request, snapshotResult(["pane-created"]));
+
+    await expect(creationPromise).resolves.toEqual({ paneId: "pane-created" });
+    expect(panePublishedWhenCreationResolved).toBe(true);
+    sessionConnection.dispose();
+  });
+
+  it("keeps the Herdr Session connection open after a creation request error", async () => {
+    let liveSnapshot: { transport: ControlledTransport; request: Request } | undefined;
+    let snapshotRequestCount = 0;
+    const connector = new ControlledConnector((transport, request) => {
+      if (request.method === "ping") transport.respond(request, pong());
+      if (request.method === "events.subscribe") transport.respond(request, subscribeAck());
+      if (request.method === "session.snapshot") {
+        snapshotRequestCount += 1;
+        if (snapshotRequestCount === 1) transport.respond(request, snapshotResult());
+        else liveSnapshot = { transport, request };
+      }
+      if (request.method === "workspace.create") {
+        transport.emit({
+          id: request.id,
+          error: { code: "SPACE_CREATE_DENIED", message: "Space creation denied" },
+        });
+      }
+    });
+    const replaceSnapshot = vi.fn();
+    const connectionClosed = vi.fn();
+    const sessionConnection = connection(connector);
+    await sessionConnection.bootstrap({ replaceSnapshot, connectionClosed });
+
+    await expect(sessionConnection.createSpace("/work/denied")).rejects.toMatchObject({
+      response: { code: "SPACE_CREATE_DENIED", message: "Space creation denied" },
+    });
+    expect(connectionClosed).not.toHaveBeenCalled();
+
+    const subscription = connector.transports[1];
+    if (subscription === undefined) throw new Error("The initial subscription transport was not created.");
+    subscription.emitEvent("workspace.updated");
+    await waitFor(
+      () => liveSnapshot,
+      (request) => expect(request).toBeDefined(),
+    );
+    if (liveSnapshot === undefined) throw new Error("The live reconciliation snapshot was not requested.");
+    liveSnapshot.transport.respond(liveSnapshot.request, snapshotResult());
+    await waitFor(
+      () => replaceSnapshot.mock.calls.length,
+      (replacements) => expect(replacements).toBe(2),
+    );
+
+    expect(connectionClosed).not.toHaveBeenCalled();
+    sessionConnection.dispose();
+  });
+
+  it("fails the Herdr Session connection when reconciliation fails after creation", async () => {
+    let creationSnapshot: { transport: ControlledTransport; request: Request } | undefined;
+    let snapshotRequestCount = 0;
+    const connector = new ControlledConnector((transport, request) => {
+      if (request.method === "ping") transport.respond(request, pong());
+      if (request.method === "events.subscribe") transport.respond(request, subscribeAck());
+      if (request.method === "session.snapshot") {
+        snapshotRequestCount += 1;
+        if (snapshotRequestCount === 1) transport.respond(request, snapshotResult());
+        else creationSnapshot = { transport, request };
+      }
+      if (request.method === "tab.create") transport.respond(request, tabCreatedResult("pane-created"));
+    });
+    const connectionClosed = vi.fn();
+    const sessionConnection = connection(connector);
+    await sessionConnection.bootstrap({ replaceSnapshot: vi.fn(), connectionClosed });
+
+    const creationPromise = sessionConnection.createPane("space-1");
+    await waitFor(
+      () => creationSnapshot,
+      (request) => expect(request).toBeDefined(),
+    );
+    if (creationSnapshot === undefined) throw new Error("The post-creation snapshot request was not created.");
+    creationSnapshot.transport.emit({
+      id: creationSnapshot.request.id,
+      error: { code: "SNAPSHOT_AFTER_CREATE_FAILED", message: "Post-creation snapshot unavailable" },
+    });
+
+    await expect(creationPromise).rejects.toMatchObject({
+      failure: {
+        kind: "herdr-error",
+        code: "SNAPSHOT_AFTER_CREATE_FAILED",
+        message: "Post-creation snapshot unavailable",
+        operation: "snapshot",
+      },
+    });
+    expect(connectionClosed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "herdr-error",
+        code: "SNAPSHOT_AFTER_CREATE_FAILED",
+        message: "Post-creation snapshot unavailable",
+        operation: "snapshot",
+      }),
+    );
+    sessionConnection.dispose();
   });
 });
 
