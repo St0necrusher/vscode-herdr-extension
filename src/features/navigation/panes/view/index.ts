@@ -1,1 +1,1 @@
-export { VsCodePanesView } from "./VsCodePanesView";
+export { PaneTreeItem, VsCodePanesView } from "./VsCodePanesView";

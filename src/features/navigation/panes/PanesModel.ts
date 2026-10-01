@@ -114,7 +114,11 @@ export class PanesModel {
 }
 
 function paneRow(pane: HerdrPane, tab: HerdrTab): PaneNavigationRow {
-  return { pane, tab, name: nonEmpty(pane.label) ?? nonEmpty(pane.terminalTitle) ?? `Pane ${pane.id}` };
+  return { pane, tab, name: paneName(pane) };
+}
+
+export function paneName(pane: HerdrPane): string {
+  return nonEmpty(pane.label) ?? nonEmpty(pane.terminalTitle) ?? `Pane ${pane.id}`;
 }
 
 function singletonItem(row: PaneNavigationRow): PaneNavigationSingleton {

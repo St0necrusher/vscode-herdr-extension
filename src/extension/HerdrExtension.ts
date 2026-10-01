@@ -83,6 +83,7 @@ export class HerdrExtension implements vscode.Disposable {
       const navigationFeature = new NavigationFeature({
         sessionProjection: sessionOwner,
         paneTerminalOpening: surfaceManager,
+        creation: sessionOwner,
       });
       navigation = navigationFeature;
       this.logger = logger;

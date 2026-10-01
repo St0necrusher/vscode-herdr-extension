@@ -91,6 +91,9 @@ function dependencies(options: { list?: () => Promise<never>; configurationFailu
       connectionFactory: {
         create: () => ({
           bootstrap: () => Promise.reject(new Error("stopped Session must not connect")),
+          createSpace: () => Promise.reject(new Error("stopped Session must not connect")),
+          createPane: () => Promise.reject(new Error("stopped Session must not connect")),
+          splitPane: () => Promise.reject(new Error("stopped Session must not connect")),
           dispose: () => undefined,
         }),
       },
