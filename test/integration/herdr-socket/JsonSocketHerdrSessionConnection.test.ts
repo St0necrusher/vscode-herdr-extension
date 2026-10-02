@@ -293,6 +293,22 @@ const creationScenarios: readonly CreationScenario[] = [
     invoke: (sessionConnection) => sessionConnection.createPane("space-1"),
   },
   {
+    name: "createPane for a script",
+    method: "tab.create",
+    params: { workspace_id: "space-1", focus: false, cwd: "/work/packages/web", label: "dev" },
+    response: tabCreatedResult("pane-created"),
+    expected: { paneId: "pane-created" },
+    invoke: (sessionConnection) => sessionConnection.createPane("space-1", { cwd: "/work/packages/web", label: "dev" }),
+  },
+  {
+    name: "runCommand",
+    method: "pane.send_input",
+    params: { pane_id: "pane-1", text: "pnpm run dev", keys: ["Enter"] },
+    response: { type: "ok" },
+    expected: undefined,
+    invoke: (sessionConnection) => sessionConnection.runCommand("pane-1", "pnpm run dev"),
+  },
+  {
     name: "splitPane",
     method: "pane.split",
     params: { target_pane_id: "pane-1", direction: "down", focus: false },

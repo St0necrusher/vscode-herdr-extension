@@ -37,6 +37,7 @@ for (const entryPoint of [
   "pane-editors.test.ts",
   "creation-commands.test.ts",
   "management-commands.test.ts",
+  "run-npm-script.test.ts",
 ]) {
   await esbuild.build({
     ...commonOptions,
