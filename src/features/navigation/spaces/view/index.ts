@@ -1,1 +1,1 @@
-export { VsCodeSpacesView } from "./VsCodeSpacesView";
+export { SpaceTreeItem, VsCodeSpacesView } from "./VsCodeSpacesView";

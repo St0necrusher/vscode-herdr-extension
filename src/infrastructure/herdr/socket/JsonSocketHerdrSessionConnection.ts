@@ -97,13 +97,13 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
 
   async createSpace(cwd: string): Promise<CreatedSpace> {
     const result = parseWorkspaceCreatedResult(await this.requestOnce("workspace.create", { cwd, focus: false }));
-    await this.publishSnapshotAfterCreation();
+    await this.publishSnapshotAfterMutation();
     return result;
   }
 
   async createPane(spaceId: string): Promise<CreatedPane> {
     const result = parseTabCreatedResult(await this.requestOnce("tab.create", { workspace_id: spaceId, focus: false }));
-    await this.publishSnapshotAfterCreation();
+    await this.publishSnapshotAfterMutation();
     return result;
   }
 
@@ -111,8 +111,32 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
     const result = parsePaneInfoResult(
       await this.requestOnce("pane.split", { target_pane_id: paneId, direction, focus: false }),
     );
-    await this.publishSnapshotAfterCreation();
+    await this.publishSnapshotAfterMutation();
     return result;
+  }
+
+  async renamePane(paneId: string, label: string | null): Promise<void> {
+    await this.mutate("pane.rename", { pane_id: paneId, label }, "pane_info");
+  }
+
+  async renameTab(tabId: string, label: string): Promise<void> {
+    await this.mutate("tab.rename", { tab_id: tabId, label }, "tab_info");
+  }
+
+  async renameSpace(spaceId: string, label: string): Promise<void> {
+    await this.mutate("workspace.rename", { workspace_id: spaceId, label }, "workspace_info");
+  }
+
+  async closePane(paneId: string): Promise<void> {
+    await this.mutate("pane.close", { pane_id: paneId }, "ok");
+  }
+
+  async closeTab(tabId: string): Promise<void> {
+    await this.mutate("tab.close", { tab_id: tabId }, "ok");
+  }
+
+  async closeSpace(spaceId: string, closeGroup: boolean): Promise<void> {
+    await this.mutate("workspace.close", { workspace_id: spaceId, close_group: closeGroup }, "ok");
   }
 
   dispose(): void {
@@ -134,7 +158,18 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
   }
 
   private async requestOnce(
-    method: "ping" | "session.snapshot" | "workspace.create" | "tab.create" | "pane.split",
+    method:
+      | "ping"
+      | "session.snapshot"
+      | "workspace.create"
+      | "tab.create"
+      | "pane.split"
+      | "pane.rename"
+      | "tab.rename"
+      | "workspace.rename"
+      | "pane.close"
+      | "tab.close"
+      | "workspace.close",
     params: Readonly<Record<string, unknown>>,
   ): Promise<HerdrProtocolRecord> {
     let client: JsonSocketClient | undefined;
@@ -219,7 +254,16 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
     }
   }
 
-  private async publishSnapshotAfterCreation(): Promise<void> {
+  private async mutate(
+    method: "pane.rename" | "tab.rename" | "workspace.rename" | "pane.close" | "tab.close" | "workspace.close",
+    params: Readonly<Record<string, unknown>>,
+    resultType: "ok" | "pane_info" | "tab_info" | "workspace_info",
+  ): Promise<void> {
+    requireResultType(await this.requestOnce(method, params), resultType);
+    await this.publishSnapshotAfterMutation();
+  }
+
+  private async publishSnapshotAfterMutation(): Promise<void> {
     try {
       this.dirty = true;
       const shouldReconcileAgain = (): boolean => this.dirty && !this.disposed;

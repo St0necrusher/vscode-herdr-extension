@@ -1,9 +1,16 @@
 import type { HerdrLogger } from "@capabilities/runtime";
 import type {
+  ActiveSessionManagement,
+  ClosePaneRequest,
+  CloseSpaceRequest,
+  CloseTabRequest,
   CreatedPane,
   CreatedSpace,
   CreatePaneRequest,
   CreateSpaceRequest,
+  RenamePaneRequest,
+  RenameSpaceRequest,
+  RenameTabRequest,
   SplitPaneRequest,
   HerdrConfiguration,
   HerdrConfigurationSource,
@@ -41,7 +48,7 @@ interface RecoveryContext {
   readonly endpoint?: string;
 }
 
-export class SessionsModel implements SessionsStateSource, SessionsOperations {
+export class SessionsModel implements SessionsStateSource, SessionsOperations, ActiveSessionManagement {
   private readonly listeners = new Set<(state: SessionsState) => void>();
   private readonly paneMovedListeners = new Set<(event: HerdrSessionEventMap["pane.moved"]) => void>();
   private readonly directory: HerdrSessionDirectory;
@@ -89,15 +96,39 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
   }
 
   async createSpace(request: CreateSpaceRequest): Promise<CreatedSpace> {
-    return this.creationConnection(request.sessionId).createSpace(request.cwd);
+    return this.activeConnection(request.sessionId).createSpace(request.cwd);
   }
 
   async createPane(request: CreatePaneRequest): Promise<CreatedPane> {
-    return this.creationConnection(request.sessionId).createPane(request.spaceId);
+    return this.activeConnection(request.sessionId).createPane(request.spaceId);
   }
 
   async splitPane(request: SplitPaneRequest): Promise<CreatedPane> {
-    return this.creationConnection(request.sessionId).splitPane(request.paneId, request.direction);
+    return this.activeConnection(request.sessionId).splitPane(request.paneId, request.direction);
+  }
+
+  async renamePane(request: RenamePaneRequest): Promise<void> {
+    return this.activeConnection(request.sessionId).renamePane(request.paneId, request.label);
+  }
+
+  async renameTab(request: RenameTabRequest): Promise<void> {
+    return this.activeConnection(request.sessionId).renameTab(request.tabId, request.label);
+  }
+
+  async renameSpace(request: RenameSpaceRequest): Promise<void> {
+    return this.activeConnection(request.sessionId).renameSpace(request.spaceId, request.label);
+  }
+
+  async closePane(request: ClosePaneRequest): Promise<void> {
+    return this.activeConnection(request.sessionId).closePane(request.paneId);
+  }
+
+  async closeTab(request: CloseTabRequest): Promise<void> {
+    return this.activeConnection(request.sessionId).closeTab(request.tabId);
+  }
+
+  async closeSpace(request: CloseSpaceRequest): Promise<void> {
+    return this.activeConnection(request.sessionId).closeSpace(request.spaceId, request.closeGroup);
   }
 
   onDidChange(listener: (state: SessionsState) => void): Disposable {
@@ -518,7 +549,7 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations {
     this.connection = undefined;
   }
 
-  private creationConnection(sessionId: string): HerdrSessionConnection {
+  private activeConnection(sessionId: string): HerdrSessionConnection {
     const active = this.state.active;
     if (active.kind !== "connected") throw new Error("Herdr Session is not connected.");
     if (active.session.id !== sessionId) throw new Error("Herdr Session changed.");

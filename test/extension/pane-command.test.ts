@@ -139,6 +139,19 @@ async function withPanesFeature(
         createPane: () => Promise.reject(new Error("not used")),
         splitPane: () => Promise.reject(new Error("not used")),
       },
+      {
+        renamePane: () => Promise.reject(new Error("not used")),
+        renameTab: () => Promise.reject(new Error("not used")),
+        renameSpace: () => Promise.reject(new Error("not used")),
+        closePane: () => Promise.reject(new Error("not used")),
+        closeTab: () => Promise.reject(new Error("not used")),
+        closeSpace: () => Promise.reject(new Error("not used")),
+      },
+      {
+        closePanes: () => {
+          throw new Error("not used");
+        },
+      },
     );
     assert.ok(provider);
     await run(prefix, provider, context, requests);

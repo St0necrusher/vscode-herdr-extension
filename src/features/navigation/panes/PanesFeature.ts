@@ -1,9 +1,14 @@
 import * as vscode from "vscode";
-import type { ActiveSessionCreation, CreatedPane, SplitDirection } from "@capabilities/sessions";
-import type { PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
+import type {
+  ActiveSessionCreation,
+  ActiveSessionManagement,
+  CreatedPane,
+  SplitDirection,
+} from "@capabilities/sessions";
+import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
 import type { NavigationContextSource, NavigationPaneOpening } from "../capabilities";
-import { paneName, PanesModel } from "./PanesModel";
-import { PaneTreeItem, VsCodePanesView } from "./view";
+import { paneName, PanesModel, type PaneNavigationItem, type PaneNavigationRow } from "./PanesModel";
+import { PaneTreeItem, PanesGroupTreeItem, VsCodePanesView } from "./view";
 
 export class PanesFeature implements NavigationPaneOpening {
   private readonly model: PanesModel;
@@ -15,6 +20,8 @@ export class PanesFeature implements NavigationPaneOpening {
     private readonly context: NavigationContextSource,
     private readonly paneTerminalOpening: PaneTerminalOpening,
     private readonly creation: ActiveSessionCreation,
+    private readonly management: ActiveSessionManagement,
+    private readonly paneClosing: PaneTerminalClosing,
   ) {
     const model = new PanesModel(context);
     let view: VsCodePanesView | undefined;
@@ -35,6 +42,19 @@ export class PanesFeature implements NavigationPaneOpening {
         }),
         vscode.commands.registerCommand("herdr.splitPaneDown", async (item: unknown) => {
           if (item instanceof PaneTreeItem) await this.splitPane(item.paneId, "down");
+        }),
+        vscode.commands.registerCommand("herdr.renamePane", async (item: unknown) => {
+          if (item instanceof PaneTreeItem) await this.renamePane(item.paneId);
+        }),
+        vscode.commands.registerCommand("herdr.renameTab", async (item: unknown) => {
+          if (item instanceof PanesGroupTreeItem) await this.renameTab(item.group.tab.id);
+          else if (item instanceof PaneTreeItem) await this.renameTab(item.tabId);
+        }),
+        vscode.commands.registerCommand("herdr.closePane", async (item: unknown) => {
+          if (item instanceof PaneTreeItem) await this.closePane(item.paneId);
+        }),
+        vscode.commands.registerCommand("herdr.closeTab", async (item: unknown) => {
+          if (item instanceof PanesGroupTreeItem) await this.closeTab(item.group.tab.id);
         }),
       );
       this.model = model;
@@ -58,6 +78,79 @@ export class PanesFeature implements NavigationPaneOpening {
     const request = this.paneTerminalRequest(paneId);
     if (request === undefined) throw new Error(`Pane ${paneId} is not in the current Session snapshot`);
     this.paneTerminalOpening.openPane(request);
+  }
+
+  private async renamePane(paneId: string): Promise<void> {
+    const state = this.model.getState();
+    if (state.kind !== "connected") return;
+
+    const row = findPaneRow(state.items, paneId);
+    if (row === undefined) return;
+
+    const name = await this.view.promptPaneName(row.pane.label ?? "");
+    if (name === undefined) return;
+    const label = name.trim().length === 0 ? null : name;
+
+    try {
+      await this.management.renamePane({ sessionId: state.sessionId, paneId, label });
+    } catch (error) {
+      this.view.showPaneRenameError(error);
+    }
+  }
+
+  private async renameTab(tabId: string): Promise<void> {
+    const state = this.model.getState();
+    if (state.kind !== "connected") return;
+
+    const item = state.items.find((candidate) => candidate.tab.id === tabId);
+    if (item === undefined) return;
+
+    const label = await this.view.promptTabName(item.tab.label);
+    if (label === undefined) return;
+
+    try {
+      await this.management.renameTab({ sessionId: state.sessionId, tabId, label });
+    } catch (error) {
+      this.view.showTabRenameError(error);
+    }
+  }
+
+  private async closePane(paneId: string): Promise<void> {
+    const state = this.model.getState();
+    if (state.kind !== "connected") return;
+
+    // The snapshot may have changed since the menu rendered; never close the last Pane (ADR 0005).
+    const row = findPaneRow(state.items, paneId);
+    if (row?.closable !== true) return;
+
+    try {
+      await this.management.closePane({ sessionId: state.sessionId, paneId });
+    } catch (error) {
+      this.view.showPaneCloseError(error);
+      return;
+    }
+
+    this.paneClosing.closePanes(state.sessionId, [paneId]);
+  }
+
+  private async closeTab(tabId: string): Promise<void> {
+    const state = this.model.getState();
+    if (state.kind !== "connected") return;
+
+    // The snapshot may have changed since the menu rendered; never close the last Tab (ADR 0005).
+    const item = state.items.find((candidate) => candidate.tab.id === tabId);
+    const isClosableGroup = item?.kind === "group" && item.closable;
+    if (!isClosableGroup) return;
+
+    const paneIds = item.panes.map((row) => row.pane.id);
+    try {
+      await this.management.closeTab({ sessionId: state.sessionId, tabId });
+    } catch (error) {
+      this.view.showTabCloseError(error);
+      return;
+    }
+
+    this.paneClosing.closePanes(state.sessionId, paneIds);
   }
 
   private async createPane(): Promise<void> {
@@ -113,4 +206,9 @@ export class PanesFeature implements NavigationPaneOpening {
       name: paneName(pane),
     };
   }
+}
+
+function findPaneRow(items: readonly PaneNavigationItem[], paneId: string): PaneNavigationRow | undefined {
+  const rows = items.flatMap((item) => (item.kind === "group" ? item.panes : [item]));
+  return rows.find((row) => row.pane.id === paneId);
 }

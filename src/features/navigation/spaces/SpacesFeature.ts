@@ -1,8 +1,15 @@
 import * as vscode from "vscode";
-import type { ActiveSessionCreation, CreatedSpace } from "@capabilities/sessions";
+import type {
+  ActiveSessionCreation,
+  ActiveSessionManagement,
+  CreatedSpace,
+  HerdrPane,
+  HerdrSpace,
+} from "@capabilities/sessions";
+import type { PaneTerminalClosing } from "@capabilities/terminalSurfaces";
 import type { NavigationPaneOpening, SpaceSelectionOperations, NavigationContextSource } from "../capabilities";
-import { SpacesModel } from "./SpacesModel";
-import { VsCodeSpacesView } from "./view";
+import { SpacesModel, type SpaceNavigationEntry } from "./SpacesModel";
+import { SpaceTreeItem, VsCodeSpacesView } from "./view";
 
 export class SpacesFeature {
   private readonly model: SpacesModel;
@@ -11,10 +18,12 @@ export class SpacesFeature {
   private disposed = false;
 
   constructor(
-    context: NavigationContextSource,
+    private readonly context: NavigationContextSource,
     private readonly operations: SpaceSelectionOperations,
     private readonly creation: ActiveSessionCreation,
     private readonly paneOpening: NavigationPaneOpening,
+    private readonly management: ActiveSessionManagement,
+    private readonly paneClosing: PaneTerminalClosing,
   ) {
     const model = new SpacesModel(context);
     const view = new VsCodeSpacesView(model);
@@ -26,6 +35,15 @@ export class SpacesFeature {
       }),
       vscode.commands.registerCommand("herdr.createSpace", async () => {
         await this.createSpace();
+      }),
+      vscode.commands.registerCommand("herdr.renameSpace", async (item: unknown) => {
+        if (item instanceof SpaceTreeItem) await this.renameSpace(item.spaceId);
+      }),
+      vscode.commands.registerCommand("herdr.closeSpace", async (item: unknown) => {
+        if (item instanceof SpaceTreeItem) await this.closeSpace(item.spaceId);
+      }),
+      vscode.commands.registerCommand("herdr.closeGroup", async (item: unknown) => {
+        if (item instanceof SpaceTreeItem) await this.closeGroup(item.spaceId);
       }),
     );
   }
@@ -60,4 +78,72 @@ export class SpacesFeature {
       this.view.showCreatedSpaceOpenError(error);
     }
   }
+
+  private async renameSpace(spaceId: string): Promise<void> {
+    const target = this.findSpace(spaceId);
+    if (target === undefined) return;
+
+    const label = await this.view.promptSpaceName(target.space.label);
+    if (label === undefined) return;
+
+    try {
+      await this.management.renameSpace({ sessionId: target.sessionId, spaceId, label });
+    } catch (error) {
+      this.view.showSpaceRenameError(error);
+    }
+  }
+
+  private async closeSpace(spaceId: string): Promise<void> {
+    const target = this.findSpace(spaceId);
+    if (target === undefined) return;
+
+    const confirmed = await this.view.confirmCloseSpace(target.space);
+    if (!confirmed) return;
+
+    await this.close(target, [target.space], false, (error) => this.view.showSpaceCloseError(error));
+  }
+
+  private async closeGroup(spaceId: string): Promise<void> {
+    const target = this.findSpace(spaceId);
+    if (target === undefined) return;
+    const members = target.worktreeGroup;
+    if (members === undefined) return;
+
+    const confirmed = await this.view.confirmCloseGroup(target.space, members);
+    if (!confirmed) return;
+
+    await this.close(target, members, true, (error) => this.view.showGroupCloseError(error));
+  }
+
+  // Captures the Panes before closing, so their editors close only after Herdr confirms.
+  private async close(
+    target: SpaceTarget,
+    closedSpaces: readonly HerdrSpace[],
+    closeGroup: boolean,
+    showError: (error: unknown) => void,
+  ): Promise<void> {
+    const closedSpaceIds = new Set(closedSpaces.map((space) => space.id));
+    const paneIds = target.panes.filter((pane) => closedSpaceIds.has(pane.spaceId)).map((pane) => pane.id);
+    try {
+      await this.management.closeSpace({ sessionId: target.sessionId, spaceId: target.space.id, closeGroup });
+    } catch (error) {
+      showError(error);
+      return;
+    }
+
+    this.paneClosing.closePanes(target.sessionId, paneIds);
+  }
+
+  private findSpace(spaceId: string): SpaceTarget | undefined {
+    const context = this.context.getState();
+    const state = this.model.getState(context);
+    const isConnected = context.kind === "connected" && state.kind === "connected";
+    if (!isConnected) return undefined;
+
+    const entry = state.spaces.find((candidate) => candidate.space.id === spaceId);
+    if (entry === undefined) return undefined;
+    return { ...entry, sessionId: state.sessionId, panes: context.snapshot.panes };
+  }
 }
+
+type SpaceTarget = SpaceNavigationEntry & Readonly<{ sessionId: string; panes: readonly HerdrPane[] }>;

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { HerdrSpace } from "@capabilities/sessions";
 import type { SpaceNavigationEntry, SpacesModel, SpacesState } from "../SpacesModel";
 
 export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>, vscode.Disposable {
@@ -12,12 +13,12 @@ export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>,
     this.view = vscode.window.createTreeView("herdr.spaces", { treeDataProvider: this });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
-      setSpaceCreationEnabled(state);
+      setSpaceActionsEnabled(state);
       this.changes.fire(undefined);
     });
     const state = model.getState();
     setMessage(this.view, state);
-    setSpaceCreationEnabled(state);
+    setSpaceActionsEnabled(state);
   }
 
   async chooseSpaceFolder(): Promise<string | undefined> {
@@ -32,6 +33,45 @@ export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>,
       placeHolder: "Choose a folder for the new Herdr Space",
     });
     return selected?.uri.fsPath;
+  }
+
+  async promptSpaceName(currentLabel: string): Promise<string | undefined> {
+    return vscode.window.showInputBox({
+      title: "Rename Space",
+      value: currentLabel,
+      validateInput: (value) => (value.trim().length === 0 ? "Space name cannot be empty." : undefined),
+    });
+  }
+
+  async confirmCloseSpace(space: HerdrSpace): Promise<boolean> {
+    const action = await vscode.window.showWarningMessage(
+      `Close Space "${space.label}"?`,
+      { modal: true, detail: "Every Tab and Pane in this Space will be closed." },
+      "Close Space",
+    );
+    return action === "Close Space";
+  }
+
+  async confirmCloseGroup(primary: HerdrSpace, members: readonly HerdrSpace[]): Promise<boolean> {
+    const memberLabels = members.map((space) => `• ${space.label}`).join("\n");
+    const action = await vscode.window.showWarningMessage(
+      `Close Group "${primary.label}"?`,
+      { modal: true, detail: `This will close every Space in the group:\n${memberLabels}` },
+      "Close Group",
+    );
+    return action === "Close Group";
+  }
+
+  showSpaceRenameError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not rename Space: ${errorMessage(error)}`);
+  }
+
+  showSpaceCloseError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not close Space: ${errorMessage(error)}`);
+  }
+
+  showGroupCloseError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not close Group: ${errorMessage(error)}`);
   }
 
   showSpaceCreationError(error: unknown): void {
@@ -64,12 +104,16 @@ export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>,
 }
 
 export class SpaceTreeItem extends vscode.TreeItem {
+  readonly spaceId: string;
+
   constructor(entry: SpaceNavigationEntry) {
     const { space } = entry;
     super(space.label, vscode.TreeItemCollapsibleState.None);
     this.id = `herdr.space.${space.id}`;
     this.description = `${space.paneCount} ${space.paneCount === 1 ? "Pane" : "Panes"} · ${space.agentStatus}`;
-    this.contextValue = entry.selected ? "herdr.space.selected" : "herdr.space";
+    const spaceContextValue = entry.selected ? "herdr.space.selected" : "herdr.space";
+    this.contextValue = entry.worktreeGroup === undefined ? spaceContextValue : `${spaceContextValue}.group`;
+    this.spaceId = space.id;
     this.iconPath = new vscode.ThemeIcon(entry.selected ? "pass-filled" : "circle-filled");
     this.tooltip = [
       `Space: ${space.label}`,
@@ -90,8 +134,8 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function setSpaceCreationEnabled(state: SpacesState): void {
-  void vscode.commands.executeCommand("setContext", "herdr.spaceCreationEnabled", state.kind === "connected");
+function setSpaceActionsEnabled(state: SpacesState): void {
+  void vscode.commands.executeCommand("setContext", "herdr.spaceActionsEnabled", state.kind === "connected");
 }
 
 function setMessage(view: vscode.TreeView<SpaceTreeItem>, state: SpacesState): void {

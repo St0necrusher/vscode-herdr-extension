@@ -26,6 +26,15 @@ export type {
   SplitDirection,
   SplitPaneRequest,
 } from "./creation";
+export type {
+  ActiveSessionManagement,
+  ClosePaneRequest,
+  CloseSpaceRequest,
+  CloseTabRequest,
+  RenamePaneRequest,
+  RenameSpaceRequest,
+  RenameTabRequest,
+} from "./management";
 export {
   HerdrConnectionFailureError,
   type HerdrConnectionFailure,

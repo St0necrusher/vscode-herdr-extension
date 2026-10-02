@@ -5,12 +5,14 @@ export type PaneNavigationRow = Readonly<{
   pane: HerdrPane;
   tab: HerdrTab;
   name: string;
+  closable: boolean;
 }>;
 
 export type PaneNavigationGroup = Readonly<{
   kind: "group";
   tab: HerdrTab;
   panes: readonly PaneNavigationRow[];
+  closable: boolean;
 }>;
 
 export type PaneNavigationSingleton = PaneNavigationRow &
@@ -85,15 +87,19 @@ export class PanesModel {
 
     const tabs = context.snapshot.herdrTabs.filter((tab) => tab.spaceId === selectedSpaceId);
     const panes = context.snapshot.panes.filter((pane) => pane.spaceId === selectedSpaceId);
+    const paneClosable = panes.length > 1;
+    const tabClosable = tabs.length > 1;
     const items: PaneNavigationItem[] = [];
-    for (const tab of tabs) {
-      const tabPanes = panes.filter((pane) => pane.herdrTabId === tab.id).map((pane) => paneRow(pane, tab));
-      if (tabPanes.length > 1) items.push({ kind: "group", tab, panes: tabPanes });
+    tabs.forEach((tab) => {
+      const tabPanes = panes
+        .filter((pane) => pane.herdrTabId === tab.id)
+        .map((pane) => paneRow(pane, tab, paneClosable));
+      if (tabPanes.length > 1) items.push({ kind: "group", tab, panes: tabPanes, closable: tabClosable });
       else if (tabPanes.length === 1) {
         const singleton = tabPanes[0];
         if (singleton !== undefined) items.push(singletonItem(singleton));
       }
-    }
+    });
     return context.kind === "connected"
       ? { kind: "connected", sessionId: context.sessionId, space, items }
       : { kind: "stale", sessionId: context.sessionId, reason: context.reason, space, items };
@@ -113,8 +119,8 @@ export class PanesModel {
   }
 }
 
-function paneRow(pane: HerdrPane, tab: HerdrTab): PaneNavigationRow {
-  return { pane, tab, name: paneName(pane) };
+function paneRow(pane: HerdrPane, tab: HerdrTab, closable: boolean): PaneNavigationRow {
+  return { pane, tab, name: paneName(pane), closable };
 }
 
 export function paneName(pane: HerdrPane): string {
