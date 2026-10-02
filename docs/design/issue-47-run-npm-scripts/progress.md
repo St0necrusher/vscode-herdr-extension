@@ -1,0 +1,12 @@
+# Issue #47 progress
+
+- 2026-10-02: grounded ticket, #39 spec, research, ADR 0008, code. Found that Herdr protocol 22 has no `pane.run` socket method; proposed `pane.send_input`. Draft architecture written; awaiting user discussion and approval.
+- Worktree at start: `main`, clean.
+- 2026-10-02: researched Herdr 0.9.3 (Sonnet subagent): no pane.run; CLI pane run = pane.send_input text+["Enter"]. Decision 1 confirmed. research-herdr-pane-run.md.
+- 2026-10-02: design approved by the user. Implementation delegated to Claude delegate `opus-impl-47` (Opus, Herdr tab `opus-impl-47`, pane w3:p3M, ongoing) with implementation-brief.md; user settles details in that tab. Awaiting final report.
+- 2026-10-02: final report from opus-impl-47 received; parent reviewed diff, recorded amendments A1, A2, D1. Running validation and one advisory review.
+- 2026-10-02: validation green (typecheck, lint, format, 124 unit, 29 extension). One advisory review (gpt-6-luna max): Spec — no defects, A1/A2 accepted scope expansions; Standards — 1 minor: unnamed compound guards (npmScriptCommand.ts:21, VsCodeScriptsView.ts:88,96,103,108). No post-review edits. State: implementation ready for human review; opus-impl-47 kept open for fixes.
+- 2026-10-02: user accepted the implementation after a live check. Test phase delegated to Claude delegate `claude-tests-47` (tab claude-tests-47, ongoing) with tests-brief.md; it agrees the scenarios with the user before writing. Standards finding (unnamed compound guards) still open; opus-impl-47 is kept open for it.
+- 2026-10-02 (claude-tests-47): user approved Critical C1–C7 plus optional O1 (shell quoting) and O2 (each run creates a new Tab); O3–O6 left out. Written by the coordinator alone: `test/extension/run-npm-script.test.ts` (registered in `esbuild.mjs`), two `creationScenarios` rows in the socket test, fixtures `test/fixtures/workspace/pnpm-lock.yaml` and `packages/web/package.json`. typecheck, lint, format:check, `npm test` (126) and `test:extension` (36) green. No production defects found. Awaiting user acceptance.
+- 2026-10-02: tests accepted (C1–C7, O1, O2; run-npm-script.test.ts + socket rows + fixtures). Parent gate: no production changes from the test phase; lint ok; test:extension 36 passing; npm test 126 with intermittent TakeoverPopupHost B5 failures that also reproduce on clean main (pre-existing flake, unrelated). claude-tests-47 closed.
+- 2026-10-02: review fix (named compound guards) by opus-impl-47 accepted. Committed as docs/feat/test and opened a PR.
