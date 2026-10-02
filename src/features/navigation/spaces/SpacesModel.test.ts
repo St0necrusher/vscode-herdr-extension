@@ -67,7 +67,69 @@ function contextSource(initial: NavigationContextState): {
   };
 }
 
+function worktree(
+  checkoutPath: string,
+  isLinkedWorktree: boolean,
+  repositoryKey: string,
+): NonNullable<NavigationSpace["worktree"]> {
+  return {
+    checkoutPath,
+    isLinkedWorktree,
+    repositoryKey,
+    repositoryName: "Project",
+    repositoryRoot: "/repositories/project",
+  };
+}
+
+function connectedEntries(spaces: readonly NavigationSpace[], selectedSpaceId: string) {
+  const model = new SpacesModel(contextSource(contextState("connected", spaces, selectedSpaceId)).source);
+  const state = model.getState();
+  model.dispose();
+  if (state.kind !== "connected") throw new Error("expected connected Spaces state");
+  return state.spaces;
+}
+
 describe("SpacesModel", () => {
+  it("forms a Worktree Group from a primary Space and linked-worktree Spaces, primary first", () => {
+    const linked = space("linked", {
+      worktree: worktree("/worktrees/project-feature", true, "project-repository"),
+    });
+    const primary = space("primary", {
+      worktree: worktree("/repositories/project", false, "project-repository"),
+    });
+    const entries = connectedEntries([linked, primary], primary.id);
+    const primaryEntry = entries.find((entry) => entry.space.id === primary.id);
+    const linkedEntry = entries.find((entry) => entry.space.id === linked.id);
+
+    expect(primaryEntry?.worktreeGroup).toEqual([primary, linked]);
+    expect(linkedEntry?.worktreeGroup).toBeUndefined();
+  });
+
+  it("does not form a Worktree Group from a linked-only Space or a Space without a worktree", () => {
+    const linked = space("linked-only", {
+      worktree: worktree("/worktrees/project-feature", true, "project-repository"),
+    });
+    const withoutWorktree = space("without-worktree");
+    const entries = connectedEntries([linked, withoutWorktree], linked.id);
+
+    expect(entries.map((entry) => entry.worktreeGroup)).toEqual([undefined, undefined]);
+  });
+
+  it("does not form a Worktree Group when another same-repository Space is not a linked worktree", () => {
+    const primary = space("primary", {
+      worktree: worktree("/repositories/project", false, "project-repository"),
+    });
+    const otherUnlinked = space("other-unlinked", {
+      worktree: worktree("/repositories/project-copy", false, "project-repository"),
+    });
+    const linked = space("linked", {
+      worktree: worktree("/worktrees/project-feature", true, "project-repository"),
+    });
+    const entries = connectedEntries([primary, otherUnlinked, linked], primary.id);
+
+    expect(entries.map((entry) => entry.worktreeGroup)).toEqual([undefined, undefined, undefined]);
+  });
+
   it("derives server-ordered Space rows and freshness from the context seam", () => {
     const first = space("space-1", { number: 7, label: "Alpha", paneCount: 3, tabCount: 2, agentStatus: "working" });
     const second = space("space-2", { number: 2, label: "Beta", paneCount: 1, tabCount: 1, agentStatus: "blocked" });
