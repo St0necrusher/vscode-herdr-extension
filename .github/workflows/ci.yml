@@ -18,9 +18,11 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
+      - id: vscode
+        run: echo "version=$(curl -fsS https://update.code.visualstudio.com/api/releases/stable | jq -r '.[0]')" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
           path: .vscode-test
-          key: vscode-test-${{ runner.os }}
+          key: vscode-test-${{ runner.os }}-${{ steps.vscode.outputs.version }}
       - run: xvfb-run -a npm run test:extension
       - run: npm run package
