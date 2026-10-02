@@ -101,8 +101,10 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
     return result;
   }
 
-  async createPane(spaceId: string): Promise<CreatedPane> {
-    const result = parseTabCreatedResult(await this.requestOnce("tab.create", { workspace_id: spaceId, focus: false }));
+  async createPane(spaceId: string, options: Readonly<{ cwd?: string; label?: string }> = {}): Promise<CreatedPane> {
+    const result = parseTabCreatedResult(
+      await this.requestOnce("tab.create", { workspace_id: spaceId, focus: false, ...options }),
+    );
     await this.publishSnapshotAfterMutation();
     return result;
   }
@@ -113,6 +115,14 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
     );
     await this.publishSnapshotAfterMutation();
     return result;
+  }
+
+  // Sends what `herdr pane run` sends; the command changes no structure, so no snapshot is awaited.
+  async runCommand(paneId: string, command: string): Promise<void> {
+    requireResultType(
+      await this.requestOnce("pane.send_input", { pane_id: paneId, text: command, keys: ["Enter"] }),
+      "ok",
+    );
   }
 
   async renamePane(paneId: string, label: string | null): Promise<void> {
@@ -164,6 +174,7 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
       | "workspace.create"
       | "tab.create"
       | "pane.split"
+      | "pane.send_input"
       | "pane.rename"
       | "tab.rename"
       | "workspace.rename"

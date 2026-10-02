@@ -94,6 +94,7 @@ function dependencies(options: { list?: () => Promise<never>; configurationFailu
           createSpace: () => Promise.reject(new Error("stopped Session must not connect")),
           createPane: () => Promise.reject(new Error("stopped Session must not connect")),
           splitPane: () => Promise.reject(new Error("stopped Session must not connect")),
+          runCommand: () => Promise.reject(new Error("stopped Session must not connect")),
           renamePane: () => Promise.reject(new Error("stopped Session must not connect")),
           renameTab: () => Promise.reject(new Error("stopped Session must not connect")),
           renameSpace: () => Promise.reject(new Error("stopped Session must not connect")),

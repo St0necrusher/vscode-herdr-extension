@@ -167,6 +167,7 @@ function createHarness(options: HarnessOptions = {}) {
           record.creationCalls.push({ operation: "splitPane", paneId, direction });
           return Promise.resolve(createdPane);
         },
+        runCommand: () => Promise.reject(new Error("not used")),
         renamePane: () => Promise.reject(new Error("not used")),
         renameTab: () => Promise.reject(new Error("not used")),
         renameSpace: () => Promise.reject(new Error("not used")),

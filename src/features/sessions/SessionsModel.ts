@@ -11,6 +11,7 @@ import type {
   RenamePaneRequest,
   RenameSpaceRequest,
   RenameTabRequest,
+  RunCommandRequest,
   SplitPaneRequest,
   HerdrConfiguration,
   HerdrConfigurationSource,
@@ -100,11 +101,16 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations, A
   }
 
   async createPane(request: CreatePaneRequest): Promise<CreatedPane> {
-    return this.activeConnection(request.sessionId).createPane(request.spaceId);
+    const { sessionId, spaceId, ...options } = request;
+    return this.activeConnection(sessionId).createPane(spaceId, options);
   }
 
   async splitPane(request: SplitPaneRequest): Promise<CreatedPane> {
     return this.activeConnection(request.sessionId).splitPane(request.paneId, request.direction);
+  }
+
+  async runCommand(request: RunCommandRequest): Promise<void> {
+    return this.activeConnection(request.sessionId).runCommand(request.paneId, request.command);
   }
 
   async renamePane(request: RenamePaneRequest): Promise<void> {
