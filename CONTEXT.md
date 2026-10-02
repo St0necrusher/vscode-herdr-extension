@@ -18,6 +18,10 @@ _Avoid_: offline, cached, disconnected (for the projected state)
 The user-facing Herdr grouping shown under “spaces”; it corresponds exactly to a Herdr Workspace (`workspace_id`) and is not an extension-owned grouping.
 _Avoid_: VS Code workspace, project, workspace group
 
+**Worktree Group**:
+A primary-checkout Space together with the linked-worktree Spaces Herdr groups under it; Herdr closes the group only as a whole and on explicit intent.
+_Avoid_: repo group, worktree family
+
 **Selected Space**:
 The Space this VS Code window is browsing; a local choice that never changes Herdr focus.
 _Avoid_: active Space, current Space
