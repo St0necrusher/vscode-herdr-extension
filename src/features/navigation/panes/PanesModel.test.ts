@@ -3,7 +3,7 @@ import type { HerdrAgent, HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab 
 import type { NavigationContextSource, NavigationContextState } from "../capabilities";
 import { PanesModel } from "./PanesModel";
 
-function space(id: string, label = id): HerdrSpace {
+function space(id: string, label = id, overrides: Partial<HerdrSpace> = {}): HerdrSpace {
   return {
     id,
     number: 1,
@@ -14,6 +14,7 @@ function space(id: string, label = id): HerdrSpace {
     activeHerdrTabId: "",
     agentStatus: "idle",
     tokens: {},
+    ...overrides,
   };
 }
 
@@ -83,6 +84,21 @@ function contextSource(initial: NavigationContextState): {
       for (const listener of listeners) listener(next);
     },
   };
+}
+
+function selectedItems(selectedSpace: HerdrSpace, herdrTabs: readonly HerdrTab[], panes: readonly HerdrPane[]) {
+  const model = new PanesModel(
+    contextSource({
+      kind: "connected",
+      sessionId: "session-1",
+      snapshot: snapshot([selectedSpace], herdrTabs, panes, []),
+      selectedSpaceId: selectedSpace.id,
+    }).source,
+  );
+  const state = model.getState();
+  model.dispose();
+  if (state.kind !== "connected") throw new Error("expected connected Panes state");
+  return state.items;
 }
 
 describe("PanesModel", () => {
@@ -202,6 +218,52 @@ describe("PanesModel", () => {
     expect(model.getState()).toEqual({ kind: "unavailable" });
 
     model.dispose();
+  });
+
+  it("never offers to close the last Pane or the last Herdr Tab of a Space", () => {
+    const singleTab = tab("tab-single", "space-single", "Single Tab");
+    const singlePane = pane("pane-single", singleTab.id, "space-single");
+    const singleItems = selectedItems(
+      space("space-single", "Single", { paneCount: 1, tabCount: 1 }),
+      [singleTab],
+      [singlePane],
+    );
+    expect(singleItems).toHaveLength(1);
+    const single = singleItems[0];
+    if (single?.kind !== "singleton") throw new Error("expected singleton item");
+    expect(single.closable).toBe(false);
+
+    const twoPaneTab = tab("tab-two-panes", "space-two-panes", "Two Panes", 2);
+    const twoPaneItems = selectedItems(
+      space("space-two-panes", "Two Panes", { paneCount: 2, tabCount: 1 }),
+      [twoPaneTab],
+      [
+        pane("pane-two-panes-a", twoPaneTab.id, "space-two-panes"),
+        pane("pane-two-panes-b", twoPaneTab.id, "space-two-panes"),
+      ],
+    );
+    expect(twoPaneItems).toHaveLength(1);
+    const twoPaneGroup = twoPaneItems[0];
+    if (twoPaneGroup?.kind !== "group") throw new Error("expected grouped Tab item");
+    expect(twoPaneGroup.closable).toBe(false);
+    expect(twoPaneGroup.panes.map((row) => row.closable)).toEqual([true, true]);
+
+    const firstTab = tab("tab-first", "space-two-tabs", "First Tab", 2);
+    const secondTab = tab("tab-second", "space-two-tabs", "Second Tab", 2);
+    const twoTabItems = selectedItems(
+      space("space-two-tabs", "Two Tabs", { paneCount: 4, tabCount: 2 }),
+      [firstTab, secondTab],
+      [
+        pane("pane-first-a", firstTab.id, "space-two-tabs"),
+        pane("pane-first-b", firstTab.id, "space-two-tabs"),
+        pane("pane-second-a", secondTab.id, "space-two-tabs"),
+        pane("pane-second-b", secondTab.id, "space-two-tabs"),
+      ],
+    );
+    const twoTabGroups = twoTabItems.filter((item) => item.kind === "group");
+    expect(twoTabGroups.map((group) => group.tab.id)).toEqual([firstTab.id, secondTab.id]);
+    expect(twoTabGroups.map((group) => group.closable)).toEqual([true, true]);
+    expect(twoTabGroups.flatMap((group) => group.panes.map((row) => row.closable))).toEqual([true, true, true, true]);
   });
 
   it("names a singleton from its Tab name with the Pane label or terminal name as secondary text", () => {

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { HerdrSessionConnection, HerdrSessionProjectionConsumer } from "../../../src/capabilities/sessions";
+import type {
+  HerdrSessionConnection,
+  HerdrSessionProjectionConsumer,
+  HerdrSessionSnapshot,
+} from "../../../src/capabilities/sessions";
 import { JsonSocketHerdrSessionConnectionFactory } from "../../../src/infrastructure/herdr/socket/JsonSocketHerdrSessionConnectionFactory";
 import type {
   HerdrSocketConnector,
@@ -143,7 +147,13 @@ function pong(): Record<string, unknown> {
   };
 }
 
-function snapshotResult(paneIds: readonly string[] = []): Record<string, unknown> {
+type SnapshotLabels = Readonly<{
+  paneLabel?: string | null;
+  tabLabel?: string;
+  spaceLabel?: string;
+}>;
+
+function snapshotResult(paneIds: readonly string[] = [], labels: SnapshotLabels = {}): Record<string, unknown> {
   const hasPanes = paneIds.length > 0;
   return {
     type: "session_snapshot",
@@ -155,7 +165,7 @@ function snapshotResult(paneIds: readonly string[] = []): Record<string, unknown
             {
               workspace_id: "space-1",
               number: 1,
-              label: "Space",
+              label: labels.spaceLabel ?? "Space",
               focused: true,
               pane_count: paneIds.length,
               tab_count: 1,
@@ -170,7 +180,7 @@ function snapshotResult(paneIds: readonly string[] = []): Record<string, unknown
               tab_id: "tab-1",
               workspace_id: "space-1",
               number: 1,
-              label: "Tab",
+              label: labels.tabLabel ?? "Tab",
               focused: true,
               pane_count: paneIds.length,
               agent_status: "idle",
@@ -185,6 +195,7 @@ function snapshotResult(paneIds: readonly string[] = []): Record<string, unknown
         focused: index === 0,
         agent_status: "idle",
         revision: index,
+        label: labels.paneLabel,
       })),
       layouts: [],
       agents: [],
@@ -299,6 +310,167 @@ const creationScenarios: readonly CreationScenario[] = [
     },
     expected: { paneId: "pane-split" },
     invoke: (sessionConnection) => sessionConnection.splitPane("pane-1", "down"),
+  },
+];
+
+type MutationScenario = Readonly<{
+  name: string;
+  method: string;
+  params: Readonly<Record<string, unknown>>;
+  response: Record<string, unknown>;
+  snapshotAfterMutation: Record<string, unknown>;
+  invoke: (sessionConnection: HerdrSessionConnection) => Promise<void>;
+  assertPublishedSnapshot: (snapshot: HerdrSessionSnapshot) => void;
+}>;
+
+function paneInfoResult(paneId: string, label: string | null): Record<string, unknown> {
+  return {
+    type: "pane_info",
+    pane: {
+      pane_id: paneId,
+      terminal_id: `terminal-${paneId}`,
+      workspace_id: "space-1",
+      tab_id: "tab-1",
+      focused: true,
+      agent_status: "idle",
+      revision: 1,
+      label,
+    },
+  };
+}
+
+function tabInfoResult(label: string): Record<string, unknown> {
+  return {
+    type: "tab_info",
+    tab: {
+      tab_id: "tab-1",
+      workspace_id: "space-1",
+      number: 1,
+      label,
+      focused: true,
+      pane_count: 1,
+      agent_status: "idle",
+    },
+  };
+}
+
+function workspaceInfoResult(label: string): Record<string, unknown> {
+  return {
+    type: "workspace_info",
+    workspace: {
+      workspace_id: "space-1",
+      number: 1,
+      label,
+      focused: true,
+      pane_count: 1,
+      tab_count: 1,
+      active_tab_id: "tab-1",
+      agent_status: "idle",
+    },
+  };
+}
+
+const mutationScenarios: readonly MutationScenario[] = [
+  {
+    name: "renamePane",
+    method: "pane.rename",
+    params: { pane_id: "pane-1", label: "Build" },
+    response: paneInfoResult("pane-1", "Build"),
+    snapshotAfterMutation: snapshotResult(["pane-1"], { paneLabel: "Build" }),
+    invoke: (sessionConnection) => sessionConnection.renamePane("pane-1", "Build"),
+    assertPublishedSnapshot: (snapshot) => {
+      const pane = snapshot.panes.find((candidate) => candidate.id === "pane-1");
+      expect(pane?.label).toBe("Build");
+    },
+  },
+  {
+    name: "renamePane with a null label",
+    method: "pane.rename",
+    params: { pane_id: "pane-1", label: null },
+    response: paneInfoResult("pane-1", null),
+    snapshotAfterMutation: snapshotResult(["pane-1"], { paneLabel: null }),
+    invoke: (sessionConnection) => sessionConnection.renamePane("pane-1", null),
+    assertPublishedSnapshot: (snapshot) => {
+      const pane = snapshot.panes.find((candidate) => candidate.id === "pane-1");
+      expect(pane).toBeDefined();
+      expect(pane?.label).toBeUndefined();
+    },
+  },
+  {
+    name: "renameTab",
+    method: "tab.rename",
+    params: { tab_id: "tab-1", label: "Build" },
+    response: tabInfoResult("Build"),
+    snapshotAfterMutation: snapshotResult(["pane-1"], { tabLabel: "Build" }),
+    invoke: (sessionConnection) => sessionConnection.renameTab("tab-1", "Build"),
+    assertPublishedSnapshot: (snapshot) => {
+      const herdrTab = snapshot.herdrTabs.find((candidate) => candidate.id === "tab-1");
+      expect(herdrTab?.label).toBe("Build");
+    },
+  },
+  {
+    name: "renameSpace",
+    method: "workspace.rename",
+    params: { workspace_id: "space-1", label: "Build" },
+    response: workspaceInfoResult("Build"),
+    snapshotAfterMutation: snapshotResult(["pane-1"], { spaceLabel: "Build" }),
+    invoke: (sessionConnection) => sessionConnection.renameSpace("space-1", "Build"),
+    assertPublishedSnapshot: (snapshot) => {
+      const space = snapshot.spaces.find((candidate) => candidate.id === "space-1");
+      expect(space?.label).toBe("Build");
+    },
+  },
+  {
+    name: "closePane",
+    method: "pane.close",
+    params: { pane_id: "pane-1" },
+    response: { type: "ok" },
+    snapshotAfterMutation: snapshotResult(),
+    invoke: (sessionConnection) => sessionConnection.closePane("pane-1"),
+    assertPublishedSnapshot: (snapshot) => {
+      expect(snapshot.spaces).toEqual([]);
+      expect(snapshot.herdrTabs).toEqual([]);
+      expect(snapshot.panes).toEqual([]);
+    },
+  },
+  {
+    name: "closeTab",
+    method: "tab.close",
+    params: { tab_id: "tab-1" },
+    response: { type: "ok" },
+    snapshotAfterMutation: snapshotResult(),
+    invoke: (sessionConnection) => sessionConnection.closeTab("tab-1"),
+    assertPublishedSnapshot: (snapshot) => {
+      expect(snapshot.spaces).toEqual([]);
+      expect(snapshot.herdrTabs).toEqual([]);
+      expect(snapshot.panes).toEqual([]);
+    },
+  },
+  {
+    name: "closeSpace with close_group false",
+    method: "workspace.close",
+    params: { workspace_id: "space-1", close_group: false },
+    response: { type: "ok" },
+    snapshotAfterMutation: snapshotResult(),
+    invoke: (sessionConnection) => sessionConnection.closeSpace("space-1", false),
+    assertPublishedSnapshot: (snapshot) => {
+      expect(snapshot.spaces).toEqual([]);
+      expect(snapshot.herdrTabs).toEqual([]);
+      expect(snapshot.panes).toEqual([]);
+    },
+  },
+  {
+    name: "closeSpace with close_group true",
+    method: "workspace.close",
+    params: { workspace_id: "space-1", close_group: true },
+    response: { type: "ok" },
+    snapshotAfterMutation: snapshotResult(),
+    invoke: (sessionConnection) => sessionConnection.closeSpace("space-1", true),
+    assertPublishedSnapshot: (snapshot) => {
+      expect(snapshot.spaces).toEqual([]);
+      expect(snapshot.herdrTabs).toEqual([]);
+      expect(snapshot.panes).toEqual([]);
+    },
   },
 ];
 
@@ -530,6 +702,81 @@ describe("JSON Socket Herdr Session connection", () => {
     expect(creationRequests).toEqual([{ method: scenario.method, params: scenario.params }]);
     sessionConnection.dispose();
   });
+
+  it.each(mutationScenarios)(
+    "$name sends its exact Herdr mutation and resolves after publishing its fresh snapshot",
+    async (scenario) => {
+      let bootstrapComplete = false;
+      let mutationRequest: { transport: ControlledTransport; request: Request } | undefined;
+      let postMutationSnapshot: { transport: ControlledTransport; request: Request } | undefined;
+      let mutationResponseDelivered = false;
+      let snapshotRequestedBeforeMutationResponse: Request | undefined;
+      const connector = new ControlledConnector((transport, request) => {
+        if (request.method === "ping") transport.respond(request, pong());
+        if (request.method === "events.subscribe") transport.respond(request, subscribeAck());
+        if (request.method === "session.snapshot") {
+          if (bootstrapComplete) {
+            if (mutationResponseDelivered) {
+              if (postMutationSnapshot === undefined) postMutationSnapshot = { transport, request };
+              else transport.respond(request, scenario.snapshotAfterMutation);
+            } else {
+              snapshotRequestedBeforeMutationResponse = request;
+            }
+          } else {
+            transport.respond(request, snapshotResult(["pane-1"], { paneLabel: "Original pane" }));
+          }
+        }
+        if (request.method === scenario.method) mutationRequest = { transport, request };
+      });
+      const replaceSnapshot = vi.fn<HerdrSessionProjectionConsumer["replaceSnapshot"]>();
+      const sessionConnection = connection(connector);
+      await sessionConnection.bootstrap({ replaceSnapshot, connectionClosed: vi.fn() });
+      bootstrapComplete = true;
+
+      let operationSettled = false;
+      let operationError: unknown;
+      let snapshotPublishedAtResolution: HerdrSessionSnapshot | undefined;
+      const operation = scenario.invoke(sessionConnection).then(
+        () => {
+          operationSettled = true;
+          snapshotPublishedAtResolution = replaceSnapshot.mock.calls.at(-1)?.[0];
+        },
+        (error: unknown) => {
+          operationSettled = true;
+          operationError = error;
+        },
+      );
+
+      await waitFor(
+        () => mutationRequest,
+        (request) => expect(request).toBeDefined(),
+      );
+      if (mutationRequest === undefined) throw new Error("The Herdr mutation request was not captured.");
+      expect(mutationRequest.request.method).toBe(scenario.method);
+      expect(mutationRequest.request.params).toEqual(scenario.params);
+      mutationResponseDelivered = true;
+      mutationRequest.transport.respond(mutationRequest.request, scenario.response);
+
+      await waitFor(
+        () => postMutationSnapshot,
+        (request) => expect(request).toBeDefined(),
+      );
+      if (postMutationSnapshot === undefined) throw new Error("The post-mutation snapshot request was not captured.");
+      expect(snapshotRequestedBeforeMutationResponse).toBeUndefined();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(operationSettled).toBe(false);
+
+      postMutationSnapshot.transport.respond(postMutationSnapshot.request, scenario.snapshotAfterMutation);
+      await operation;
+      expect(operationError).toBeUndefined();
+      expect(operationSettled).toBe(true);
+      if (snapshotPublishedAtResolution === undefined) {
+        throw new Error("The operation resolved before a snapshot reached the projection consumer.");
+      }
+      scenario.assertPublishedSnapshot(snapshotPublishedAtResolution);
+      sessionConnection.dispose();
+    },
+  );
 
   it("waits for a post-response snapshot to publish the created Pane before resolving", async () => {
     let snapshotRequestCount = 0;
