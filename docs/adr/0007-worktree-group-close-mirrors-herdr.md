@@ -1,0 +1,3 @@
+# Closing a Worktree Group mirrors Herdr's TUI
+
+Herdr rejects `workspace.close` on the primary Space of a Worktree Group with `workspace_group_close_required` unless `close_group: true` expresses explicit group intent. Like Herdr's own sidebar, VS Code labels that action "Close Group", shows a modal listing every Space in the group, and sends `close_group: true` only after the user confirms. The group is detected from the snapshot with Herdr's rule: a Space whose worktree is not linked and that shares its repository key with another open Space. This refines #6's "never bypass protected worktree closes": the protection is explicit user intent, which the modal provides, not a ban on group closes.
