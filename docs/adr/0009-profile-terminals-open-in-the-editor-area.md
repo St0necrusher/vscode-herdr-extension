@@ -1,0 +1,3 @@
+# Terminals opened from the Herdr profile open in the editor area
+
+When the Herdr terminal profile creates a Pane (from `+` or Ctrl+` in the terminal panel), its Pane Editor opens in the editor area like every other Pane Editor, not in the panel where the user asked for a terminal. Attach and Observe follow Pane Editor visibility, which the extension reads from editor tab groups; panel terminals are absent from them, so supporting the panel would need a second visibility source and a way to keep the two in sync. The trade-off is that pressing Ctrl+` opens an editor tab, which surprises users who expect the panel.
