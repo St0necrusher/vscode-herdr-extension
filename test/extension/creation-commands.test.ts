@@ -227,7 +227,20 @@ async function withNavigationFeature(
     feature = new NavigationFeature({
       sessionProjection: projection,
       paneTerminalOpening: { openPane: (request) => openRequests.push(request) },
+      paneClosing: {
+        closePanes: () => {
+          throw new Error("not used");
+        },
+      },
       creation,
+      management: {
+        renamePane: () => Promise.reject(new Error("not used")),
+        renameTab: () => Promise.reject(new Error("not used")),
+        renameSpace: () => Promise.reject(new Error("not used")),
+        closePane: () => Promise.reject(new Error("not used")),
+        closeTab: () => Promise.reject(new Error("not used")),
+        closeSpace: () => Promise.reject(new Error("not used")),
+      },
     });
     assert.ok(spacesProvider);
     assert.ok(panesProvider);
@@ -513,8 +526,8 @@ suite("Creation commands", () => {
 
   test("Creation context keys follow Session freshness and Selected Space availability", async () => {
     await withNavigationFeature(connectedProjection(), (harness) => {
-      const spaceKey = "herdr.spaceCreationEnabled";
-      const paneKey = "herdr.paneCreationEnabled";
+      const spaceKey = "herdr.spaceActionsEnabled";
+      const paneKey = "herdr.paneActionsEnabled";
       assert.equal(latestContextValue(harness.contextChanges, spaceKey), true);
       assert.equal(latestContextValue(harness.contextChanges, paneKey), true);
 

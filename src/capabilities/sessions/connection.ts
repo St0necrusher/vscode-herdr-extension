@@ -41,6 +41,12 @@ export interface HerdrSessionConnection {
   createSpace(cwd: string): Promise<CreatedSpace>;
   createPane(spaceId: string): Promise<CreatedPane>;
   splitPane(paneId: string, direction: SplitDirection): Promise<CreatedPane>;
+  renamePane(paneId: string, label: string | null): Promise<void>;
+  renameTab(tabId: string, label: string): Promise<void>;
+  renameSpace(spaceId: string, label: string): Promise<void>;
+  closePane(paneId: string): Promise<void>;
+  closeTab(tabId: string): Promise<void>;
+  closeSpace(spaceId: string, closeGroup: boolean): Promise<void>;
   dispose(): void;
 }
 

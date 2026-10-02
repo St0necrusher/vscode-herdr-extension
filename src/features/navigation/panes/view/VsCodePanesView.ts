@@ -24,7 +24,7 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     this.view = vscode.window.createTreeView("herdr.panes", { treeDataProvider: this });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
-      setPaneCreationEnabled(state);
+      setPaneActionsEnabled(state);
       this.changes.fire(undefined);
     });
     this.expansionSubscription = this.view.onDidExpandElement((event) => {
@@ -37,7 +37,7 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     });
     const state = model.getState();
     setMessage(this.view, state);
-    setPaneCreationEnabled(state);
+    setPaneActionsEnabled(state);
   }
 
   getTreeItem(item: PanesTreeItem): vscode.TreeItem {
@@ -51,6 +51,34 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     setMessage(this.view, state);
     if (state.kind === "unavailable" || state.kind === "no-space") return [];
     return state.items.map((item) => treeItem(item, this.expanded));
+  }
+
+  promptPaneName(currentLabel: string): Thenable<string | undefined> {
+    return vscode.window.showInputBox({ title: "Rename Pane", value: currentLabel });
+  }
+
+  promptTabName(currentLabel: string): Thenable<string | undefined> {
+    return vscode.window.showInputBox({
+      title: "Rename Tab",
+      value: currentLabel,
+      validateInput: (value) => (value.trim().length === 0 ? "Tab name cannot be empty." : undefined),
+    });
+  }
+
+  showPaneRenameError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not rename Pane: ${errorMessage(error)}`);
+  }
+
+  showTabRenameError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not rename Tab: ${errorMessage(error)}`);
+  }
+
+  showPaneCloseError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not close Pane: ${errorMessage(error)}`);
+  }
+
+  showTabCloseError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not close Tab: ${errorMessage(error)}`);
   }
 
   showPaneCreationError(error: unknown): void {
@@ -82,7 +110,7 @@ export class PanesGroupTreeItem extends vscode.TreeItem {
     super(group.tab.label, vscode.TreeItemCollapsibleState.Expanded);
     this.id = group.tab.id;
     this.description = `${group.panes.length} ${group.panes.length === 1 ? "Pane" : "Panes"}`;
-    this.contextValue = "herdr.panes.group";
+    this.contextValue = `herdr.panes.group${group.closable ? ".closable" : ""}`;
     this.iconPath = new vscode.ThemeIcon("folder");
     this.tooltip = [`Herdr Tab: ${group.tab.label}`, `ID: ${group.tab.id}`, `Panes: ${group.panes.length}`].join("\n");
     this.accessibilityInformation = { label: `${group.tab.label}, ${this.description}` };
@@ -91,15 +119,18 @@ export class PanesGroupTreeItem extends vscode.TreeItem {
 
 export class PaneTreeItem extends vscode.TreeItem {
   readonly paneId: string;
+  readonly tabId: string;
 
   constructor(row: PaneNavigationRow | PaneNavigationSingleton) {
     const singleton = "kind" in row;
     const title = singleton ? row.title : row.name;
     super(title, vscode.TreeItemCollapsibleState.None);
     this.paneId = row.pane.id;
+    this.tabId = row.tab.id;
     this.id = `herdr.pane.${this.paneId}`;
     if (singleton && row.description !== undefined) this.description = row.description;
-    this.contextValue = singleton ? "herdr.panes.singleton" : "herdr.panes.pane";
+    const kind = singleton ? "singleton" : "pane";
+    this.contextValue = `herdr.panes.${kind}${row.closable ? ".closable" : ""}`;
     this.command = { command: "herdr.openPane", title: "Open Pane", arguments: [row.pane.id] };
     this.iconPath = new vscode.ThemeIcon("terminal");
     this.tooltip = [
@@ -122,8 +153,8 @@ function treeItem(item: PaneNavigationItem, expanded: ReadonlyMap<string, boolea
   return group;
 }
 
-function setPaneCreationEnabled(state: PanesState): void {
-  void vscode.commands.executeCommand("setContext", "herdr.paneCreationEnabled", state.kind === "connected");
+function setPaneActionsEnabled(state: PanesState): void {
+  void vscode.commands.executeCommand("setContext", "herdr.paneActionsEnabled", state.kind === "connected");
 }
 
 function errorMessage(error: unknown): string {

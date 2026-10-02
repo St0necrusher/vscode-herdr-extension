@@ -2,10 +2,17 @@ import * as vscode from "vscode";
 import type { HerdrLogger } from "@capabilities/runtime";
 import type {
   ActiveSessionCreation,
+  ActiveSessionManagement,
+  ClosePaneRequest,
+  CloseSpaceRequest,
+  CloseTabRequest,
   CreatedPane,
   CreatedSpace,
   CreatePaneRequest,
   CreateSpaceRequest,
+  RenamePaneRequest,
+  RenameSpaceRequest,
+  RenameTabRequest,
   SplitPaneRequest,
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
@@ -31,7 +38,9 @@ export type SessionsFeatureDependencies = Readonly<{
   logger: HerdrLogger;
 }>;
 
-export class SessionsFeature implements ActiveSessionProjectionSource, HerdrSessionEventSource, ActiveSessionCreation {
+export class SessionsFeature
+  implements ActiveSessionProjectionSource, HerdrSessionEventSource, ActiveSessionCreation, ActiveSessionManagement
+{
   private readonly model: SessionsModel;
   private readonly view: VsCodeSessionsView;
   private readonly status: StatusFeature;
@@ -88,6 +97,30 @@ export class SessionsFeature implements ActiveSessionProjectionSource, HerdrSess
 
   splitPane(request: SplitPaneRequest): Promise<CreatedPane> {
     return this.model.splitPane(request);
+  }
+
+  renamePane(request: RenamePaneRequest): Promise<void> {
+    return this.model.renamePane(request);
+  }
+
+  renameTab(request: RenameTabRequest): Promise<void> {
+    return this.model.renameTab(request);
+  }
+
+  renameSpace(request: RenameSpaceRequest): Promise<void> {
+    return this.model.renameSpace(request);
+  }
+
+  closePane(request: ClosePaneRequest): Promise<void> {
+    return this.model.closePane(request);
+  }
+
+  closeTab(request: CloseTabRequest): Promise<void> {
+    return this.model.closeTab(request);
+  }
+
+  closeSpace(request: CloseSpaceRequest): Promise<void> {
+    return this.model.closeSpace(request);
   }
 
   onDidChangeActiveSessionProjection(listener: (state: ActiveSessionProjectionState) => void): { dispose(): void } {

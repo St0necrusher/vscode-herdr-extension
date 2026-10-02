@@ -4,6 +4,8 @@ import type { NavigationContextSource } from "../capabilities";
 export type SpaceNavigationEntry = Readonly<{
   space: HerdrSpace;
   selected: boolean;
+  // The Spaces that Close Group closes, primary first; undefined unless this Space is a group primary.
+  worktreeGroup: readonly HerdrSpace[] | undefined;
 }>;
 
 export type UnavailableSpacesState = Readonly<{
@@ -48,6 +50,7 @@ export class SpacesModel {
     const spaces = context.snapshot.spaces.map((space) => ({
       space,
       selected: space.id === context.selectedSpaceId,
+      worktreeGroup: worktreeGroup(space, context.snapshot.spaces),
     }));
     return context.kind === "connected"
       ? { kind: "connected", sessionId: context.sessionId, spaces }
@@ -66,4 +69,21 @@ export class SpacesModel {
     this.contextSubscription.dispose();
     this.listeners.clear();
   }
+}
+
+// Herdr's rule: a primary checkout with linked worktrees of the same repository, and no other primary checkout of it.
+function worktreeGroup(primary: HerdrSpace, spaces: readonly HerdrSpace[]): readonly HerdrSpace[] | undefined {
+  const worktree = primary.worktree;
+  const isPrimaryCheckout = worktree !== undefined && !worktree.isLinkedWorktree;
+  if (!isPrimaryCheckout) return undefined;
+
+  const sameRepository = spaces.filter((space) => {
+    const isOtherCheckoutOfRepository =
+      space.id !== primary.id && space.worktree?.repositoryKey === worktree.repositoryKey;
+    return isOtherCheckoutOfRepository;
+  });
+  const linked = sameRepository.filter((space) => space.worktree?.isLinkedWorktree === true);
+  const allOthersAreLinked = linked.length === sameRepository.length;
+  const isGroup = linked.length > 0 && allOthersAreLinked;
+  return isGroup ? [primary, ...linked] : undefined;
 }

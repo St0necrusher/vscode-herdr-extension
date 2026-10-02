@@ -70,25 +70,67 @@
         "command": "herdr.createSpace",
         "title": "Herdr: New Space",
         "icon": "$(add)",
-        "enablement": "herdr.spaceCreationEnabled"
+        "enablement": "herdr.spaceActionsEnabled"
       },
       {
         "command": "herdr.createPane",
         "title": "Herdr: New Pane",
         "icon": "$(add)",
-        "enablement": "herdr.paneCreationEnabled"
+        "enablement": "herdr.paneActionsEnabled"
       },
       {
         "command": "herdr.splitPaneRight",
         "title": "Herdr: Split Pane Right",
         "icon": "$(split-horizontal)",
-        "enablement": "herdr.paneCreationEnabled"
+        "enablement": "herdr.paneActionsEnabled"
       },
       {
         "command": "herdr.splitPaneDown",
         "title": "Herdr: Split Pane Down",
         "icon": "$(split-vertical)",
-        "enablement": "herdr.paneCreationEnabled"
+        "enablement": "herdr.paneActionsEnabled"
+      },
+      {
+        "command": "herdr.renamePane",
+        "title": "Herdr: Rename Pane…",
+        "icon": "$(edit)",
+        "enablement": "herdr.paneActionsEnabled"
+      },
+      {
+        "command": "herdr.renameTab",
+        "title": "Herdr: Rename Tab…",
+        "icon": "$(edit)",
+        "enablement": "herdr.paneActionsEnabled"
+      },
+      {
+        "command": "herdr.closePane",
+        "title": "Herdr: Close Pane",
+        "icon": "$(close)",
+        "enablement": "herdr.paneActionsEnabled"
+      },
+      {
+        "command": "herdr.closeTab",
+        "title": "Herdr: Close Tab",
+        "icon": "$(close)",
+        "enablement": "herdr.paneActionsEnabled"
+      },
+      {
+        "command": "herdr.renameSpace",
+        "title": "Herdr: Rename Space…",
+        "icon": "$(edit)",
+        "enablement": "herdr.spaceActionsEnabled"
+      },
+      {
+        "command": "herdr.closeSpace",
+        "title": "Herdr: Close Space",
+        "icon": "$(close)",
+        "enablement": "herdr.spaceActionsEnabled"
+      },
+      {
+        "command": "herdr.closeGroup",
+        "title": "Herdr: Close Group",
+        "icon": "$(close)",
+        "enablement": "herdr.spaceActionsEnabled"
       }
     ],
     "viewsContainers": {
@@ -136,13 +178,68 @@
       ],
       "view/item/context": [
         {
+          "command": "herdr.renamePane",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)(?:\\.closable)?$/",
+          "group": "edit@1"
+        },
+        {
+          "command": "herdr.renameTab",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(group|singleton)(?:\\.closable)?$/",
+          "group": "edit@2"
+        },
+        {
+          "command": "herdr.closePane",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)\\.closable$/",
+          "group": "close@1"
+        },
+        {
+          "command": "herdr.closeTab",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.group\\.closable$/",
+          "group": "close@2"
+        },
+        {
+          "command": "herdr.renameSpace",
+          "when": "view == herdr.spaces && viewItem =~ /^herdr\\.space(?:\\.selected)?(?:\\.group)?$/",
+          "group": "edit@1"
+        },
+        {
+          "command": "herdr.closeSpace",
+          "when": "view == herdr.spaces && viewItem =~ /^herdr\\.space(?:\\.selected)?$/",
+          "group": "close@1"
+        },
+        {
+          "command": "herdr.closeGroup",
+          "when": "view == herdr.spaces && viewItem =~ /^herdr\\.space(?:\\.selected)?\\.group$/",
+          "group": "close@1"
+        },
+        {
+          "command": "herdr.closePane",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)\\.closable$/ && config.herdr.views.showInlineClose",
+          "group": "inline"
+        },
+        {
+          "command": "herdr.closeTab",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.group\\.closable$/ && config.herdr.views.showInlineClose",
+          "group": "inline"
+        },
+        {
+          "command": "herdr.closeSpace",
+          "when": "view == herdr.spaces && viewItem =~ /^herdr\\.space(?:\\.selected)?$/ && config.herdr.views.showInlineClose",
+          "group": "inline"
+        },
+        {
+          "command": "herdr.closeGroup",
+          "when": "view == herdr.spaces && viewItem =~ /^herdr\\.space(?:\\.selected)?\\.group$/ && config.herdr.views.showInlineClose",
+          "group": "inline"
+        },
+        {
           "command": "herdr.splitPaneRight",
-          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)$/",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)(?:\\.closable)?$/",
           "group": "split@1"
         },
         {
           "command": "herdr.splitPaneDown",
-          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)$/",
+          "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)(?:\\.closable)?$/",
           "group": "split@2"
         }
       ],
@@ -153,6 +250,34 @@
         },
         {
           "command": "herdr.splitPaneDown",
+          "when": "false"
+        },
+        {
+          "command": "herdr.renamePane",
+          "when": "false"
+        },
+        {
+          "command": "herdr.renameTab",
+          "when": "false"
+        },
+        {
+          "command": "herdr.closePane",
+          "when": "false"
+        },
+        {
+          "command": "herdr.closeTab",
+          "when": "false"
+        },
+        {
+          "command": "herdr.renameSpace",
+          "when": "false"
+        },
+        {
+          "command": "herdr.closeSpace",
+          "when": "false"
+        },
+        {
+          "command": "herdr.closeGroup",
           "when": "false"
         }
       ]
@@ -169,6 +294,11 @@
           "type": "string",
           "default": "default",
           "description": "Initial Herdr Session preference/fallback when no valid saved per-workspace/window selection exists; use default for the default Session. This setting does not start a Session automatically."
+        },
+        "herdr.views.showInlineClose": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show an inline close button on Pane, Tab, and Space rows in the Herdr views. Close actions stay available in the context menu."
         }
       }
     },

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
+import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
 import type { HerdrPaneMovedEvent, HerdrSessionEventSource } from "@capabilities/sessions";
 import type { PaneEditorSelection, SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import type { PaneTerminalSurface, PaneTerminalSurfaceFactory } from "./PaneTerminalSurface";
@@ -11,7 +11,7 @@ interface ManagedPaneSurface {
   tab: vscode.Tab | undefined;
 }
 
-export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
+export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerminalClosing {
   private readonly surfacesBySession = new Map<string, Map<string, ManagedPaneSurface>>();
   private readonly subscriptions: readonly { dispose(): void }[];
   private disposed = false;
@@ -49,6 +49,13 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening {
     surface.onDidClose(() => this.handleSurfaceClosed(managed));
     surface.reveal();
     this.reconcileTabBindings();
+  }
+
+  closePanes(sessionId: string, paneIds: readonly string[]): void {
+    paneIds.forEach((paneId) => {
+      const managed = this.getSurface({ sessionId, paneId });
+      if (managed !== undefined) this.handleSurfaceClosed(managed);
+    });
   }
 
   dispose(): void {
