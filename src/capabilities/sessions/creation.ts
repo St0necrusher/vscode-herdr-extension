@@ -4,11 +4,13 @@ export type CreatedSpace = Readonly<{ spaceId: string; paneId: string }>;
 export type CreatedPane = Readonly<{ paneId: string }>;
 
 export type CreateSpaceRequest = Readonly<{ sessionId: string; cwd: string }>;
-export type CreatePaneRequest = Readonly<{ sessionId: string; spaceId: string }>;
+export type CreatePaneRequest = Readonly<{ sessionId: string; spaceId: string; cwd?: string; label?: string }>;
 export type SplitPaneRequest = Readonly<{ sessionId: string; paneId: string; direction: SplitDirection }>;
+export type RunCommandRequest = Readonly<{ sessionId: string; paneId: string; command: string }>;
 
 export interface ActiveSessionCreation {
   createSpace(request: CreateSpaceRequest): Promise<CreatedSpace>;
   createPane(request: CreatePaneRequest): Promise<CreatedPane>;
   splitPane(request: SplitPaneRequest): Promise<CreatedPane>;
+  runCommand(request: RunCommandRequest): Promise<void>;
 }

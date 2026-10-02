@@ -234,6 +234,7 @@ async function withNavigationFeature(
       createSpace: () => Promise.reject(new Error("not used")),
       createPane: () => Promise.reject(new Error("not used")),
       splitPane: () => Promise.reject(new Error("not used")),
+      runCommand: () => Promise.reject(new Error("not used")),
     };
     const paneClosing: PaneTerminalClosing = {
       closePanes: (closedSessionId, paneIds) => {

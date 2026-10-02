@@ -76,6 +76,10 @@ class RecordingCreation implements ActiveSessionCreation {
     return Promise.resolve({ paneId: "pane-created" });
   }
 
+  runCommand(): Promise<void> {
+    return Promise.reject(new Error("not used"));
+  }
+
   splitPane(request: SplitPaneRequest): Promise<{ paneId: string }> {
     this.splitRequests.push(request);
     const splitNumber = this.splitRequests.length;

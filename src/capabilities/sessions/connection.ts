@@ -39,8 +39,9 @@ export interface HerdrSessionProjectionConsumer {
 export interface HerdrSessionConnection {
   bootstrap(consumer: HerdrSessionProjectionConsumer): Promise<HerdrSessionMetadata>;
   createSpace(cwd: string): Promise<CreatedSpace>;
-  createPane(spaceId: string): Promise<CreatedPane>;
+  createPane(spaceId: string, options?: Readonly<{ cwd?: string; label?: string }>): Promise<CreatedPane>;
   splitPane(paneId: string, direction: SplitDirection): Promise<CreatedPane>;
+  runCommand(paneId: string, command: string): Promise<void>;
   renamePane(paneId: string, label: string | null): Promise<void>;
   renameTab(tabId: string, label: string): Promise<void>;
   renameSpace(spaceId: string, label: string): Promise<void>;

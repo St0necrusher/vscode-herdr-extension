@@ -115,6 +115,21 @@
         "enablement": "herdr.paneActionsEnabled"
       },
       {
+        "command": "herdr.runNpmScript",
+        "title": "Run Script in Herdr",
+        "icon": "$(terminal)",
+        "enablement": "herdr.paneActionsEnabled"
+      },
+      {
+        "command": "herdr.runNpmScriptAtCursor",
+        "title": "Run Script in Herdr",
+        "enablement": "herdr.paneActionsEnabled"
+      },
+      {
+        "command": "herdr.runNpmScriptFromHover",
+        "title": "Run Script in Herdr"
+      },
+      {
         "command": "herdr.renameSpace",
         "title": "Herdr: Rename Space…",
         "icon": "$(edit)",
@@ -159,6 +174,13 @@
       ]
     },
     "menus": {
+      "editor/context": [
+        {
+          "command": "herdr.runNpmScriptAtCursor",
+          "when": "resourceFilename == 'package.json' && resourceScheme == file",
+          "group": "navigation@1"
+        }
+      ],
       "view/title": [
         {
           "command": "herdr.refreshSessions",
@@ -177,6 +199,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "herdr.runNpmScript",
+          "when": "view == npm && viewItem == script",
+          "group": "inline"
+        },
+        {
+          "command": "herdr.runNpmScript",
+          "when": "view == npm && viewItem == script",
+          "group": "navigation@4"
+        },
         {
           "command": "herdr.renamePane",
           "when": "view == herdr.panes && viewItem =~ /^herdr\\.panes\\.(pane|singleton)(?:\\.closable)?$/",
@@ -279,6 +311,18 @@
         {
           "command": "herdr.closeGroup",
           "when": "false"
+        },
+        {
+          "command": "herdr.runNpmScript",
+          "when": "false"
+        },
+        {
+          "command": "herdr.runNpmScriptAtCursor",
+          "when": "false"
+        },
+        {
+          "command": "herdr.runNpmScriptFromHover",
+          "when": "false"
         }
       ]
     },
@@ -352,6 +396,7 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
+    "jsonc-parser": "^3.3.1",
     "node-pty": "1.2.0-beta.13"
   },
   "repository": {

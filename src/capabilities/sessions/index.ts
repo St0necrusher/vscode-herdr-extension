@@ -23,6 +23,7 @@ export type {
   CreatedSpace,
   CreatePaneRequest,
   CreateSpaceRequest,
+  RunCommandRequest,
   SplitDirection,
   SplitPaneRequest,
 } from "./creation";

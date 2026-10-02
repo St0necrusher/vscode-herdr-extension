@@ -13,6 +13,7 @@ import type {
   RenamePaneRequest,
   RenameSpaceRequest,
   RenameTabRequest,
+  RunCommandRequest,
   SplitPaneRequest,
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
@@ -97,6 +98,10 @@ export class SessionsFeature
 
   splitPane(request: SplitPaneRequest): Promise<CreatedPane> {
     return this.model.splitPane(request);
+  }
+
+  runCommand(request: RunCommandRequest): Promise<void> {
+    return this.model.runCommand(request);
   }
 
   renamePane(request: RenamePaneRequest): Promise<void> {

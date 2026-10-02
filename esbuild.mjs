@@ -11,6 +11,8 @@ const commonOptions = {
   format: "cjs",
   platform: "node",
   target: "node20",
+  // jsonc-parser's UMD entry hides its internal requires from esbuild; bundle its ESM entry instead.
+  mainFields: ["module", "main"],
   external: ["vscode", "node-pty"],
   sourcemap: true,
   alias: {
