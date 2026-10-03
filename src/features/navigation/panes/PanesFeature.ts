@@ -7,7 +7,8 @@ import type {
 } from "@capabilities/sessions";
 import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
 import type { NavigationContextSource, NavigationPaneOpening } from "../capabilities";
-import { paneName, PanesModel, type PaneNavigationItem, type PaneNavigationRow } from "./PanesModel";
+import { paneName } from "../shared";
+import { PanesModel, type PaneNavigationItem, type PaneNavigationRow } from "./PanesModel";
 import { PaneTreeItem, PanesGroupTreeItem, VsCodePanesView } from "./view";
 
 export class PanesFeature implements NavigationPaneOpening {

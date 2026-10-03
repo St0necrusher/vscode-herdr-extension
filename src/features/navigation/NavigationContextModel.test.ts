@@ -4,6 +4,7 @@ import type {
   ActiveSessionProjectionState,
   HerdrSessionSnapshot,
 } from "@capabilities/sessions";
+import type { PaneEditorPresenceSource } from "@capabilities/terminalSurfaces";
 import { NavigationContextModel } from "./NavigationContextModel";
 import type { NavigationContextState } from "./capabilities";
 
@@ -64,10 +65,15 @@ function sessionSource(initial: ActiveSessionProjectionState): {
   };
 }
 
+const noPaneEditors: PaneEditorPresenceSource = {
+  getPaneEditorPresence: () => ({ visible: [] }),
+  onDidChangePaneEditorPresence: () => ({ dispose: () => undefined }),
+};
+
 describe("NavigationContextModel", () => {
   it("resolves and reconciles local Space selection across Session lifecycles", () => {
     const harness = sessionSource({ kind: "unavailable" });
-    const model = new NavigationContextModel(harness.source);
+    const model = new NavigationContextModel(harness.source, noPaneEditors);
     const changes: NavigationContextState[] = [];
     model.onDidChange((state) => changes.push(state));
 
@@ -103,7 +109,7 @@ describe("NavigationContextModel", () => {
   it("retains a valid local choice through stale and fresh projections", () => {
     const initialSnapshot = snapshot(["space-a", "space-b"], "space-b");
     const harness = sessionSource(connected("session-1", initialSnapshot));
-    const model = new NavigationContextModel(harness.source);
+    const model = new NavigationContextModel(harness.source, noPaneEditors);
     model.selectSpace("space-a");
 
     harness.setState(stale("session-1", snapshot(["space-a", "space-b"], "space-b")));

@@ -7,6 +7,7 @@ import type {
   PanesModel,
   PanesState,
 } from "../PanesModel";
+import { paneRowUri } from "../../shared/view";
 
 export type PanesTreeItem = PanesGroupTreeItem | PaneTreeItem;
 
@@ -140,6 +141,7 @@ export class PaneTreeItem extends vscode.TreeItem {
       `Herdr Tab: ${row.tab.label}`,
       `Tab ID: ${row.tab.id}`,
     ].join("\n");
+    this.resourceUri = paneRowUri(row.pane.id);
     this.accessibilityInformation = {
       label: singleton && row.description !== undefined ? `${title}, ${row.description}` : title,
     };

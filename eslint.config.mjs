@@ -101,6 +101,16 @@ export default tseslint.config(
                       fileInternalPath: "index.ts",
                     },
                   },
+                  {
+                    element: {
+                      type: "feature-child",
+                      captured: {
+                        feature: "{{ from.element.captured.feature }}",
+                        module: "shared",
+                      },
+                      fileInternalPath: "view/index.ts",
+                    },
+                  },
                 ],
               },
             },
@@ -122,6 +132,17 @@ export default tseslint.config(
                         module: "capabilities",
                       },
                       fileInternalPath: "index.ts",
+                    },
+                  },
+                  // Implementation shared by at least two sibling children of the same feature.
+                  {
+                    element: {
+                      type: "feature-child",
+                      captured: {
+                        feature: "{{ from.element.captured.feature }}",
+                        module: "shared",
+                      },
+                      fileInternalPath: ["index.ts", "view/index.ts"],
                     },
                   },
                 ],
