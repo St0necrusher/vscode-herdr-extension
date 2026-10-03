@@ -84,6 +84,7 @@ export class HerdrExtension implements vscode.Disposable {
         sessionProjection: sessionOwner,
         paneTerminalOpening: surfaceManager,
         paneClosing: surfaceManager,
+        paneEditorPresence: surfaceManager,
         creation: sessionOwner,
         management: sessionOwner,
       });

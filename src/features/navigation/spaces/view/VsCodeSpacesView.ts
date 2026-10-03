@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import type { HerdrSpace } from "@capabilities/sessions";
+import { spaceRowUri } from "../../shared/view";
 import type { SpaceNavigationEntry, SpacesModel, SpacesState } from "../SpacesModel";
 
 export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>, vscode.Disposable {
@@ -121,6 +122,7 @@ export class SpaceTreeItem extends vscode.TreeItem {
       `Panes: ${space.paneCount}`,
       `Agent state: ${space.agentStatus}`,
     ].join("\n");
+    this.resourceUri = spaceRowUri(space.id);
     this.accessibilityInformation = { label: `${space.label}, ${this.description}` };
     this.command = {
       command: "herdr.selectSpace",

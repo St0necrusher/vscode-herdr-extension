@@ -133,6 +133,10 @@ async function withNavigationFeature(
 
     feature = new NavigationFeature({
       sessionProjection: projection,
+      paneEditorPresence: {
+        getPaneEditorPresence: () => ({ visible: [] }),
+        onDidChangePaneEditorPresence: () => ({ dispose: () => undefined }),
+      },
       paneTerminalOpening: { openPane: (request) => openRequests.push(request) },
       paneClosing: {
         closePanes: (closedSessionId, paneIds) => {

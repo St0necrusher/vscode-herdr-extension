@@ -1,5 +1,12 @@
 import * as vscode from "vscode";
-import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
+import type {
+  PaneEditorPresence,
+  PaneEditorPresenceSource,
+  PaneEditorReference,
+  PaneTerminalClosing,
+  PaneTerminalOpenRequest,
+  PaneTerminalOpening,
+} from "@capabilities/terminalSurfaces";
 import type { HerdrPaneMovedEvent, HerdrSessionEventSource } from "@capabilities/sessions";
 import type { PaneEditorSelection, SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import type { PaneTerminalSurface, PaneTerminalSurfaceFactory } from "./PaneTerminalSurface";
@@ -11,8 +18,10 @@ interface ManagedPaneSurface {
   tab: vscode.Tab | undefined;
 }
 
-export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerminalClosing {
+export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerminalClosing, PaneEditorPresenceSource {
   private readonly surfacesBySession = new Map<string, Map<string, ManagedPaneSurface>>();
+  private readonly presenceListeners = new Set<(presence: PaneEditorPresence) => void>();
+  private presence: PaneEditorPresence = { visible: [] };
   private readonly subscriptions: readonly { dispose(): void }[];
   private disposed = false;
 
@@ -25,6 +34,8 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
     this.subscriptions = [
       sessionEvents.subscribe("pane.moved", (event) => this.handlePaneMoved(event)),
       tabGroups.onDidChangeTabs(() => this.handleTabsChanged()),
+      // Switching the active group fires no tab change, yet it moves the focused Pane Editor.
+      tabGroups.onDidChangeTabGroups(() => this.handleTabsChanged()),
       vscode.window.onDidChangeActiveTerminal(() => this.updateActiveTerminalContext()),
     ];
     this.updateActiveTerminalContext();
@@ -34,8 +45,10 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
     const selection = { sessionId: request.sessionId, paneId: request.paneId };
     const existing = this.getSurface(selection);
     if (existing !== undefined) {
-      const surfaceIsAlreadyActive = existing.tab !== undefined && this.isActiveTab(existing.tab);
-      if (surfaceIsAlreadyActive) return;
+      // A Visible Pane Editor in an inactive group is revealed so that it takes focus.
+      const surfaceIsAlreadyFocused =
+        existing.tab !== undefined && vscode.window.tabGroups.activeTabGroup.activeTab === existing.tab;
+      if (surfaceIsAlreadyFocused) return;
       existing.surface.reveal();
       this.reconcileTabBindings();
       return;
@@ -49,6 +62,15 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
     surface.onDidClose(() => this.handleSurfaceClosed(managed));
     surface.reveal();
     this.reconcileTabBindings();
+  }
+
+  getPaneEditorPresence(): PaneEditorPresence {
+    return this.presence;
+  }
+
+  onDidChangePaneEditorPresence(listener: (presence: PaneEditorPresence) => void): { dispose(): void } {
+    this.presenceListeners.add(listener);
+    return { dispose: () => this.presenceListeners.delete(listener) };
   }
 
   closePanes(sessionId: string, paneIds: readonly string[]): void {
@@ -67,6 +89,7 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
       surfaces.forEach((managed) => managed.surface.dispose());
     });
     this.surfacesBySession.clear();
+    this.presenceListeners.clear();
     // The context key outlives the extension host; without this, arrows in plain terminals would send markers.
     void vscode.commands.executeCommand("setContext", "herdr.activeTerminalIsPane", false);
   }
@@ -83,12 +106,14 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
     this.setSurface(current, managed);
     this.selection.move(previous, current);
     managed.surface.move(event.currentPane);
+    this.updatePresence();
   }
 
   private handleSurfaceClosed(managed: ManagedPaneSurface): void {
     this.removeSurface(managed.selection);
     this.selection.deselect(managed.selection);
     managed.surface.dispose();
+    this.updatePresence();
   }
 
   private handleTabsChanged(): void {
@@ -132,10 +157,20 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
         }
       }
     });
+    this.updatePresence();
   }
 
-  private isActiveTab(tab: vscode.Tab): boolean {
-    return vscode.window.tabGroups.all.some((group) => group.activeTab === tab);
+  private updatePresence(): void {
+    const tabGroups = vscode.window.tabGroups;
+    const bound = this.allSurfaces().filter((managed) => managed.tab !== undefined);
+    const visible = bound
+      .filter((managed) => tabGroups.all.some((group) => group.activeTab === managed.tab))
+      .map((managed) => managed.selection);
+    const focused = bound.find((managed) => tabGroups.activeTabGroup.activeTab === managed.tab)?.selection;
+    const next: PaneEditorPresence = focused === undefined ? { visible } : { visible, focused };
+    if (samePresence(this.presence, next)) return;
+    this.presence = next;
+    for (const listener of [...this.presenceListeners]) listener(next);
   }
 
   private allSurfaces(): ManagedPaneSurface[] {
@@ -164,4 +199,16 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
   private terminalName(selection: SelectedPaneEditor): string {
     return `${selection.sessionId}:${selection.paneId}`;
   }
+}
+
+function samePresence(left: PaneEditorPresence, right: PaneEditorPresence): boolean {
+  return (
+    sameReference(left.focused, right.focused) &&
+    left.visible.length === right.visible.length &&
+    left.visible.every((reference, index) => sameReference(reference, right.visible[index]))
+  );
+}
+
+function sameReference(left: PaneEditorReference | undefined, right: PaneEditorReference | undefined): boolean {
+  return left?.sessionId === right?.sessionId && left?.paneId === right?.paneId;
 }

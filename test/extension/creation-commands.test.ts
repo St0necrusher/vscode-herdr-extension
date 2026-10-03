@@ -215,7 +215,7 @@ async function withNavigationFeature(
         spacesProvider = options.treeDataProvider as unknown as vscode.TreeDataProvider<vscode.TreeItem>;
       else if (viewId === "herdr.panes")
         panesProvider = options.treeDataProvider as unknown as vscode.TreeDataProvider<vscode.TreeItem>;
-      else assert.fail(`Unexpected Tree View ${viewId}`);
+      else if (viewId !== "herdr.agents") assert.fail(`Unexpected Tree View ${viewId}`);
       return mockTreeView as vscode.TreeView<T>;
     };
     vscode.window.showErrorMessage = (message: string) => {
@@ -230,6 +230,10 @@ async function withNavigationFeature(
 
     feature = new NavigationFeature({
       sessionProjection: projection,
+      paneEditorPresence: {
+        getPaneEditorPresence: () => ({ visible: [] }),
+        onDidChangePaneEditorPresence: () => ({ dispose: () => undefined }),
+      },
       paneTerminalOpening: { openPane: (request) => openRequests.push(request) },
       paneClosing: {
         closePanes: () => {

@@ -1,0 +1,1 @@
+export { VsCodeAgentsView } from "./VsCodeAgentsView";

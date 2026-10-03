@@ -10,7 +10,7 @@
     "printWidth": 120
   },
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.134.0"
   },
   "categories": [
     "Other"
@@ -67,6 +67,10 @@
         "title": "Herdr: Open Pane"
       },
       {
+        "command": "herdr.openAgentPane",
+        "title": "Herdr: Open Agent Pane"
+      },
+      {
         "command": "herdr.createSpace",
         "title": "Herdr: New Space",
         "icon": "$(add)",
@@ -105,13 +109,13 @@
       {
         "command": "herdr.closePane",
         "title": "Herdr: Close Pane",
-        "icon": "$(close)",
+        "icon": "$(close-small)",
         "enablement": "herdr.paneActionsEnabled"
       },
       {
         "command": "herdr.closeTab",
         "title": "Herdr: Close Tab",
-        "icon": "$(close)",
+        "icon": "$(close-small)",
         "enablement": "herdr.paneActionsEnabled"
       },
       {
@@ -138,13 +142,13 @@
       {
         "command": "herdr.closeSpace",
         "title": "Herdr: Close Space",
-        "icon": "$(close)",
+        "icon": "$(close-small)",
         "enablement": "herdr.spaceActionsEnabled"
       },
       {
         "command": "herdr.closeGroup",
         "title": "Herdr: Close Group",
-        "icon": "$(close)",
+        "icon": "$(close-small)",
         "enablement": "herdr.spaceActionsEnabled"
       }
     ],
@@ -170,6 +174,10 @@
         {
           "id": "herdr.panes",
           "name": "Panes"
+        },
+        {
+          "id": "herdr.agents",
+          "name": "Agents"
         }
       ]
     },
@@ -276,6 +284,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "herdr.openAgentPane",
+          "when": "false"
+        },
         {
           "command": "herdr.splitPaneRight",
           "when": "false"

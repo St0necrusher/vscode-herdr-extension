@@ -1,15 +1,30 @@
 import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "@capabilities/sessions";
-import type { NavigationContextState, NavigationContextSource, SpaceSelectionOperations } from "./capabilities";
+import type { PaneEditorPresence, PaneEditorPresenceSource } from "@capabilities/terminalSurfaces";
+import type {
+  NavigationContextState,
+  NavigationContextSource,
+  SpaceSelectionOperations,
+  VisiblePaneEditorsSource,
+} from "./capabilities";
 
-export class NavigationContextModel implements NavigationContextSource, SpaceSelectionOperations {
+export class NavigationContextModel
+  implements NavigationContextSource, SpaceSelectionOperations, VisiblePaneEditorsSource
+{
   private readonly listeners = new Set<(state: NavigationContextState) => void>();
+  private readonly visibleListeners = new Set<(paneIds: ReadonlySet<string>) => void>();
   private readonly sessionSubscription: { dispose(): void };
+  private readonly presenceSubscription: { dispose(): void };
+  private presence: PaneEditorPresence;
   private state: NavigationContextState;
+  private visiblePaneIds: ReadonlySet<string>;
   private disposed = false;
 
-  constructor(source: ActiveSessionProjectionSource) {
+  constructor(source: ActiveSessionProjectionSource, presenceSource: PaneEditorPresenceSource) {
+    this.presence = presenceSource.getPaneEditorPresence();
     this.state = contextState(source.getActiveSessionProjection());
+    this.visiblePaneIds = activeSessionVisiblePaneIds(this.state, this.presence);
     this.sessionSubscription = source.onDidChangeActiveSessionProjection((next) => this.replaceProjection(next));
+    this.presenceSubscription = presenceSource.onDidChangePaneEditorPresence((next) => this.replacePresence(next));
   }
 
   getState(): NavigationContextState {
@@ -22,32 +37,64 @@ export class NavigationContextModel implements NavigationContextSource, SpaceSel
     return { dispose: () => this.listeners.delete(listener) };
   }
 
+  getVisiblePaneIds(): ReadonlySet<string> {
+    return this.visiblePaneIds;
+  }
+
+  onDidChangeVisiblePaneIds(listener: (paneIds: ReadonlySet<string>) => void): { dispose(): void } {
+    if (this.disposed) return { dispose: () => undefined };
+    this.visibleListeners.add(listener);
+    return { dispose: () => this.visibleListeners.delete(listener) };
+  }
+
   selectSpace(spaceId: string): void {
     if (this.disposed) return;
     const current = this.state;
     if (current.kind === "unavailable" || !current.snapshot.spaces.some((space) => space.id === spaceId)) return;
     if (current.selectedSpaceId === spaceId) return;
-    this.publish({ ...current, selectedSpaceId: spaceId });
+    this.update({ ...current, selectedSpaceId: spaceId });
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.sessionSubscription.dispose();
+    this.presenceSubscription.dispose();
     this.listeners.clear();
+    this.visibleListeners.clear();
   }
 
   private replaceProjection(next: ActiveSessionProjectionState): void {
     if (this.disposed) return;
-    const previous = this.state;
-    const nextState = contextState(next, previous);
-    if (sameState(previous, nextState)) return;
-    this.publish(nextState);
+    this.update(contextState(next, this.state));
   }
 
-  private publish(next: NavigationContextState): void {
-    this.state = next;
-    for (const listener of [...this.listeners]) listener(next);
+  // Only a change of the focused Pane Editor moves the Selected Space, so a Space the user picks is not overridden.
+  private replacePresence(next: PaneEditorPresence): void {
+    if (this.disposed) return;
+    const focusChanged =
+      next.focused?.sessionId !== this.presence.focused?.sessionId ||
+      next.focused?.paneId !== this.presence.focused?.paneId;
+    this.presence = next;
+    const current = this.state;
+    const focused = next.focused;
+    if (!focusChanged || current.kind === "unavailable" || focused?.sessionId !== current.sessionId) {
+      this.update(current);
+      return;
+    }
+    const focusedPane = current.snapshot.panes.find((pane) => pane.id === focused.paneId);
+    this.update(focusedPane === undefined ? current : { ...current, selectedSpaceId: focusedPane.spaceId });
+  }
+
+  // Both facts are applied before either is published, so every listener reads a consistent pair.
+  private update(nextState: NavigationContextState): void {
+    const stateChanged = !sameState(this.state, nextState);
+    const nextVisiblePaneIds = activeSessionVisiblePaneIds(nextState, this.presence);
+    const visibleChanged = !sameIds(this.visiblePaneIds, nextVisiblePaneIds);
+    if (stateChanged) this.state = nextState;
+    if (visibleChanged) this.visiblePaneIds = nextVisiblePaneIds;
+    if (stateChanged) for (const listener of [...this.listeners]) listener(this.state);
+    if (visibleChanged) for (const listener of [...this.visibleListeners]) listener(this.visiblePaneIds);
   }
 }
 
@@ -92,6 +139,16 @@ function resolveSelectedSpace(
     return next.snapshot.focusedSpaceId;
   }
   return next.snapshot.spaces[0]?.id;
+}
+
+function activeSessionVisiblePaneIds(state: NavigationContextState, presence: PaneEditorPresence): ReadonlySet<string> {
+  return new Set(
+    presence.visible.filter((editor) => editor.sessionId === state.sessionId).map((editor) => editor.paneId),
+  );
+}
+
+function sameIds(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  return left.size === right.size && [...left].every((id) => right.has(id));
 }
 
 function sameState(left: NavigationContextState, right: NavigationContextState): boolean {

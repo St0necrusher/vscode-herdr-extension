@@ -1,5 +1,6 @@
 import type { HerdrPane, HerdrSpace, HerdrTab } from "@capabilities/sessions";
 import type { NavigationContextSource } from "../capabilities";
+import { paneName } from "../shared";
 
 export type PaneNavigationRow = Readonly<{
   pane: HerdrPane;
@@ -121,10 +122,6 @@ export class PanesModel {
 
 function paneRow(pane: HerdrPane, tab: HerdrTab, closable: boolean): PaneNavigationRow {
   return { pane, tab, name: paneName(pane), closable };
-}
-
-export function paneName(pane: HerdrPane): string {
-  return nonEmpty(pane.label) ?? nonEmpty(pane.terminalTitle) ?? `Pane ${pane.id}`;
 }
 
 function singletonItem(row: PaneNavigationRow): PaneNavigationSingleton {
