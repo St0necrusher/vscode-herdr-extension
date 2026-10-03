@@ -35,6 +35,7 @@ for (const entryPoint of [
   "sessions.test.ts",
   "pane-command.test.ts",
   "pane-editors.test.ts",
+  "agents-navigation.test.ts",
   "creation-commands.test.ts",
   "management-commands.test.ts",
   "run-npm-script.test.ts",
