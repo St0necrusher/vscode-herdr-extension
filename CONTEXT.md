@@ -44,6 +44,10 @@ _Avoid_: active Pane, selected Pane
 A VS Code terminal tab that shows one Pane. Closing it releases only the extension's clients; the Pane keeps running in Herdr.
 _Avoid_: Pane tab, terminal
 
+**Visible Pane Editor**:
+A Pane Editor that is currently the active tab of its editor group; several can be visible at once, across Spaces. Distinct from the single Pane Editor that holds keyboard focus.
+_Avoid_: open Pane, active Pane Editor
+
 **Attach**:
 A Pane Editor's exclusive interactive connection to a Pane; it owns input and the Pane's geometry until it disconnects. Once lost to another client, it is regained only by fresh local input or focus.
 _Avoid_: control, take control, connect
@@ -59,3 +63,13 @@ _Avoid_: release, detach, handoff
 **Takeover Popup**:
 A Herdr plugin popup shown to other Herdr clients while VS Code holds the Attach on the Focused Pane; any input in it makes VS Code Yield.
 _Avoid_: mobile popup, takeover dialog
+
+### Agents
+
+**Agent**:
+A coding-agent program Herdr has detected running in a Pane; a Pane hosts at most one Agent at a time. It is an occupant of its Pane rather than a resource of its own, so navigating to an Agent means navigating to its Pane. The extension never launches, resumes, or detects Agents itself.
+_Avoid_: agent session, assistant, bot
+
+**Agent Status**:
+Herdr's semantic state for an Agent: `working`, `blocked` (waiting for human input), `done` (finished and not yet seen), `idle`, or `unknown`. Herdr alone decides it; `unknown` never implies completion.
+_Avoid_: agent state, activity

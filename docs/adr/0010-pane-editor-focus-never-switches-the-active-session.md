@@ -1,0 +1,3 @@
+# Focusing a Pane Editor never switches the active Herdr Session
+
+Pane Editors of a Herdr Session stay open after the window switches to another Session, and focusing one of them does not make its Session active again; navigation follows a focused Pane Editor only within the active Session. Switching Session reconnects and rebuilds every navigation View, so following focus across Sessions would make the Views jump back and forth whenever editors from two Sessions sit side by side. This narrows the original MVP promise (#4, #9 user story 9) that focusing any open terminal restores its Session as well as its Space.
