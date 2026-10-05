@@ -97,12 +97,22 @@ function closeSocketServer(server: Server, connections: Socket[]): Promise<void>
   });
 }
 
+// The popup exits without draining its sockets, so on Linux the kernel resets a connection that still holds
+// an unread heartbeat or pane.read reply. That reset, or a write after it, is the end of the connection.
+function endConnectionOnPopupExit(connection: Socket): void {
+  connection.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code !== "ECONNRESET" && error.code !== "EPIPE") throw error;
+    connection.destroy();
+  });
+}
+
 async function startOwnerSocketServer(socketPath: string, events: string[] = []): Promise<OwnerSocketServer> {
   const connections: Socket[] = [];
   const messages: string[] = [];
   const sentMessages: string[] = [];
   const server = createServer((connection) => {
     connections.push(connection);
+    endConnectionOnPopupExit(connection);
     let remainder = "";
     connection.on("data", (chunk: Buffer) => {
       const lines = `${remainder}${chunk.toString("utf8")}`.split("\n");
@@ -158,6 +168,7 @@ async function startHerdrSocketServer(
   let readCount = 0;
   const server = createServer((connection) => {
     connections.push(connection);
+    endConnectionOnPopupExit(connection);
     let remainder = "";
     connection.on("data", (chunk: Buffer) => {
       const lines = `${remainder}${chunk.toString("utf8")}`.split("\n");
