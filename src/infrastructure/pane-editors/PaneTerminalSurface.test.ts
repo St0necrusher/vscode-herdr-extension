@@ -1,4 +1,5 @@
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
+import { Terminal } from "@xterm/headless";
 import type {
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
@@ -712,6 +713,158 @@ describe("VsCodePaneTerminalSurface disposal (O5)", () => {
     expect(harness.running()).toEqual([]);
     expect(harness.paneClients.attaches).toHaveLength(1);
     expect(harness.paneClients.observers).toHaveLength(0);
+  });
+});
+
+// herdr's attach client enters the alternate screen and enables these modes; a kitty-aware app (Pi) pushes its flags on top.
+const ATTACH_START = "\x1b[?1049h\x1b[?2004h\x1b[?1004h\x1b[?1000h\x1b[?1006h";
+const PI_PUSHES_KITTY_FLAGS = "\x1b[>7u";
+const PI_POPS_KITTY_FLAGS = "\x1b[<1u";
+
+// Replays the Surface output into the xterm.js version VS Code 1.138 ships.
+async function renderInXterm(writes: readonly string[]) {
+  const terminal = new Terminal({ allowProposedApi: true, vtExtensions: { kittyKeyboard: true } });
+  const write = (data: string) => new Promise<void>((resolve) => terminal.write(data, resolve));
+  const replies: string[] = [];
+  terminal.onData((data) => replies.push(data));
+  await write(writes.join(""));
+  const modes = terminal.modes;
+  const kittyFlags = async () => {
+    replies.splice(0);
+    await write("\x1b[?u");
+    return replies.join("");
+  };
+  // After popping one entry, the flags stay 0 only if that screen's stack was empty.
+  const kittyFlagsAfterPop = async () => {
+    await write(PI_POPS_KITTY_FLAGS);
+    return kittyFlags();
+  };
+  return { write, modes, kittyFlags, kittyFlagsAfterPop };
+}
+
+// No flags on the current screen, and popping one more entry finds none left either.
+async function expectNoKittyFlags(xterm: Awaited<ReturnType<typeof renderInXterm>>) {
+  expect(await xterm.kittyFlags()).toBe("\x1b[?0u");
+  expect(await xterm.kittyFlagsAfterPop()).toBe("\x1b[?0u");
+}
+
+describe("VsCodePaneTerminalSurface attach mode reset (#60)", () => {
+  async function refocusAfterRelease(harness: ReturnType<typeof createHarness>, released: FakePaneClient) {
+    released.settleStop();
+    await vi.waitFor(() => expect(harness.paneClients.attaches.filter(isRunning)).toHaveLength(1));
+    return harness.onlyRunning("attach");
+  }
+
+  it("leaves no kitty flags after blur → refocus → Pi exits, however often it repeats", async () => {
+    const harness = createHarness();
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    let attach = harness.onlyRunning("attach");
+
+    for (let round = 0; round < 3; round += 1) {
+      attach.sink.append(`${ATTACH_START}${PI_PUSHES_KITTY_FLAGS}`);
+      vscodeStub.setWindowFocused(false);
+      await vi.waitFor(() => expect(harness.paneClients.observers.filter(isRunning)).toHaveLength(1));
+      harness.onlyRunning("observe").sink.replace("observer full frame");
+      vscodeStub.setWindowFocused(true);
+      attach = await refocusAfterRelease(harness, attach);
+    }
+    attach.sink.append(`${ATTACH_START}${PI_PUSHES_KITTY_FLAGS}${PI_POPS_KITTY_FLAGS}`);
+
+    const xterm = await renderInXterm(surface.writes);
+    await expectNoKittyFlags(xterm);
+    await xterm.write("\x1b[?1049l");
+    await expectNoKittyFlags(xterm);
+  });
+
+  it("leaves no kitty flags on either screen after focused → hidden → focused, then Pi exits", async () => {
+    const harness = createHarness();
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    const firstAttach = harness.onlyRunning("attach");
+    firstAttach.sink.append(`${ATTACH_START}${PI_PUSHES_KITTY_FLAGS}`);
+
+    harness.selection.deselect(initialSelection);
+    await nextMacrotask();
+    expect(harness.running()).toEqual([]);
+    harness.selection.select(initialSelection);
+    const secondAttach = await refocusAfterRelease(harness, firstAttach);
+    secondAttach.sink.append(`${ATTACH_START}${PI_PUSHES_KITTY_FLAGS}${PI_POPS_KITTY_FLAGS}\x1b[?1049l`);
+
+    const xterm = await renderInXterm(surface.writes);
+    await expectNoKittyFlags(xterm);
+    await xterm.write("\x1b[?1049h");
+    await expectNoKittyFlags(xterm);
+  });
+
+  it("leaves no kitty flags on either screen after moving to another Pane, then Pi exits", async () => {
+    const harness = createHarness();
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    const firstAttach = harness.onlyRunning("attach");
+    firstAttach.sink.append(`${ATTACH_START}${PI_PUSHES_KITTY_FLAGS}`);
+
+    const otherPane = pane("pane-2", "terminal-2");
+    harness.selection.move(initialSelection, { sessionId, paneId: otherPane.id });
+    surface.surface.move(otherPane);
+    const secondAttach = await refocusAfterRelease(harness, firstAttach);
+    expect(secondAttach.request.terminalId).toBe(otherPane.terminalId);
+    secondAttach.sink.append(`${ATTACH_START}${PI_PUSHES_KITTY_FLAGS}${PI_POPS_KITTY_FLAGS}\x1b[?1049l`);
+
+    const xterm = await renderInXterm(surface.writes);
+    await expectNoKittyFlags(xterm);
+    await xterm.write("\x1b[?1049h");
+    await expectNoKittyFlags(xterm);
+  });
+
+  it("turns off bracketed paste and focus reporting when the Attach is dropped", async () => {
+    const harness = createHarness();
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    harness.onlyRunning("attach").sink.append(ATTACH_START);
+
+    harness.selection.deselect(initialSelection);
+
+    const { modes } = await renderInXterm(surface.writes);
+    expect(modes.bracketedPasteMode).toBe(false);
+    expect(modes.sendFocusMode).toBe(false);
+    expect(modes.mouseTrackingMode).toBe("none");
+  });
+
+  it("writes the reset when the Attach completes on its own", async () => {
+    const harness = createHarness();
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    const attach = harness.onlyRunning("attach");
+    attach.sink.append(`${ATTACH_START}${PI_PUSHES_KITTY_FLAGS}`);
+
+    attach.complete();
+    await vi.waitFor(() => expect(harness.paneClients.observers.filter(isRunning)).toHaveLength(1));
+
+    const xterm = await renderInXterm(surface.writes);
+    await expectNoKittyFlags(xterm);
+    expect(xterm.modes.bracketedPasteMode).toBe(false);
+  });
+
+  it("keeps displaced-observer mouse modes on after yielding the Attach", async () => {
+    const harness = createHarness();
+    const surface = harness.createSurface();
+    surface.pty.open(initialDimensions);
+    harness.selection.select(initialSelection);
+    harness.onlyRunning("attach").sink.append(ATTACH_START);
+    const offer = harness.takeoverOffers.offers[0];
+    assert(offer);
+
+    offer.onConfirm();
+
+    const { modes } = await renderInXterm(surface.writes);
+    expect(modes.mouseTrackingMode).toBe("vt200");
+    expect(modes.bracketedPasteMode).toBe(false);
   });
 });
 

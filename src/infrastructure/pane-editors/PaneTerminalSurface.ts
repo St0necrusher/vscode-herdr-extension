@@ -25,7 +25,10 @@ export interface PaneTerminalSurfaceFactory {
   create(selection: SelectedPaneEditor, viewColumn: vscode.ViewColumn, terminalName: string): PaneTerminalSurface;
 }
 
-const SCREEN_RESET = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1049l\x1b[3J\x1b[2J\x1b[H";
+const MOUSE_MODES_OFF = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l";
+const SCREEN_RESET = `${MOUSE_MODES_OFF}\x1b[?1049l\x1b[3J\x1b[2J\x1b[H`;
+// Herdr's own exit tail is lost when an Attach is dropped (ADR 0011): pop every kitty flag on the current, alternate and main screens, then turn off the modes the attach client enables.
+const ATTACH_MODES_RESET = `\x1b[<99u\x1b[?1049h\x1b[<99u\x1b[?1049l\x1b[<99u\x1b[?2004l\x1b[?1004l${MOUSE_MODES_OFF}`;
 const DISPLACED_OBSERVER_MODES_ON = "\x1b[?1000h\x1b[?1006h";
 const DISPLACED_OBSERVER_MODES_OFF = "\x1b[?1000l\x1b[?1006l";
 const OBSERVER_RESIZE_DEBOUNCE_MS = 120;
@@ -376,12 +379,17 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
       void client.observer.stop();
     }
     if (client.kind === "attached") {
+      this.resetAttachModes();
       this.stoppingAttach = client.attach.stop().then(() => {
         this.stoppingAttach = undefined;
         this.converge();
       });
     }
     this.client = { kind: "idle" };
+  }
+
+  private resetAttachModes(): void {
+    if (this.host.kind === "open") this.writeEmitter.fire(ATTACH_MODES_RESET);
   }
 
   private startObserver(request: PaneClientRequest): void {
@@ -462,6 +470,7 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
   private handleAttachCompletion(client: AttachedClient): void {
     const completionIsCurrent = !this.disposed && this.client === client;
     if (!completionIsCurrent) return;
+    this.resetAttachModes();
     this.client = { kind: "idle" };
     this.attachIntent = "displaced";
     this.converge();
