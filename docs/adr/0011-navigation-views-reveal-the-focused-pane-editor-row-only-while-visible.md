@@ -1,0 +1,3 @@
+# Navigation Views reveal the Focused Pane Editor's row only while visible
+
+When the Focused Pane Editor changes, the Panes View and the Agents View reveal and select its row without taking keyboard focus, like the Explorer does for the active file; the Spaces View does not. A View reveals only while it is visible and catches up once when it is shown, because `TreeView.reveal` always opens its View and would otherwise switch the sidebar away from, for example, the Explorer. Selecting rows programmatically leaves VS Code's inline actions, such as close buttons, on the selected and the previously list-focused rows; that clutter is accepted. This reverses amendment A1 of #15, which dropped reveal for that clutter (#62).

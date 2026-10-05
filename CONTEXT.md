@@ -45,8 +45,12 @@ A VS Code terminal tab that shows one Pane. Closing it releases only the extensi
 _Avoid_: Pane tab, terminal
 
 **Visible Pane Editor**:
-A Pane Editor that is currently the active tab of its editor group; several can be visible at once, across Spaces. Distinct from the single Pane Editor that holds keyboard focus.
+A Pane Editor that is currently the active tab of its editor group; several can be visible at once, across Spaces. Distinct from the Focused Pane Editor.
 _Avoid_: open Pane, active Pane Editor
+
+**Focused Pane Editor**:
+The one Visible Pane Editor that is the active tab of the active editor group, if any. Distinct from the Focused Pane, which is Herdr's server-wide focus.
+_Avoid_: active Pane Editor, Focused Pane
 
 **Attach**:
 A Pane Editor's exclusive interactive connection to a Pane; it owns input and the Pane's geometry until it disconnects. Once lost to another client, it is regained only by fresh local input or focus.
