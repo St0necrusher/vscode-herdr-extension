@@ -6,6 +6,7 @@ import type {
   ClosePaneRequest,
   CloseSpaceRequest,
   CloseTabRequest,
+  MoveTabRequest,
   CreatedPane,
   CreatedSpace,
   CreatePaneRequest,
@@ -118,6 +119,10 @@ export class SessionsFeature
 
   closePane(request: ClosePaneRequest): Promise<void> {
     return this.model.closePane(request);
+  }
+
+  moveTab(request: MoveTabRequest): Promise<void> {
+    return this.model.moveTab(request);
   }
 
   closeTab(request: CloseTabRequest): Promise<void> {

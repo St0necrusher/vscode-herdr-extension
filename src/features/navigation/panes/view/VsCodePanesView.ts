@@ -11,6 +11,12 @@ import { paneRowUri } from "../../shared/view";
 
 export type PanesTreeItem = PanesGroupTreeItem | PaneTreeItem;
 
+type TabMove = (tabId: string, targetTabId: string | undefined) => Promise<void>;
+
+const tabMimeType = "application/vnd.herdr.tab";
+// VS Code delivers drops from a tree, including this one, only when its own mime type is accepted.
+const panesTreeMimeType = "application/vnd.code.tree.herdr.panes";
+
 export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<PanesTreeItem | undefined | null>();
   private readonly subscription: { dispose(): void };
@@ -21,8 +27,14 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
   private disposed = false;
   readonly onDidChangeTreeData = this.changes.event;
 
-  constructor(private readonly model: PanesModel) {
-    this.view = vscode.window.createTreeView("herdr.panes", { treeDataProvider: this });
+  constructor(
+    private readonly model: PanesModel,
+    moveTab: TabMove,
+  ) {
+    this.view = vscode.window.createTreeView("herdr.panes", {
+      treeDataProvider: this,
+      dragAndDropController: new TabDragAndDropController(moveTab),
+    });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
       setPaneActionsEnabled(state);
@@ -72,6 +84,10 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
 
   showTabRenameError(error: unknown): void {
     void vscode.window.showErrorMessage(`Could not rename Tab: ${errorMessage(error)}`);
+  }
+
+  showTabMoveError(error: unknown): void {
+    void vscode.window.showErrorMessage(`Could not move Tab: ${errorMessage(error)}`);
   }
 
   showPaneCloseError(error: unknown): void {
@@ -148,8 +164,34 @@ export class PaneTreeItem extends vscode.TreeItem {
   }
 }
 
+// A single-Pane Tab is shown as its Pane row, so the row also stands for the whole Tab.
+class SingletonPaneTreeItem extends PaneTreeItem {}
+
+// Only Tab rows are draggable; a drop on a Pane inside a group lands on that group's Tab.
+class TabDragAndDropController implements vscode.TreeDragAndDropController<PanesTreeItem> {
+  readonly dragMimeTypes = [tabMimeType];
+  readonly dropMimeTypes = [tabMimeType, panesTreeMimeType];
+
+  constructor(private readonly moveTab: TabMove) {}
+
+  handleDrag(source: readonly PanesTreeItem[], dataTransfer: vscode.DataTransfer): void {
+    const [item] = source;
+    if (item instanceof PanesGroupTreeItem)
+      dataTransfer.set(tabMimeType, new vscode.DataTransferItem(item.group.tab.id));
+    else if (item instanceof SingletonPaneTreeItem)
+      dataTransfer.set(tabMimeType, new vscode.DataTransferItem(item.tabId));
+  }
+
+  async handleDrop(target: PanesTreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+    const tabId = await dataTransfer.get(tabMimeType)?.asString();
+    if (tabId === undefined) return;
+    const targetTabId = target instanceof PanesGroupTreeItem ? target.group.tab.id : target?.tabId;
+    await this.moveTab(tabId, targetTabId);
+  }
+}
+
 function treeItem(item: PaneNavigationItem, expanded: ReadonlyMap<string, boolean>): PanesTreeItem {
-  if (item.kind === "singleton") return new PaneTreeItem(item);
+  if (item.kind === "singleton") return new SingletonPaneTreeItem(item);
   const group = new PanesGroupTreeItem(item);
   if (expanded.get(item.tab.id) === false) group.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
   return group;

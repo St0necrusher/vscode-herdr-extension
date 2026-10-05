@@ -32,6 +32,7 @@ export type {
   ClosePaneRequest,
   CloseSpaceRequest,
   CloseTabRequest,
+  MoveTabRequest,
   RenamePaneRequest,
   RenameSpaceRequest,
   RenameTabRequest,

@@ -244,6 +244,7 @@ async function withNavigationFeature(
       management: {
         renamePane: () => Promise.reject(new Error("not used")),
         renameTab: () => Promise.reject(new Error("not used")),
+        moveTab: () => Promise.reject(new Error("not used")),
         renameSpace: () => Promise.reject(new Error("not used")),
         closePane: () => Promise.reject(new Error("not used")),
         closeTab: () => Promise.reject(new Error("not used")),
