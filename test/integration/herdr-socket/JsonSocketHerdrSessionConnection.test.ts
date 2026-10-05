@@ -425,6 +425,17 @@ const mutationScenarios: readonly MutationScenario[] = [
     },
   },
   {
+    name: "moveTab",
+    method: "tab.move",
+    params: { tab_id: "tab-1", insert_index: 0 },
+    response: { type: "tab_list", tabs: [tabInfoResult("1").tab] },
+    snapshotAfterMutation: snapshotResult(["pane-1"]),
+    invoke: (sessionConnection) => sessionConnection.moveTab("tab-1", 0),
+    assertPublishedSnapshot: (snapshot) => {
+      expect(snapshot.herdrTabs.map((herdrTab) => herdrTab.id)).toEqual(["tab-1"]);
+    },
+  },
+  {
     name: "renameSpace",
     method: "workspace.rename",
     params: { workspace_id: "space-1", label: "Build" },
