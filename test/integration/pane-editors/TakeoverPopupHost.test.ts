@@ -10,6 +10,10 @@ import { TAKEOVER_PLUGIN_ID } from "../../../src/infrastructure/pane-editors/tak
 
 vi.mock("vscode", () => ({}));
 
+// The host's timings, mirrored from TakeoverPopupHost.
+const HELLO_TIMEOUT_MS = 5_000;
+const REOPEN_DELAYS_MS = [1_000, 2_000, 4_000, 8_000] as const;
+
 type HerdrMode = "success" | "failure" | "plugin-not-found";
 type FakeInvocation = Readonly<{ argv: string[] }>;
 type FakeHerdr = Readonly<{
@@ -85,9 +89,10 @@ async function createFixture(mode: HerdrMode = "success", isRegistered = true) {
   };
   const registration = { isRegistered: () => isRegistered };
   const info = vi.fn();
+  const error = vi.fn();
   const logger: HerdrLogger = {
     info,
-    error: vi.fn(),
+    error,
     show: vi.fn(),
   };
   const host = new TakeoverPopupHost(configuration, registration, logger);
@@ -97,6 +102,7 @@ async function createFixture(mode: HerdrMode = "success", isRegistered = true) {
     fake,
     host,
     info,
+    error,
     async connect(invocation: FakeInvocation): Promise<PopupConnection> {
       const socketPath = requiredEnvironment(invocation, "HERDR_VSCODE_TAKEOVER_SOCKET");
       const popup = new PopupConnection(createConnection(socketPath));
@@ -123,17 +129,18 @@ function requiredEnvironment(invocation: FakeInvocation, name: string): string {
   return assignment.slice(prefix.length);
 }
 
+// Waits in real time: the fake Herdr is a real process, and advancing fake time while it starts can pass
+// the hello deadline and trigger an extra open. Tests advance fake time only once the host waits on a timer.
 async function waitForOpenCount(fake: FakeHerdr, count: number): Promise<FakeInvocation[]> {
-  await vi.waitFor(
-    async () => {
-      const openCount = (await fake.invocations()).length;
-      if (openCount >= count) return;
-      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(100);
-      expect((await fake.invocations()).length).toBeGreaterThanOrEqual(count);
-    },
-    { timeout: 5_000, interval: 10 },
-  );
+  await vi.waitFor(async () => expect((await fake.invocations()).length).toBeGreaterThanOrEqual(count), {
+    timeout: 5_000,
+    interval: 10,
+  });
   return fake.invocations();
+}
+
+async function waitForFailedOpenCount(error: ReturnType<typeof vi.fn>, count: number): Promise<void> {
+  await vi.waitFor(() => expect(error).toHaveBeenCalledTimes(count), { timeout: 5_000, interval: 10 });
 }
 
 async function getInvocation(fake: FakeHerdr, index: number): Promise<FakeInvocation> {
@@ -322,7 +329,11 @@ describe("TakeoverPopupHost adapter", () => {
     fixture.host.offer({ sessionId: "default", paneId: "failure-pane", onConfirm: () => undefined });
 
     try {
-      await waitForOpenCount(fixture.fake, 5);
+      for (const [index, reopenDelay] of REOPEN_DELAYS_MS.entries()) {
+        await waitForFailedOpenCount(fixture.error, index + 1);
+        await vi.advanceTimersByTimeAsync(reopenDelay);
+      }
+      await waitForFailedOpenCount(fixture.error, 5);
       await vi.advanceTimersByTimeAsync(30_000);
       expect((await fixture.fake.invocations()).length).toBe(5);
     } finally {
@@ -344,6 +355,8 @@ describe("TakeoverPopupHost adapter", () => {
         popup.socket.write(`hello ${token}\n`);
         popup.socket.end();
         await popup.closed;
+        await waitForFailedOpenCount(fixture.error, index + 1);
+        await vi.advanceTimersByTimeAsync(REOPEN_DELAYS_MS[index] ?? 0);
       }
 
       await vi.advanceTimersByTimeAsync(30_000);
@@ -359,6 +372,8 @@ describe("TakeoverPopupHost adapter", () => {
     const offer = fixture.host.offer({ sessionId: "default", paneId: "silent-popup-pane", onConfirm: () => undefined });
 
     try {
+      await waitForOpenCount(fixture.fake, 1);
+      await vi.advanceTimersByTimeAsync(HELLO_TIMEOUT_MS + REOPEN_DELAYS_MS[0]);
       await waitForOpenCount(fixture.fake, 2);
       expect((await fixture.fake.invocations()).length).toBe(2);
       offer.retract();
