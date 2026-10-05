@@ -12,6 +12,7 @@ import type {
   HerdrSessionSnapshot,
   HerdrSpace,
   HerdrTab,
+  MoveTabRequest,
   RenamePaneRequest,
   RenameSpaceRequest,
   RenameTabRequest,
@@ -49,11 +50,14 @@ class MutableSessionProjection implements ActiveSessionProjectionSource {
 class RecordingManagement implements ActiveSessionManagement {
   readonly renamePaneRequests: RenamePaneRequest[] = [];
   readonly renameTabRequests: RenameTabRequest[] = [];
+  readonly moveTabRequests: MoveTabRequest[] = [];
   readonly renameSpaceRequests: RenameSpaceRequest[] = [];
   readonly closePaneRequests: ClosePaneRequest[] = [];
   readonly closeTabRequests: CloseTabRequest[] = [];
   readonly closeSpaceRequests: CloseSpaceRequest[] = [];
   private nextCloseError: Error | undefined;
+  private nextMoveError: Error | undefined;
+  private heldMove: Readonly<{ markRequested: () => void; released: Promise<void> }> | undefined;
 
   constructor(private readonly projection: MutableSessionProjection) {}
 
@@ -81,8 +85,46 @@ class RecordingManagement implements ActiveSessionManagement {
     return Promise.resolve();
   }
 
-  moveTab(): Promise<void> {
-    return Promise.reject(new Error("not used"));
+  // Mirrors Herdr: insertIndex is a gap in the Space's Tab order before the move.
+  async moveTab(request: MoveTabRequest): Promise<void> {
+    this.moveTabRequests.push(request);
+    const held = this.heldMove;
+    this.heldMove = undefined;
+    if (held !== undefined) {
+      held.markRequested();
+      await held.released;
+    }
+    const error = this.nextMoveError;
+    this.nextMoveError = undefined;
+    if (error !== undefined) throw error;
+
+    const current = currentConnectedProjection(this.projection);
+    const moved = current.snapshot.herdrTabs.find((tab) => tab.id === request.tabId);
+    assert.ok(moved, `The test projection contains Herdr Tab ${request.tabId}`);
+    const spaceTabs = current.snapshot.herdrTabs.filter((tab) => tab.spaceId === moved.spaceId);
+    const otherTabs = current.snapshot.herdrTabs.filter((tab) => tab.spaceId !== moved.spaceId);
+    const before = spaceTabs.slice(0, request.insertIndex).filter((tab) => tab !== moved);
+    const after = spaceTabs.slice(request.insertIndex).filter((tab) => tab !== moved);
+    publishContents(
+      this.projection,
+      current.snapshot.spaces,
+      [...otherTabs, ...before, moved, ...after],
+      current.snapshot.panes,
+    );
+  }
+
+  rejectNextMove(message: string): void {
+    this.nextMoveError = new Error(message);
+  }
+
+  // Keeps the next move in flight, like Herdr before it publishes the new snapshot.
+  holdNextMove(): Readonly<{ requested: Promise<void>; release: () => void }> {
+    let markRequested = (): void => undefined;
+    let release = (): void => undefined;
+    const requested = new Promise<void>((resolve) => (markRequested = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    this.heldMove = { markRequested, released };
+    return { requested, release };
   }
 
   renameSpace(request: RenameSpaceRequest): Promise<void> {
@@ -168,6 +210,7 @@ type NavigationHarness = Readonly<{
   projection: MutableSessionProjection;
   management: RecordingManagement;
   panesProvider: vscode.TreeDataProvider<vscode.TreeItem>;
+  panesDragAndDrop: vscode.TreeDragAndDropController<vscode.TreeItem>;
   spacesProvider: vscode.TreeDataProvider<vscode.TreeItem>;
   closedPaneEditors: readonly ClosedPaneEditors[];
   errors: readonly string[];
@@ -194,6 +237,7 @@ async function withNavigationFeature(
   const warningCalls: WarningCall[] = [];
   const mockTreeView = testTreeView<vscode.TreeItem>();
   let panesProvider: vscode.TreeDataProvider<vscode.TreeItem> | undefined;
+  let panesDragAndDrop: vscode.TreeDragAndDropController<vscode.TreeItem> | undefined;
   let spacesProvider: vscode.TreeDataProvider<vscode.TreeItem> | undefined;
   let inputResult: string | undefined;
   let warningResult: string | undefined;
@@ -211,9 +255,11 @@ async function withNavigationFeature(
       return executeOriginal(command, ...args);
     }) as typeof originalExecuteCommand;
     vscode.window.createTreeView = <T>(viewId: string, options: vscode.TreeViewOptions<T>) => {
-      if (viewId === "herdr.panes")
+      if (viewId === "herdr.panes") {
         panesProvider = options.treeDataProvider as unknown as vscode.TreeDataProvider<vscode.TreeItem>;
-      else if (viewId === "herdr.spaces")
+        panesDragAndDrop = options.dragAndDropController as unknown as
+          vscode.TreeDragAndDropController<vscode.TreeItem> | undefined;
+      } else if (viewId === "herdr.spaces")
         spacesProvider = options.treeDataProvider as unknown as vscode.TreeDataProvider<vscode.TreeItem>;
       else if (viewId !== "herdr.agents") assert.fail(`Unexpected Tree View ${viewId}`);
       return mockTreeView as vscode.TreeView<T>;
@@ -257,12 +303,14 @@ async function withNavigationFeature(
       management,
     });
     assert.ok(panesProvider);
+    assert.ok(panesDragAndDrop);
     assert.ok(spacesProvider);
     await run({
       prefix,
       projection,
       management,
       panesProvider,
+      panesDragAndDrop,
       spacesProvider,
       closedPaneEditors,
       errors,
@@ -420,6 +468,19 @@ function snapshot(): HerdrSessionSnapshot {
   };
 }
 
+// Adds a third, single-Pane Herdr Tab after the two in the primary Space.
+function snapshotWithThreeTabs(): HerdrSessionSnapshot {
+  const base = snapshot();
+  const [group, single, ...otherTabs] = base.herdrTabs;
+  assert.ok(group);
+  assert.ok(single);
+  return {
+    ...base,
+    herdrTabs: [group, single, tab("tab-third", "space-primary", "Third Herdr Tab", 1), ...otherTabs],
+    panes: [...base.panes, pane("pane-third", "terminal-third", "tab-third", "space-primary", "Pane Third")],
+  };
+}
+
 function connectedProjection(currentSnapshot = snapshot()): ActiveSessionProjectionState {
   return { kind: "connected", sessionId, snapshot: currentSnapshot };
 }
@@ -455,6 +516,37 @@ function isGroupTreeItemFor(item: vscode.TreeItem, tabId: string): item is Panes
   const isGroupRow = item instanceof PanesGroupTreeItem;
   const hasTargetTabId = isGroupRow && item.group.tab.id === tabId;
   return hasTargetTabId;
+}
+
+async function dragTab(
+  harness: NavigationHarness,
+  source: vscode.TreeItem,
+  target: vscode.TreeItem | undefined,
+): Promise<void> {
+  const token = new vscode.CancellationTokenSource().token;
+  const dataTransfer = new vscode.DataTransfer();
+  await harness.panesDragAndDrop.handleDrag?.([source], dataTransfer, token);
+  await harness.panesDragAndDrop.handleDrop?.(target, dataTransfer, token);
+}
+
+function rowLabel(item: vscode.TreeItem): string | undefined {
+  return typeof item.label === "string" ? item.label : item.label?.label;
+}
+
+async function rowLabels(harness: NavigationHarness, parent?: vscode.TreeItem): Promise<(string | undefined)[]> {
+  const rows = await treeChildren(harness.panesProvider, parent);
+  return rows.map(rowLabel);
+}
+
+async function rowLabeled(
+  harness: NavigationHarness,
+  label: string,
+  parent?: vscode.TreeItem,
+): Promise<vscode.TreeItem> {
+  const rows = await treeChildren(harness.panesProvider, parent);
+  const row = rows.find((item) => rowLabel(item) === label);
+  assert.ok(row, `The Panes View shows a row named ${label}`);
+  return row;
 }
 
 function isSpaceTreeItemFor(item: vscode.TreeItem, spaceId: string): item is SpaceTreeItem {
@@ -621,6 +713,113 @@ suite("Management commands", () => {
       assert.deepEqual(harness.management.renameTabRequests, [
         { sessionId, tabId: "tab-single", label: "Renamed singleton Tab" },
       ]);
+    });
+  });
+
+  test("Dragging a Tab down places it after the target Tab", async () => {
+    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+      await dragTab(
+        harness,
+        await rowLabeled(harness, "Grouped Herdr Tab"),
+        await rowLabeled(harness, "Third Herdr Tab"),
+      );
+
+      assert.deepEqual(harness.management.moveTabRequests, [{ sessionId, tabId: "tab-group", insertIndex: 3 }]);
+      assert.deepEqual(await rowLabels(harness), ["Singleton Herdr Tab", "Third Herdr Tab", "Grouped Herdr Tab"]);
+    });
+  });
+
+  test("Dragging a single-Pane Tab up places it before the target Tab", async () => {
+    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+      await dragTab(
+        harness,
+        await rowLabeled(harness, "Third Herdr Tab"),
+        await rowLabeled(harness, "Singleton Herdr Tab"),
+      );
+
+      assert.deepEqual(harness.management.moveTabRequests, [{ sessionId, tabId: "tab-third", insertIndex: 1 }]);
+      assert.deepEqual(await rowLabels(harness), ["Grouped Herdr Tab", "Third Herdr Tab", "Singleton Herdr Tab"]);
+    });
+  });
+
+  test("Dropping a Tab on a Pane inside a group targets that group's Tab", async () => {
+    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+      const paneRow = await rowLabeled(harness, "Pane Two", await rowLabeled(harness, "Grouped Herdr Tab"));
+
+      await dragTab(harness, await rowLabeled(harness, "Third Herdr Tab"), paneRow);
+
+      assert.deepEqual(harness.management.moveTabRequests, [{ sessionId, tabId: "tab-third", insertIndex: 0 }]);
+      assert.deepEqual(await rowLabels(harness), ["Third Herdr Tab", "Grouped Herdr Tab", "Singleton Herdr Tab"]);
+    });
+  });
+
+  test("Dropping a Tab on empty space moves it to the end", async () => {
+    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+      await dragTab(harness, await rowLabeled(harness, "Singleton Herdr Tab"), undefined);
+
+      assert.deepEqual(harness.management.moveTabRequests, [{ sessionId, tabId: "tab-single", insertIndex: 3 }]);
+      assert.deepEqual(await rowLabels(harness), ["Grouped Herdr Tab", "Third Herdr Tab", "Singleton Herdr Tab"]);
+    });
+  });
+
+  test("Dragging a Pane inside a group sends no move", async () => {
+    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+      const paneRow = await rowLabeled(harness, "Pane One", await rowLabeled(harness, "Grouped Herdr Tab"));
+
+      await dragTab(harness, paneRow, await rowLabeled(harness, "Third Herdr Tab"));
+
+      assert.deepEqual(harness.management.moveTabRequests, []);
+    });
+  });
+
+  test("Dragging a Tab in a Stale Session sends no move", async () => {
+    const stale: ActiveSessionProjectionState = {
+      kind: "stale",
+      sessionId,
+      reason: "reconnecting",
+      snapshot: snapshotWithThreeTabs(),
+    };
+    await withNavigationFeature(stale, async (harness) => {
+      await dragTab(
+        harness,
+        await rowLabeled(harness, "Grouped Herdr Tab"),
+        await rowLabeled(harness, "Third Herdr Tab"),
+      );
+
+      assert.deepEqual(harness.management.moveTabRequests, []);
+    });
+  });
+
+  test("The Tab order changes only when Herdr publishes the move", async () => {
+    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+      const held = harness.management.holdNextMove();
+
+      const drop = dragTab(
+        harness,
+        await rowLabeled(harness, "Grouped Herdr Tab"),
+        await rowLabeled(harness, "Third Herdr Tab"),
+      );
+      await held.requested;
+      assert.deepEqual(await rowLabels(harness), ["Grouped Herdr Tab", "Singleton Herdr Tab", "Third Herdr Tab"]);
+
+      held.release();
+      await drop;
+      assert.deepEqual(await rowLabels(harness), ["Singleton Herdr Tab", "Third Herdr Tab", "Grouped Herdr Tab"]);
+    });
+  });
+
+  test("A rejected move shows Herdr's error and keeps the Tab order", async () => {
+    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+      harness.management.rejectNextMove("server denied");
+
+      await dragTab(
+        harness,
+        await rowLabeled(harness, "Grouped Herdr Tab"),
+        await rowLabeled(harness, "Third Herdr Tab"),
+      );
+
+      assert.deepEqual(harness.errors, ["Could not move Tab: server denied"]);
+      assert.deepEqual(await rowLabels(harness), ["Grouped Herdr Tab", "Singleton Herdr Tab", "Third Herdr Tab"]);
     });
   });
 });
