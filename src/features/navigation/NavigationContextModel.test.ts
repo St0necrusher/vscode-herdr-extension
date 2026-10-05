@@ -206,6 +206,51 @@ describe("NavigationContextModel", () => {
     model.dispose();
   });
 
+  it("publishes the active Session's Focused Pane Editor after the Selected Space it moves to", () => {
+    const harness = sessionSource(connected("session-1", snapshot(["space-a", "space-b"], "space-a")));
+    const editors = paneEditorSource({ visible: [] });
+    const model = new NavigationContextModel(harness.source, editors.source);
+    const events: string[] = [];
+    model.onDidChange((state) => events.push(`space ${state.kind === "unavailable" ? "" : state.selectedSpaceId}`));
+    model.onDidChangeFocusedEditorPaneId((paneId) => events.push(`focused ${paneId}`));
+    const paneB = { sessionId: "session-1", paneId: "pane-space-b" };
+    const otherSessionPane = { sessionId: "session-2", paneId: "pane-space-c" };
+
+    editors.setPresence({ visible: [paneB], focused: paneB });
+    expect(model.getFocusedEditorPaneId()).toBe("pane-space-b");
+    expect(events).toEqual(["space space-b", "focused pane-space-b"]);
+
+    editors.setPresence({ visible: [paneB, otherSessionPane], focused: otherSessionPane });
+    expect(model.getFocusedEditorPaneId()).toBeUndefined();
+    expect(events.at(-1)).toBe("focused undefined");
+
+    harness.setState(connected("session-2", snapshot(["space-c"], "space-c")));
+    expect(model.getFocusedEditorPaneId()).toBe("pane-space-c");
+    expect(events.at(-1)).toBe("focused pane-space-c");
+    model.dispose();
+  });
+
+  it("treats a focused Pane its snapshot does not list yet as unfocused until a snapshot lists it", () => {
+    const harness = sessionSource(connected("session-1", snapshot(["space-a"], "space-a")));
+    const paneA = { sessionId: "session-1", paneId: "pane-space-a" };
+    const editors = paneEditorSource({ visible: [paneA], focused: paneA });
+    const model = new NavigationContextModel(harness.source, editors.source);
+    const focusedChanges: (string | undefined)[] = [];
+    model.onDidChangeFocusedEditorPaneId((paneId) => focusedChanges.push(paneId));
+
+    // pane.moved rekeys the Pane Editor before the snapshot that lists the Pane under its new ID arrives.
+    const moved = { sessionId: "session-1", paneId: "pane-space-b" };
+    editors.setPresence({ visible: [moved], focused: moved });
+    expect(model.getFocusedEditorPaneId()).toBeUndefined();
+    expect(model.getState()).toMatchObject({ selectedSpaceId: "space-a" });
+
+    harness.setState(connected("session-1", snapshot(["space-a", "space-b"], "space-a")));
+    expect(model.getFocusedEditorPaneId()).toBe("pane-space-b");
+    expect(model.getState()).toMatchObject({ selectedSpaceId: "space-b" });
+    expect(focusedChanges).toEqual([undefined, "pane-space-b"]);
+    model.dispose();
+  });
+
   it("resolves and reconciles local Space selection across Session lifecycles", () => {
     const harness = sessionSource({ kind: "unavailable" });
     const model = new NavigationContextModel(harness.source, noPaneEditors);

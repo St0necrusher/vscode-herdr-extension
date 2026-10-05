@@ -95,6 +95,7 @@ function testTreeView<T>(): vscode.TreeView<T> {
   return {
     onDidExpandElement: () => disposable,
     onDidCollapseElement: () => disposable,
+    onDidChangeVisibility: () => disposable,
     dispose: () => undefined,
     message: undefined,
   } as unknown as vscode.TreeView<T>;
@@ -129,6 +130,12 @@ async function withPanesFeature(
   try {
     feature = new PanesFeature(
       context,
+      {
+        getVisiblePaneIds: () => new Set(),
+        onDidChangeVisiblePaneIds: () => ({ dispose: () => undefined }),
+        getFocusedEditorPaneId: () => undefined,
+        onDidChangeFocusedEditorPaneId: () => ({ dispose: () => undefined }),
+      },
       {
         openPane: (request) => {
           requests.push(request);
