@@ -70,6 +70,15 @@ const snapshot: HerdrSessionSnapshot = {
   herdrTabs: [
     { id: "tab-a", spaceId: "space-a", number: 1, label: "Tab A", focused: true, paneCount: 1, agentStatus: "working" },
     {
+      id: "tab-a2",
+      spaceId: "space-a",
+      number: 2,
+      label: "Tab A2",
+      focused: false,
+      paneCount: 2,
+      agentStatus: "idle",
+    },
+    {
       id: "tab-b",
       spaceId: "space-b",
       number: 1,
@@ -92,6 +101,18 @@ const snapshot: HerdrSessionSnapshot = {
       stateLabels: {},
       tokens: {},
     },
+    ...["pane-a2", "pane-a3"].map((id) => ({
+      id,
+      terminalId: `terminal-${id}`,
+      spaceId: "space-a",
+      herdrTabId: "tab-a2",
+      focused: false,
+      agentStatus: "idle" as const,
+      revision: 1,
+      terminalTitle: id === "pane-a2" ? "Pane A2" : "Pane A3",
+      stateLabels: {},
+      tokens: {},
+    })),
     {
       id: "pane-b",
       terminalId: "terminal-b",
@@ -142,10 +163,17 @@ const snapshot: HerdrSessionSnapshot = {
   layouts: [],
 };
 
+interface FakeTreeView {
+  visible: boolean;
+  readonly reveals: { id: string | undefined; options: unknown }[];
+  readonly visibility: vscode.EventEmitter<vscode.TreeViewVisibilityChangeEvent>;
+}
+
 interface NavigationHarness {
   readonly prefix: string;
   readonly manager: PaneTerminalSurfaceManager;
   readonly providers: ReadonlyMap<string, vscode.TreeDataProvider<vscode.TreeItem>>;
+  readonly views: ReadonlyMap<string, FakeTreeView>;
   readonly decorations: vscode.FileDecorationProvider;
   readonly decorationChanges: Set<string>;
   readonly token: vscode.CancellationToken;
@@ -266,6 +294,49 @@ suite("Agent navigation and Visible Pane Editors", () => {
       assertPresence(harness, { visible: [] });
     });
   });
+
+  test("R2 + R4 a focused Pane Editor reveals its Pane row, including inside a Tab group, and its Agent row", async () => {
+    await withNavigationHarness(async (harness) => {
+      const panes = view(harness, "herdr.panes");
+      const agents = view(harness, "herdr.agents");
+      const select = { select: true, focus: false };
+
+      await vscode.commands.executeCommand(`${harness.prefix}herdr.openPane`, "pane-a2");
+      await waitFor(() => panes.reveals.length > 0, "the Pane row to be revealed");
+      assert.deepEqual(panes.reveals, [{ id: "herdr.pane.pane-a2", options: select }]);
+      assert.deepEqual(agents.reveals, [], "a Pane without an Agent reveals no Agent row");
+      const [group] = (await treeRows(harness, "herdr.panes")).filter((row) => row.id === "tab-a2");
+      assert.ok(group);
+      const [grouped] = (await provider(harness, "herdr.panes").getChildren(group)) ?? [];
+      assert.ok(grouped);
+      assert.equal((await provider(harness, "herdr.panes").getParent?.(grouped))?.id, "tab-a2");
+
+      await vscode.commands.executeCommand(`${harness.prefix}herdr.openAgentPane`, "pane-b");
+      await waitFor(() => agents.reveals.length > 0, "the Agent row to be revealed");
+      assert.deepEqual(panes.reveals.at(-1), { id: "herdr.pane.pane-b", options: select });
+      assert.deepEqual(agents.reveals, [{ id: "herdr.agent.pane-b", options: select }]);
+    });
+  });
+
+  test("R3 a hidden view reveals nothing until it is shown, then catches up once", async () => {
+    await withNavigationHarness(async (harness) => {
+      const hidden = [
+        { view: view(harness, "herdr.panes"), rowId: "herdr.pane.pane-b" },
+        { view: view(harness, "herdr.agents"), rowId: "herdr.agent.pane-b" },
+      ];
+      hidden.forEach(({ view }) => (view.visible = false));
+
+      await vscode.commands.executeCommand(`${harness.prefix}herdr.openAgentPane`, "pane-b");
+      await waitForFocusedPane(harness, "pane-b");
+      hidden.forEach(({ view }) => assert.deepEqual(view.reveals, []));
+
+      hidden.forEach(({ view, rowId }) => {
+        view.visible = true;
+        view.visibility.fire({ visible: true });
+        assert.deepEqual(view.reveals, [{ id: rowId, options: { select: true, focus: false } }]);
+      });
+    });
+  });
 });
 
 async function withNavigationHarness(run: (harness: NavigationHarness) => Promise<void>): Promise<void> {
@@ -302,6 +373,7 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
     },
   );
   const providers = new Map<string, vscode.TreeDataProvider<vscode.TreeItem>>();
+  const views = new Map<string, FakeTreeView>();
   const decorationChanges = new Set<string>();
   const tokenSource = new vscode.CancellationTokenSource();
   let decorations: vscode.FileDecorationProvider | undefined;
@@ -313,10 +385,20 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
       originalRegisterCommand(prefix + args[0], args[1], args[2]);
     vscode.window.createTreeView = <T>(id: string, options: vscode.TreeViewOptions<T>) => {
       providers.set(id, options.treeDataProvider as vscode.TreeDataProvider<vscode.TreeItem>);
+      const view: FakeTreeView = { visible: true, reveals: [], visibility: new vscode.EventEmitter() };
+      views.set(id, view);
       return {
         onDidExpandElement: () => ({ dispose: () => undefined }),
         onDidCollapseElement: () => ({ dispose: () => undefined }),
-        dispose: () => undefined,
+        onDidChangeVisibility: view.visibility.event,
+        get visible() {
+          return view.visible;
+        },
+        reveal: (element: vscode.TreeItem, revealOptions: unknown) => {
+          view.reveals.push({ id: element.id, options: revealOptions });
+          return Promise.resolve();
+        },
+        dispose: () => view.visibility.dispose(),
         message: "",
       } as unknown as vscode.TreeView<T>;
     };
@@ -350,6 +432,7 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
       prefix,
       manager,
       providers,
+      views,
       decorations,
       decorationChanges,
       token: tokenSource.token,
@@ -370,9 +453,19 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
 }
 
 async function treeRows(harness: NavigationHarness, viewId: string): Promise<vscode.TreeItem[]> {
-  const provider = harness.providers.get(viewId);
-  assert.ok(provider, `${viewId} tree provider is registered`);
-  return (await provider.getChildren()) ?? [];
+  return (await provider(harness, viewId).getChildren()) ?? [];
+}
+
+function provider(harness: NavigationHarness, viewId: string): vscode.TreeDataProvider<vscode.TreeItem> {
+  const registered = harness.providers.get(viewId);
+  assert.ok(registered, `${viewId} tree provider is registered`);
+  return registered;
+}
+
+function view(harness: NavigationHarness, viewId: string): FakeTreeView {
+  const created = harness.views.get(viewId);
+  assert.ok(created, `${viewId} tree view is created`);
+  return created;
 }
 
 function rowUri(row: vscode.TreeItem): vscode.Uri {

@@ -344,6 +344,7 @@ function testTreeView<T>(): vscode.TreeView<T> {
   return {
     onDidExpandElement: () => disposable,
     onDidCollapseElement: () => disposable,
+    onDidChangeVisibility: () => disposable,
     dispose: () => undefined,
     message: undefined,
   } as unknown as vscode.TreeView<T>;
