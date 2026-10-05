@@ -1,5 +1,10 @@
 import * as vscode from "vscode";
-import type { NavigationContextSource, NavigationPaneOpening, SpaceSelectionOperations } from "../capabilities";
+import type {
+  NavigationContextSource,
+  NavigationPaneOpening,
+  SpaceSelectionOperations,
+  VisiblePaneEditorsSource,
+} from "../capabilities";
 import { AgentsModel } from "./AgentsModel";
 import { VsCodeAgentsView } from "./view";
 
@@ -13,9 +18,10 @@ export class AgentsFeature {
     private readonly context: NavigationContextSource,
     private readonly spaceSelection: SpaceSelectionOperations,
     private readonly paneOpening: NavigationPaneOpening,
+    paneEditors: VisiblePaneEditorsSource,
   ) {
     this.model = new AgentsModel(context);
-    this.view = new VsCodeAgentsView(this.model);
+    this.view = new VsCodeAgentsView(this.model, paneEditors);
     this.commands = vscode.commands.registerCommand("herdr.openAgentPane", (paneId: unknown) => {
       if (typeof paneId === "string") this.openAgentPane(paneId);
     });

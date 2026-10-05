@@ -39,6 +39,7 @@ export class NavigationFeature {
     const context = new NavigationContextModel(dependencies.sessionProjection, dependencies.paneEditorPresence);
     const panes = new PanesFeature(
       context,
+      context,
       dependencies.paneTerminalOpening,
       dependencies.creation,
       dependencies.management,
@@ -56,7 +57,7 @@ export class NavigationFeature {
     this.panes = panes;
     this.spaces = spaces;
     this.scripts = new ScriptsFeature(context, dependencies.creation, panes);
-    this.agents = new AgentsFeature(context, context, panes);
+    this.agents = new AgentsFeature(context, context, panes, context);
     this.decorationProvider = new VisiblePaneEditorDecorationProvider(context, context);
     this.decorations = vscode.window.registerFileDecorationProvider(this.decorationProvider);
   }

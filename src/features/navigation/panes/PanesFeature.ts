@@ -6,7 +6,7 @@ import type {
   SplitDirection,
 } from "@capabilities/sessions";
 import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
-import type { NavigationContextSource, NavigationPaneOpening } from "../capabilities";
+import type { NavigationContextSource, NavigationPaneOpening, VisiblePaneEditorsSource } from "../capabilities";
 import { paneName } from "../shared";
 import { PanesModel, tabInsertIndex, type PaneNavigationItem, type PaneNavigationRow } from "./PanesModel";
 import { PaneTreeItem, PanesGroupTreeItem, VsCodePanesView } from "./view";
@@ -19,6 +19,7 @@ export class PanesFeature implements NavigationPaneOpening {
 
   constructor(
     private readonly context: NavigationContextSource,
+    paneEditors: VisiblePaneEditorsSource,
     private readonly paneTerminalOpening: PaneTerminalOpening,
     private readonly creation: ActiveSessionCreation,
     private readonly management: ActiveSessionManagement,
@@ -27,7 +28,7 @@ export class PanesFeature implements NavigationPaneOpening {
     const model = new PanesModel(context);
     let view: VsCodePanesView | undefined;
     try {
-      view = new VsCodePanesView(model, (tabId, targetTabId) => this.moveTab(tabId, targetTabId));
+      view = new VsCodePanesView(model, paneEditors, (tabId, targetTabId) => this.moveTab(tabId, targetTabId));
       this.commands = vscode.Disposable.from(
         vscode.commands.registerCommand("herdr.openPane", (paneId: unknown) => {
           if (typeof paneId === "string") {

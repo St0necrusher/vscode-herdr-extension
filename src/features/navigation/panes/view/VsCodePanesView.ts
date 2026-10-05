@@ -7,6 +7,7 @@ import type {
   PanesModel,
   PanesState,
 } from "../PanesModel";
+import type { VisiblePaneEditorsSource } from "../../capabilities";
 import { paneRowUri } from "../../shared/view";
 
 export type PanesTreeItem = PanesGroupTreeItem | PaneTreeItem;
@@ -22,6 +23,8 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
   private readonly subscription: { dispose(): void };
   private readonly expansionSubscription: { dispose(): void };
   private readonly collapseSubscription: { dispose(): void };
+  private readonly focusSubscription: { dispose(): void };
+  private readonly visibilitySubscription: { dispose(): void };
   private readonly view: vscode.TreeView<PanesTreeItem>;
   private readonly expanded = new Map<string, boolean>();
   private disposed = false;
@@ -29,6 +32,7 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
 
   constructor(
     private readonly model: PanesModel,
+    private readonly paneEditors: VisiblePaneEditorsSource,
     moveTab: TabMove,
   ) {
     this.view = vscode.window.createTreeView("herdr.panes", {
@@ -48,6 +52,8 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
       if (event.element instanceof PanesGroupTreeItem && event.element.id !== undefined)
         this.expanded.set(event.element.id, false);
     });
+    this.focusSubscription = paneEditors.onDidChangeFocusedEditorPaneId(() => this.revealFocusedPane());
+    this.visibilitySubscription = this.view.onDidChangeVisibility(() => this.revealFocusedPane());
     const state = model.getState();
     setMessage(this.view, state);
     setPaneActionsEnabled(state);
@@ -64,6 +70,15 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     setMessage(this.view, state);
     if (state.kind === "unavailable" || state.kind === "no-space") return [];
     return state.items.map((item) => treeItem(item, this.expanded));
+  }
+
+  // reveal resolves rows by id, so a freshly built item stands for the row VS Code already shows.
+  getParent(item: PanesTreeItem): PanesTreeItem | undefined {
+    if (!(item instanceof PaneTreeItem) || item instanceof SingletonPaneTreeItem) return undefined;
+    const state = this.model.getState();
+    if (state.kind === "unavailable" || state.kind === "no-space") return undefined;
+    const group = state.items.find((candidate) => candidate.kind === "group" && candidate.tab.id === item.tabId);
+    return group === undefined ? undefined : treeItem(group, this.expanded);
   }
 
   promptPaneName(currentLabel: string): Thenable<string | undefined> {
@@ -116,9 +131,19 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     this.subscription.dispose();
     this.expansionSubscription.dispose();
     this.collapseSubscription.dispose();
+    this.focusSubscription.dispose();
+    this.visibilitySubscription.dispose();
     this.view.dispose();
     this.changes.dispose();
     this.expanded.clear();
+  }
+
+  // Like the Explorer: reveal opens its view, so a hidden view waits until it is shown and catches up then.
+  private revealFocusedPane(): void {
+    const paneId = this.paneEditors.getFocusedEditorPaneId();
+    if (!this.view.visible || paneId === undefined) return;
+    const item = paneTreeItem(this.model.getState(), paneId);
+    if (item !== undefined) void this.view.reveal(item, { select: true, focus: false });
   }
 }
 
@@ -195,6 +220,16 @@ function treeItem(item: PaneNavigationItem, expanded: ReadonlyMap<string, boolea
   const group = new PanesGroupTreeItem(item);
   if (expanded.get(item.tab.id) === false) group.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
   return group;
+}
+
+function paneTreeItem(state: PanesState, paneId: string): PaneTreeItem | undefined {
+  if (state.kind === "unavailable" || state.kind === "no-space") return undefined;
+  const singleton = state.items.find((item) => item.kind === "singleton" && item.pane.id === paneId);
+  if (singleton?.kind === "singleton") return new SingletonPaneTreeItem(singleton);
+  const row = state.items
+    .flatMap((item) => (item.kind === "group" ? item.panes : []))
+    .find((candidate) => candidate.pane.id === paneId);
+  return row === undefined ? undefined : new PaneTreeItem(row);
 }
 
 function setPaneActionsEnabled(state: PanesState): void {

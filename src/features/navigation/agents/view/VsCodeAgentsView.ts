@@ -1,21 +1,29 @@
 import * as vscode from "vscode";
 import type { HerdrAgentStatus } from "@capabilities/sessions";
+import type { VisiblePaneEditorsSource } from "../../capabilities";
 import { agentRowUri } from "../../shared/view";
 import type { AgentNavigationRow, AgentsModel, AgentsState } from "../AgentsModel";
 
 export class VsCodeAgentsView implements vscode.TreeDataProvider<AgentTreeItem>, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<AgentTreeItem | undefined | null>();
   private readonly subscription: { dispose(): void };
+  private readonly focusSubscription: { dispose(): void };
+  private readonly visibilitySubscription: { dispose(): void };
   private readonly view: vscode.TreeView<AgentTreeItem>;
   private disposed = false;
   readonly onDidChangeTreeData = this.changes.event;
 
-  constructor(private readonly model: AgentsModel) {
+  constructor(
+    private readonly model: AgentsModel,
+    private readonly paneEditors: VisiblePaneEditorsSource,
+  ) {
     this.view = vscode.window.createTreeView("herdr.agents", { treeDataProvider: this });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
       this.changes.fire(undefined);
     });
+    this.focusSubscription = paneEditors.onDidChangeFocusedEditorPaneId(() => this.revealFocusedAgent());
+    this.visibilitySubscription = this.view.onDidChangeVisibility(() => this.revealFocusedAgent());
     setMessage(this.view, model.getState());
   }
 
@@ -31,12 +39,28 @@ export class VsCodeAgentsView implements vscode.TreeDataProvider<AgentTreeItem>,
     return state.rows.map((row) => new AgentTreeItem(row));
   }
 
+  // The list is flat; reveal requires the method all the same.
+  getParent(): undefined {
+    return undefined;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.subscription.dispose();
+    this.focusSubscription.dispose();
+    this.visibilitySubscription.dispose();
     this.view.dispose();
     this.changes.dispose();
+  }
+
+  // Like the Explorer: reveal opens its view, so a hidden view waits until it is shown and catches up then.
+  private revealFocusedAgent(): void {
+    const paneId = this.paneEditors.getFocusedEditorPaneId();
+    const state = this.model.getState();
+    if (!this.view.visible || paneId === undefined || state.kind === "unavailable") return;
+    const row = state.rows.find((candidate) => candidate.pane.id === paneId);
+    if (row !== undefined) void this.view.reveal(new AgentTreeItem(row), { select: true, focus: false });
   }
 }
 
