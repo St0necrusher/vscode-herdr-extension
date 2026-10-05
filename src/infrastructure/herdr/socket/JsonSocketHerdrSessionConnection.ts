@@ -133,6 +133,10 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
     await this.mutate("tab.rename", { tab_id: tabId, label }, "tab_info");
   }
 
+  async moveTab(tabId: string, insertIndex: number): Promise<void> {
+    await this.mutate("tab.move", { tab_id: tabId, insert_index: insertIndex }, "tab_list");
+  }
+
   async renameSpace(spaceId: string, label: string): Promise<void> {
     await this.mutate("workspace.rename", { workspace_id: spaceId, label }, "workspace_info");
   }
@@ -177,6 +181,7 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
       | "pane.send_input"
       | "pane.rename"
       | "tab.rename"
+      | "tab.move"
       | "workspace.rename"
       | "pane.close"
       | "tab.close"
@@ -266,9 +271,10 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
   }
 
   private async mutate(
-    method: "pane.rename" | "tab.rename" | "workspace.rename" | "pane.close" | "tab.close" | "workspace.close",
+    method:
+      "pane.rename" | "tab.rename" | "tab.move" | "workspace.rename" | "pane.close" | "tab.close" | "workspace.close",
     params: Readonly<Record<string, unknown>>,
-    resultType: "ok" | "pane_info" | "tab_info" | "workspace_info",
+    resultType: "ok" | "pane_info" | "tab_info" | "tab_list" | "workspace_info",
   ): Promise<void> {
     requireResultType(await this.requestOnce(method, params), resultType);
     await this.publishSnapshotAfterMutation();

@@ -338,6 +338,7 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
       management: {
         renamePane: unused,
         renameTab: unused,
+        moveTab: unused,
         renameSpace: unused,
         closePane: unused,
         closeTab: unused,

@@ -27,7 +27,7 @@ The Space this VS Code window is browsing; a local choice that never changes Her
 _Avoid_: active Space, current Space
 
 **Herdr Tab**:
-A layout group inside a Space containing one or more Panes, potentially arranged as splits.
+A layout group inside a Space containing one or more Panes, potentially arranged as splits. Its position within the Space is owned by Herdr; the extension only requests moves.
 _Avoid_: terminal, VS Code editor tab
 
 **Pane**:

@@ -8,7 +8,7 @@ import type {
 import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
 import type { NavigationContextSource, NavigationPaneOpening } from "../capabilities";
 import { paneName } from "../shared";
-import { PanesModel, type PaneNavigationItem, type PaneNavigationRow } from "./PanesModel";
+import { PanesModel, tabInsertIndex, type PaneNavigationItem, type PaneNavigationRow } from "./PanesModel";
 import { PaneTreeItem, PanesGroupTreeItem, VsCodePanesView } from "./view";
 
 export class PanesFeature implements NavigationPaneOpening {
@@ -27,7 +27,7 @@ export class PanesFeature implements NavigationPaneOpening {
     const model = new PanesModel(context);
     let view: VsCodePanesView | undefined;
     try {
-      view = new VsCodePanesView(model);
+      view = new VsCodePanesView(model, (tabId, targetTabId) => this.moveTab(tabId, targetTabId));
       this.commands = vscode.Disposable.from(
         vscode.commands.registerCommand("herdr.openPane", (paneId: unknown) => {
           if (typeof paneId === "string") {
@@ -113,6 +113,24 @@ export class PanesFeature implements NavigationPaneOpening {
       await this.management.renameTab({ sessionId: state.sessionId, tabId, label });
     } catch (error) {
       this.view.showTabRenameError(error);
+    }
+  }
+
+  private async moveTab(tabId: string, targetTabId: string | undefined): Promise<void> {
+    const state = this.model.getState();
+    if (state.kind !== "connected") return;
+
+    const insertIndex = tabInsertIndex(
+      state.items.map((item) => item.tab.id),
+      tabId,
+      targetTabId,
+    );
+    if (insertIndex === undefined) return;
+
+    try {
+      await this.management.moveTab({ sessionId: state.sessionId, tabId, insertIndex });
+    } catch (error) {
+      this.view.showTabMoveError(error);
     }
   }
 

@@ -81,6 +81,10 @@ class RecordingManagement implements ActiveSessionManagement {
     return Promise.resolve();
   }
 
+  moveTab(): Promise<void> {
+    return Promise.reject(new Error("not used"));
+  }
+
   renameSpace(request: RenameSpaceRequest): Promise<void> {
     this.renameSpaceRequests.push(request);
     const current = currentConnectedProjection(this.projection);

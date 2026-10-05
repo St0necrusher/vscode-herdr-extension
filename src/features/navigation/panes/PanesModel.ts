@@ -120,6 +120,21 @@ export class PanesModel {
   }
 }
 
+// The dragged Tab takes the target's place; no target means the end. Herdr counts the insert index as a gap
+// in the order before the move, so a Tab moving down is inserted one past its target.
+export function tabInsertIndex(
+  tabIds: readonly string[],
+  tabId: string,
+  targetTabId: string | undefined,
+): number | undefined {
+  const from = tabIds.indexOf(tabId);
+  const to = targetTabId === undefined ? tabIds.length - 1 : tabIds.indexOf(targetTabId);
+  const bothShown = from !== -1 && to !== -1;
+  const changesOrder = bothShown && from !== to;
+  if (!changesOrder) return undefined;
+  return from < to ? to + 1 : to;
+}
+
 function paneRow(pane: HerdrPane, tab: HerdrTab, closable: boolean): PaneNavigationRow {
   return { pane, tab, name: paneName(pane), closable };
 }

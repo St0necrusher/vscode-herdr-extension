@@ -4,6 +4,7 @@ import type {
   ClosePaneRequest,
   CloseSpaceRequest,
   CloseTabRequest,
+  MoveTabRequest,
   CreatedPane,
   CreatedSpace,
   CreatePaneRequest,
@@ -119,6 +120,10 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations, A
 
   async renameTab(request: RenameTabRequest): Promise<void> {
     return this.activeConnection(request.sessionId).renameTab(request.tabId, request.label);
+  }
+
+  async moveTab(request: MoveTabRequest): Promise<void> {
+    return this.activeConnection(request.sessionId).moveTab(request.tabId, request.insertIndex);
   }
 
   async renameSpace(request: RenameSpaceRequest): Promise<void> {

@@ -44,6 +44,7 @@ export interface HerdrSessionConnection {
   runCommand(paneId: string, command: string): Promise<void>;
   renamePane(paneId: string, label: string | null): Promise<void>;
   renameTab(tabId: string, label: string): Promise<void>;
+  moveTab(tabId: string, insertIndex: number): Promise<void>;
   renameSpace(spaceId: string, label: string): Promise<void>;
   closePane(paneId: string): Promise<void>;
   closeTab(tabId: string): Promise<void>;
