@@ -1,4 +1,4 @@
-import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "@capabilities/sessions";
+import type { ActiveSessionProjectionSource, ActiveSessionProjectionState, HerdrPane } from "@capabilities/sessions";
 import type { PaneEditorPresence, PaneEditorPresenceSource } from "@capabilities/terminalSurfaces";
 import type {
   NavigationContextState,
@@ -12,17 +12,20 @@ export class NavigationContextModel
 {
   private readonly listeners = new Set<(state: NavigationContextState) => void>();
   private readonly visibleListeners = new Set<(paneIds: ReadonlySet<string>) => void>();
+  private readonly focusedListeners = new Set<(paneId: string | undefined) => void>();
   private readonly sessionSubscription: { dispose(): void };
   private readonly presenceSubscription: { dispose(): void };
   private presence: PaneEditorPresence;
   private state: NavigationContextState;
   private visiblePaneIds: ReadonlySet<string>;
+  private focusedEditorPaneId: string | undefined;
   private disposed = false;
 
   constructor(source: ActiveSessionProjectionSource, presenceSource: PaneEditorPresenceSource) {
     this.presence = presenceSource.getPaneEditorPresence();
     this.state = contextState(source.getActiveSessionProjection());
     this.visiblePaneIds = activeSessionVisiblePaneIds(this.state, this.presence);
+    this.focusedEditorPaneId = focusedEditorPane(this.state, this.presence)?.id;
     this.sessionSubscription = source.onDidChangeActiveSessionProjection((next) => this.replaceProjection(next));
     this.presenceSubscription = presenceSource.onDidChangePaneEditorPresence((next) => this.replacePresence(next));
   }
@@ -47,6 +50,16 @@ export class NavigationContextModel
     return { dispose: () => this.visibleListeners.delete(listener) };
   }
 
+  getFocusedEditorPaneId(): string | undefined {
+    return this.focusedEditorPaneId;
+  }
+
+  onDidChangeFocusedEditorPaneId(listener: (paneId: string | undefined) => void): { dispose(): void } {
+    if (this.disposed) return { dispose: () => undefined };
+    this.focusedListeners.add(listener);
+    return { dispose: () => this.focusedListeners.delete(listener) };
+  }
+
   selectSpace(spaceId: string): void {
     if (this.disposed) return;
     const current = this.state;
@@ -62,6 +75,7 @@ export class NavigationContextModel
     this.presenceSubscription.dispose();
     this.listeners.clear();
     this.visibleListeners.clear();
+    this.focusedListeners.clear();
   }
 
   private replaceProjection(next: ActiveSessionProjectionState): void {
@@ -69,32 +83,30 @@ export class NavigationContextModel
     this.update(contextState(next, this.state));
   }
 
-  // Only a change of the focused Pane Editor moves the Selected Space, so a Space the user picks is not overridden.
   private replacePresence(next: PaneEditorPresence): void {
     if (this.disposed) return;
-    const focusChanged =
-      next.focused?.sessionId !== this.presence.focused?.sessionId ||
-      next.focused?.paneId !== this.presence.focused?.paneId;
     this.presence = next;
-    const current = this.state;
-    const focused = next.focused;
-    if (!focusChanged || current.kind === "unavailable" || focused?.sessionId !== current.sessionId) {
-      this.update(current);
-      return;
-    }
-    const focusedPane = current.snapshot.panes.find((pane) => pane.id === focused.paneId);
-    this.update(focusedPane === undefined ? current : { ...current, selectedSpaceId: focusedPane.spaceId });
+    this.update(this.state);
   }
 
-  // Both facts are applied before either is published, so every listener reads a consistent pair.
-  private update(nextState: NavigationContextState): void {
+  // All facts are applied before any is published, so every listener reads a consistent set. The Focused Pane Editor
+  // is published last, so a tree that reveals its row has already queued the refresh for a new Selected Space.
+  private update(next: NavigationContextState): void {
+    const focusedPane = focusedEditorPane(next, this.presence);
+    const nextFocusedEditorPaneId = focusedPane?.id;
+    const focusedChanged = nextFocusedEditorPaneId !== this.focusedEditorPaneId;
+    // Only a change of the Focused Pane Editor moves the Selected Space, so a Space the user picks is not overridden.
+    const movesSelectedSpace = focusedChanged && focusedPane !== undefined && next.kind !== "unavailable";
+    const nextState = movesSelectedSpace ? { ...next, selectedSpaceId: focusedPane.spaceId } : next;
     const stateChanged = !sameState(this.state, nextState);
     const nextVisiblePaneIds = activeSessionVisiblePaneIds(nextState, this.presence);
     const visibleChanged = !sameIds(this.visiblePaneIds, nextVisiblePaneIds);
     if (stateChanged) this.state = nextState;
     if (visibleChanged) this.visiblePaneIds = nextVisiblePaneIds;
-    if (stateChanged) for (const listener of [...this.listeners]) listener(this.state);
-    if (visibleChanged) for (const listener of [...this.visibleListeners]) listener(this.visiblePaneIds);
+    if (focusedChanged) this.focusedEditorPaneId = nextFocusedEditorPaneId;
+    if (stateChanged) [...this.listeners].forEach((listener) => listener(this.state));
+    if (visibleChanged) [...this.visibleListeners].forEach((listener) => listener(this.visiblePaneIds));
+    if (focusedChanged) [...this.focusedListeners].forEach((listener) => listener(this.focusedEditorPaneId));
   }
 }
 
@@ -145,6 +157,14 @@ function activeSessionVisiblePaneIds(state: NavigationContextState, presence: Pa
   return new Set(
     presence.visible.filter((editor) => editor.sessionId === state.sessionId).map((editor) => editor.paneId),
   );
+}
+
+// A Pane its snapshot does not list yet, such as one just moved, counts as unfocused until a snapshot lists it, so
+// the Selected Space and revealed rows catch up then.
+function focusedEditorPane(state: NavigationContextState, presence: PaneEditorPresence): HerdrPane | undefined {
+  const focused = presence.focused;
+  if (state.kind === "unavailable" || focused?.sessionId !== state.sessionId) return undefined;
+  return state.snapshot.panes.find((pane) => pane.id === focused.paneId);
 }
 
 function sameIds(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {

@@ -36,8 +36,11 @@ export interface NavigationPaneOpening {
   openPane(paneId: string): void;
 }
 
-// Panes of the active Session with a Visible Pane Editor; editors of other Sessions never reach Navigation (ADR 0010).
+// Panes of the active Session with a Visible Pane Editor, and the one with the Focused Pane Editor; editors of other
+// Sessions never reach Navigation (ADR 0010).
 export interface VisiblePaneEditorsSource {
   getVisiblePaneIds(): ReadonlySet<string>;
   onDidChangeVisiblePaneIds(listener: (paneIds: ReadonlySet<string>) => void): { dispose(): void };
+  getFocusedEditorPaneId(): string | undefined;
+  onDidChangeFocusedEditorPaneId(listener: (paneId: string | undefined) => void): { dispose(): void };
 }
