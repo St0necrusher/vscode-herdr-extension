@@ -116,6 +116,7 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
   private visiblePlaceholder: string | undefined;
   private publishedName: string | undefined;
   private paneNameVisible = false;
+  private revealOnOpen = false;
   private disposed = false;
 
   constructor(
@@ -138,6 +139,10 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
       handleInput: (data) => this.handleInput(data),
       open: (dimensions) => {
         this.host = { kind: "open", dimensions };
+        if (this.revealOnOpen) {
+          this.revealOnOpen = false;
+          this.terminal.show();
+        }
         if (this.client.kind === "observer-failed") this.client = { kind: "idle" };
         this.publishPaneName();
         this.converge();
@@ -164,6 +169,8 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
 
   reveal(): void {
     this.terminal.show();
+    // The first terminal of a window opens its editor before VS Code creates its xterm, which drops that focus (ADR 0013).
+    if (this.host.kind === "closed") this.revealOnOpen = true;
   }
 
   move(pane: HerdrPane): void {
