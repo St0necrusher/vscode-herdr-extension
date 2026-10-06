@@ -48,6 +48,12 @@ for (const entryPoint of [
 }
 
 await esbuild.build({
+  ...commonOptions,
+  entryPoints: [resolve(root, "test/extension-fresh-window/first-pane-editor-focus.test.ts")],
+  outfile: resolve(root, "dist/test/extension-fresh-window/first-pane-editor-focus.test.js"),
+});
+
+await esbuild.build({
   bundle: true,
   entryPoints: [resolve(root, "herdr-plugin/takeoverPopup.ts")],
   outfile: resolve(root, "dist/herdr-plugin/takeover-popup.js"),

@@ -48,6 +48,7 @@ export default tseslint.config(
         element("extension", "src/extension"),
         element("herdr-plugin", "herdr-plugin"),
         element("extension-test", "test/extension"),
+        element("extension-test", "test/extension-fresh-window"),
         element("integration-test", "test/integration"),
       ],
     },
