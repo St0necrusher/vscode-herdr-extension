@@ -27,7 +27,7 @@ export interface PaneTerminalSurfaceFactory {
 
 const MOUSE_MODES_OFF = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l";
 const SCREEN_RESET = `${MOUSE_MODES_OFF}\x1b[?1049l\x1b[3J\x1b[2J\x1b[H`;
-// Herdr's own exit tail is lost when an Attach is dropped (ADR 0011): pop every kitty flag on the current, alternate and main screens, then turn off the modes the attach client enables.
+// Herdr's own exit tail is lost when an Attach is dropped (ADR 0012): pop every kitty flag on the current, alternate and main screens, then turn off the modes the attach client enables.
 const ATTACH_MODES_RESET = `\x1b[<99u\x1b[?1049h\x1b[<99u\x1b[?1049l\x1b[<99u\x1b[?2004l\x1b[?1004l${MOUSE_MODES_OFF}`;
 const DISPLACED_OBSERVER_MODES_ON = "\x1b[?1000h\x1b[?1006h";
 const DISPLACED_OBSERVER_MODES_OFF = "\x1b[?1000l\x1b[?1006l";
