@@ -1,3 +1,4 @@
+export { TakeoverPluginRegistration, TakeoverPopupHost, type TakeoverOffer, type TakeoverOffers } from "./takeover";
 export { HerdrCliSessionDirectory, type HerdrSessionDirectory, type HerdrSessionListResult } from "./cli";
 export {
   JsonSocketHerdrSessionConnectionFactory,

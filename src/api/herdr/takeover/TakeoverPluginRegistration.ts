@@ -1,29 +1,22 @@
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import * as vscode from "vscode";
 import type { Logger } from "@core/logger";
-import type { HerdrConfigurationSource } from "@modules/sessions";
+import type { HerdrExecutableSource } from "./herdrExecutableSource";
 
 export const TAKEOVER_PLUGIN_ID = "st0necrusher.vscode-herdr-takeover";
 
 const PLUGIN_MANIFEST = "herdr-plugin.toml";
 
-export class TakeoverPluginRegistration implements vscode.Disposable {
+export class TakeoverPluginRegistration {
   private registered = false;
-  private readonly commands: vscode.Disposable;
 
   constructor(
-    private readonly configuration: HerdrConfigurationSource,
+    private readonly configuration: HerdrExecutableSource,
     private readonly logger: Logger,
     private readonly packagedPluginDirectory: string,
     private readonly copiedPluginDirectory: string,
-  ) {
-    this.commands = vscode.Disposable.from(
-      vscode.commands.registerCommand("herdr.installMobileTakeoverPlugin", () => this.install()),
-      vscode.commands.registerCommand("herdr.removeMobileTakeoverPlugin", () => this.remove()),
-    );
-  }
+  ) {}
 
   async initialize(): Promise<void> {
     try {
@@ -47,37 +40,23 @@ export class TakeoverPluginRegistration implements vscode.Disposable {
     return this.registered;
   }
 
-  dispose(): void {
-    this.commands.dispose();
+  async install(): Promise<void> {
+    await executeFile("node", ["--version"]);
+    if (this.registered) {
+      await this.runHerdr(["plugin", "unlink", TAKEOVER_PLUGIN_ID]);
+      this.registered = false;
+    }
+    await this.copyPackagedPlugin();
+    await this.runHerdr(["plugin", "link", this.copiedPluginDirectory]);
+    this.registered = true;
   }
 
-  private async install(): Promise<void> {
-    try {
-      await executeFile("node", ["--version"]);
-      if (this.registered) {
-        await this.runHerdr(["plugin", "unlink", TAKEOVER_PLUGIN_ID]);
-        this.registered = false;
-      }
-      await this.copyPackagedPlugin();
-      await this.runHerdr(["plugin", "link", this.copiedPluginDirectory]);
-      this.registered = true;
-      await vscode.window.showInformationMessage("Mobile Takeover Plugin installed.");
-    } catch (error) {
-      await this.showCommandError("install", error);
+  async remove(): Promise<void> {
+    if (this.registered) {
+      await this.runHerdr(["plugin", "unlink", TAKEOVER_PLUGIN_ID]);
+      this.registered = false;
     }
-  }
-
-  private async remove(): Promise<void> {
-    try {
-      if (this.registered) {
-        await this.runHerdr(["plugin", "unlink", TAKEOVER_PLUGIN_ID]);
-        this.registered = false;
-      }
-      await rm(this.copiedPluginDirectory, { recursive: true, force: true });
-      await vscode.window.showInformationMessage("Mobile Takeover Plugin removed.");
-    } catch (error) {
-      await this.showCommandError("remove", error);
-    }
+    await rm(this.copiedPluginDirectory, { recursive: true, force: true });
   }
 
   private async refreshRegisteredPlugin(): Promise<void> {
@@ -96,12 +75,6 @@ export class TakeoverPluginRegistration implements vscode.Disposable {
 
   private runHerdr(args: string[]): Promise<string> {
     return executeFile(this.configuration.read().executable, args);
-  }
-
-  private async showCommandError(operation: string, error: unknown): Promise<void> {
-    const reason = error instanceof Error ? error.message : String(error);
-    this.logger.error(`Could not ${operation} Mobile Takeover Plugin`, error);
-    await vscode.window.showErrorMessage(`Could not ${operation} Mobile Takeover Plugin: ${reason}`);
   }
 }
 

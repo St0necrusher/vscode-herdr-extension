@@ -12,7 +12,7 @@ import type { PaneOutputSink } from "./PaneOutputSink";
 import { PaneEditorFocusTracker } from "./PaneEditorFocusTracker";
 import { PaneEditorSelectionModel, type SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import { VsCodePaneTerminalSurface } from "./PaneTerminalSurface";
-import type { TakeoverOffers } from "./takeover";
+import type { TakeoverOffers } from "@api/herdr";
 
 const vscodeStub = vi.hoisted(() => {
   class MockEventEmitter<T> {
