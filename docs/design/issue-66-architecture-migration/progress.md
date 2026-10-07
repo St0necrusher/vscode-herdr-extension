@@ -34,9 +34,9 @@ Execution plan approved by the user on 2026-10-07.
 | 1a | Aliases, ESLint layer rules, `core/` | done |
 | 1b | `api/herdr` (cli, connection, protocol, types) | done |
 | 2a | `modules/sessions` (`SessionsModel` as one unit, projection mapping), `ARCHITECTURE.md:100` | done |
-| 2b | `views/sidebar/sessions`, `views/connection-status`, `features/start-local-session`, `features/configure-executable`; `SessionsFeature` removed | pending |
-| 3a | `modules/pane-editors`, `api/herdr/pane-clients`; `capabilities/terminalSurfaces` dissolved | pending |
-| 3b | `api/herdr/takeover`, `features/manage-takeover-plugin` | pending |
+| 2b | `views/sidebar/sessions`, `views/connection-status`, `features/start-local-session`, `features/configure-executable`; `SessionsFeature` removed | done |
+| 3a | `api/herdr/takeover`, `features/manage-takeover-plugin` (moved before the module: `PaneTerminalSurface` imports takeover) | pending |
+| 3b | `modules/pane-editors`, `api/herdr/pane-clients`; `capabilities/terminalSurfaces` dissolved | pending |
 | 4 | `modules/workspace-context` | pending |
 | 5a | `views/sidebar/{spaces,panes,agents,shared}`, create-space, create-pane, rename, close, reveal-pane | pending |
 | 5b | `views/npm-scripts`, `features/run-npm-script`; `NavigationFeature` removed | pending |
@@ -53,3 +53,4 @@ Execution plan approved by the user on 2026-10-07.
 - 2026-10-07: 1a accepted after one correction: the core logger is generic (`Logger`, `VsCodeLogger(name)`; composition passes "Herdr"). ESLint layer rules verified by the worker on an allowed/forbidden import matrix (report 1a). Next: 1b.
 - 2026-10-07: 1b accepted after one question round (D13, D14). `src/infrastructure/herdr/` removed; directory operations take the executable path. Assertion changes: D14 and the CLI test call arguments (D6) only.
 - 2026-10-07: 2a accepted after one correction (structural conformance instead of `implements HerdrConfigurationActions` in `VsCodeHerdrConfiguration`, which 2b deletes). `src/capabilities/sessions/` removed; D5 rules text edited. 2b briefed with D15.
+- 2026-10-07: 2b accepted after one review round (flat constructor cleanup in `HerdrExtension`, single dispose on initialization failure, status owner renamed `ConnectionStatus`). `src/features/sessions/` and `src/infrastructure/vscode/` removed; D3 tests rewritten per owner (mapping in report 2b). Slices 3a/3b swapped: takeover moves before the Pane Editors module.

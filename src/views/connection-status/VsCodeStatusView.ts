@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { Logger } from "@core/logger";
-import type { HerdrStatusAction, HerdrStatusModel } from "../../capabilities";
+import type { HerdrStatusAction, HerdrStatusModel } from "./statusTypes";
 
 type StatusTone = "checking" | "reconnecting" | "connected" | "failed";
 type Item = vscode.QuickPickItem & Readonly<{ id: HerdrStatusAction }>;

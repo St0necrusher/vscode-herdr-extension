@@ -1,11 +1,12 @@
 import * as vscode from "vscode";
-import type { HerdrConfigurationActions } from "../capabilities";
+import type { StartLocalSessionFeature } from "@features/start-local-session";
+import type { ConfigureExecutableFeature } from "@features/configure-executable";
 import type { Logger } from "@core/logger";
 import type { SessionsOperations, SessionsStateSource } from "@modules/sessions";
 import { statusModel } from "./statusModel";
-import { VsCodeStatusView } from "./view/VsCodeStatusView";
+import { VsCodeStatusView } from "./VsCodeStatusView";
 
-export class StatusFeature {
+export class ConnectionStatus {
   private readonly view: VsCodeStatusView;
   private readonly subscription: { dispose(): void };
   private readonly commands: { dispose(): void };
@@ -15,7 +16,8 @@ export class StatusFeature {
   constructor(
     private readonly source: SessionsStateSource,
     private readonly operations: SessionsOperations,
-    private readonly configurationActions: HerdrConfigurationActions,
+    private readonly startLocalSession: Pick<StartLocalSessionFeature, "start">,
+    private readonly configureExecutable: Pick<ConfigureExecutableFeature, "selectExecutable">,
     logger: Logger,
   ) {
     this.logger = logger;
@@ -34,14 +36,8 @@ export class StatusFeature {
       const registrations: vscode.Disposable[] = [];
       try {
         registrations.push(vscode.commands.registerCommand("herdr.showStatusActions", () => this.showActions()));
-        registrations.push(vscode.commands.registerCommand("herdr.start", () => operations.startSelectedSession()));
         registrations.push(vscode.commands.registerCommand("herdr.retryDiscovery", () => operations.retry()));
-        registrations.push(
-          vscode.commands.registerCommand("herdr.selectExecutable", () => configurationActions.selectExecutable()),
-        );
-        registrations.push(
-          vscode.commands.registerCommand("herdr.openSettings", () => configurationActions.openSettings()),
-        );
+        registrations.push(vscode.commands.registerCommand("herdr.openSettings", () => this.openSettings()));
         commands = vscode.Disposable.from(...registrations);
       } catch (error) {
         vscode.Disposable.from(...registrations).dispose();
@@ -69,24 +65,29 @@ export class StatusFeature {
   private async showActions(): Promise<void> {
     if (this.disposed) return;
     const action = await this.view.chooseAction(statusModel(this.source.getState()));
-    if (this.isDisposed() || action === undefined) return;
+    const cannotRunAction = this.isDisposed() || action === undefined;
+    if (cannotRunAction) return;
     switch (action) {
       case "start":
-        await this.operations.startSelectedSession();
+        await this.startLocalSession.start();
         break;
       case "retry":
         await this.operations.retry();
         break;
       case "select-executable":
-        await this.configurationActions.selectExecutable();
+        await this.configureExecutable.selectExecutable();
         break;
       case "open-settings":
-        await this.configurationActions.openSettings();
+        await this.openSettings();
         break;
       case "show-diagnostics":
         this.logger.show();
         break;
     }
+  }
+
+  private async openSettings(): Promise<void> {
+    await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:St0necrusher.vscode-herdr-extension");
   }
 
   private isDisposed(): boolean {

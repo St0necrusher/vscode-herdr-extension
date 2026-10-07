@@ -1,4 +1,5 @@
 import type { Logger } from "@core/logger";
+import { activeSessionProjection, type ActiveSessionProjectionState } from "./activeSessionProjection";
 import type {
   ActiveSessionManagement,
   ClosePaneRequest,
@@ -93,6 +94,14 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations, A
 
   getState(): SessionsState {
     return this.state;
+  }
+
+  getActiveSessionProjection(): ActiveSessionProjectionState {
+    return activeSessionProjection(this.state);
+  }
+
+  onDidChangeActiveSessionProjection(listener: (state: ActiveSessionProjectionState) => void): Disposable {
+    return this.onDidChange((state) => listener(activeSessionProjection(state)));
   }
 
   async createSpace(request: CreateSpaceRequest): Promise<CreatedSpace> {

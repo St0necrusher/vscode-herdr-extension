@@ -1,26 +1,39 @@
 import * as vscode from "vscode";
 import type { HerdrConnectionFailure } from "@api/herdr";
-import type { SessionsState, SessionsStateSource } from "@modules/sessions";
+import type { SessionsOperations, SessionsState, SessionsStateSource } from "@modules/sessions";
 
 export class VsCodeSessionsView implements vscode.TreeDataProvider<SessionTreeItem>, vscode.Disposable {
   private readonly changes: vscode.EventEmitter<SessionTreeItem | undefined | null>;
   private readonly subscription: { dispose(): void };
   private readonly registration: vscode.Disposable;
   private readonly source: SessionsStateSource;
+  private readonly commands: vscode.Disposable;
   private disposed = false;
   readonly onDidChangeTreeData: vscode.Event<SessionTreeItem | undefined | null>;
 
-  constructor(source: SessionsStateSource) {
+  constructor(source: SessionsStateSource, operations: Pick<SessionsOperations, "selectSession" | "refresh">) {
     const changes = new vscode.EventEmitter<SessionTreeItem | undefined | null>();
     this.changes = changes;
     this.source = source;
     this.onDidChangeTreeData = changes.event;
     let subscription: { dispose(): void } | undefined;
+    let registration: vscode.Disposable | undefined;
+    const commands: vscode.Disposable[] = [];
     try {
       subscription = source.onDidChange(() => changes.fire(undefined));
-      this.registration = vscode.window.registerTreeDataProvider("herdr.sessions", this);
+      registration = vscode.window.registerTreeDataProvider("herdr.sessions", this);
+      commands.push(
+        vscode.commands.registerCommand("herdr.selectSession", (id: unknown) =>
+          typeof id === "string" ? operations.selectSession(id) : undefined,
+        ),
+      );
+      commands.push(vscode.commands.registerCommand("herdr.refreshSessions", () => operations.refresh()));
+      this.commands = vscode.Disposable.from(...commands);
+      this.registration = registration;
       this.subscription = subscription;
     } catch (error) {
+      vscode.Disposable.from(...commands).dispose();
+      registration?.dispose();
       subscription?.dispose();
       changes.dispose();
       throw error;
@@ -45,6 +58,7 @@ export class VsCodeSessionsView implements vscode.TreeDataProvider<SessionTreeIt
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.commands.dispose();
     this.subscription.dispose();
     this.registration.dispose();
     this.changes.dispose();
