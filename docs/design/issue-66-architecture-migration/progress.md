@@ -24,7 +24,7 @@ Execution plan approved by the user on 2026-10-07.
 | # | Slice | Status |
 |---|---|---|
 | 0a | Characterization tests in existing test files | done |
-| 0b | Real-composition extension test against a fake herdr | pending |
+| 0b | Real-composition extension test against a fake herdr | done |
 | — | Baseline of test names and assertion lines | pending |
 | 1a | Aliases, ESLint layer rules, `core/` | pending |
 | 1b | `api/herdr` (cli, connection, protocol, types) | pending |
@@ -41,3 +41,5 @@ Execution plan approved by the user on 2026-10-07.
 - 2026-10-07: baseline on `054c1bc` — lint, format, Vitest (140 tests) green; `test:extension` 47 passing, 1 failing locally (`Run Script in Herdr › package.json hover offers Run in Herdr while connected…`: 2 links instead of 1). CI on the same commit is green; the failure reproduces with fresh VS Code user data. Treated as a known local exception; CI is the gate.
 - 2026-10-07: 0a dispatched to pi `sol-0a` (pane `w3:p4J`, worktree `-66`); 0b dispatched to pi `sol-0b` (pane `w3:p4K`, worktree `-66-0b`, branch `refactor/66-0b`). Each worktree has its own `.vscode-test/user-data`.
 - 2026-10-07: 0a accepted after review: 11 new tests (7 behaviors), no existing assertion changed. Criterion 2 limits accepted: Agent rows carry no contextValue; the npm scripts tree belongs to VS Code's npm extension; a non-closable grouped Pane row is unreachable. Validation: Vitest 141 passed; extension 57 passing, 1 known local failure.
+- 2026-10-07: 0b accepted after one review round (ESLint element instead of per-file disables; explicit activation-order guard). Mutation checks: removing the `pane.moved` subscription or the navigation projection fails the suite. Known risk: VS Code does not guarantee that the test bundle loads before `onStartupFinished` activation; the suite fails with a named "activation-order race" message if it does. Watch CI.
+- 2026-10-07: second known local exception: fresh-window `The first Pane Editor of a window › takes keyboard focus from the Panes View` times out on this machine depending on which app holds OS focus (fails on `6d1d6b9`, where it passed earlier). CI is the gate.
