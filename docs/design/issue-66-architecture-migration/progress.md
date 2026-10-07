@@ -19,6 +19,9 @@ Execution plan approved by the user on 2026-10-07.
 - **D11. ESLint grows with the stages.** Slice 1a adds layer rules and elements for the new layers while the old elements stay; each slice adds what its new folders need; slice 6 removes the old elements and verifies allowed and forbidden imports.
 - **D12. Workers.** Each slice gets a fresh pi worker on `openai-codex/gpt-6.1-sol --thinking medium` (a #66-only exception to `delegating-slices.md`). Workers stay under ~150k context and hand off before crossing it. Worker questions go to the coordinator, who resolves them with astra or the user. The coordinator writes no code.
 
+- **D13. Shape of `api/herdr`** (astra, 2026-10-07). The issue tree is a starting map; §3 decides. Shared Herdr data and `HerdrConnectionFailureError` live in `api/herdr/shared/` (no root `types.ts`); parts reach them through `../shared`, and `api/herdr/index.ts` re-exports what other blocks need, so consumers keep `@api/herdr`. `protocol/` is a part of `connection/` while only the connection uses it; `connection/shared/` only for code several connection parts use. `pane-clients/` and `takeover/` are parts of `api/herdr` taking the executable as a parameter or an injected current-value source. No rules change.
+- **D14. Test decisions go to astra.** The user delegated approval of test changes and architecture questions to astra. First case: `SessionsModel.test.ts:333` asserts `start` with `configuration.executable` instead of `configuration` (D6 changes the dependency contract, not the behavior).
+
 ## Slices
 
 | # | Slice | Status |
