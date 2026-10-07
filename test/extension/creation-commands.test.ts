@@ -13,7 +13,7 @@ import type {
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
 import type { PaneTerminalOpenRequest } from "../../src/modules/pane-editors";
 import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
-import { PanesGroupTreeItem, PaneTreeItem } from "../../src/features/navigation/panes/view/VsCodePanesView";
+import { PanesGroupTreeItem, PaneTreeItem } from "../../src/views/sidebar/panes/VsCodePanesView";
 
 const sessionId = "session-current";
 let sequence = 0;

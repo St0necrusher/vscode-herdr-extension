@@ -1,1 +1,0 @@
-export { paneName } from "./paneName";

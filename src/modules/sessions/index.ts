@@ -1,3 +1,6 @@
+export { paneName } from "./paneName";
+export { worktreeGroup } from "./worktreeGroup";
+export { isPaneClosable, isTabClosable } from "./closability";
 export { SessionsModel } from "./SessionsModel";
 export { activeSessionProjection } from "./activeSessionProjection";
 export type {

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { HerdrSpace } from "@api/herdr";
-import { spaceRowUri } from "../../shared/view";
-import type { SpaceNavigationEntry, SpacesModel, SpacesState } from "../SpacesModel";
+import { spaceRowUri } from "../shared";
+import type { SpaceNavigationEntry, SpacesModel, SpacesState } from "./SpacesModel";
 
 export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<SpaceTreeItem | undefined | null>();

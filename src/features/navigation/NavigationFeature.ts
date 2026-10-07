@@ -10,7 +10,7 @@ import { AgentsFeature } from "./agents";
 import { PanesFeature } from "./panes";
 import { ScriptsFeature } from "./scripts";
 import { SpacesFeature } from "./spaces";
-import { VisiblePaneEditorDecorationProvider } from "./shared/view";
+import { VisiblePaneEditorDecorationProvider } from "@views/sidebar";
 
 export type NavigationFeatureDependencies = Readonly<{
   sessionProjection: ActiveSessionProjectionSource;

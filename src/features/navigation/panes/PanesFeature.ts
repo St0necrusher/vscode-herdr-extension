@@ -1,12 +1,18 @@
 import * as vscode from "vscode";
-import type { ActiveSessionCreation, ActiveSessionManagement } from "@modules/sessions";
+import { paneName, type ActiveSessionCreation, type ActiveSessionManagement } from "@modules/sessions";
 import type { CreatedPane, SplitDirection } from "@api/herdr";
 import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@modules/pane-editors";
 import type { NavigationContextSource, VisiblePaneEditorsSource } from "@modules/workspace-context";
 import type { NavigationPaneOpening } from "../capabilities";
-import { paneName } from "../shared";
-import { PanesModel, tabInsertIndex, type PaneNavigationItem, type PaneNavigationRow } from "./PanesModel";
-import { PaneTreeItem, PanesGroupTreeItem, VsCodePanesView } from "./view";
+import {
+  PanesModel,
+  tabInsertIndex,
+  PaneTreeItem,
+  PanesGroupTreeItem,
+  VsCodePanesView,
+  type PaneNavigationItem,
+  type PaneNavigationRow,
+} from "@views/sidebar";
 
 export class PanesFeature implements NavigationPaneOpening {
   private readonly model: PanesModel;
