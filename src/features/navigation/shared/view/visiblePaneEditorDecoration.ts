@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { NavigationContextSource, VisiblePaneEditorsSource } from "../../capabilities";
+import type { NavigationContextSource, VisiblePaneEditorsSource } from "@modules/workspace-context";
 
 const scheme = "herdr-navigation";
 

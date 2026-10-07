@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { ActiveSessionCreation } from "@modules/sessions";
-import type { NavigationContextSource, NavigationPaneOpening } from "../capabilities";
+import type { NavigationContextSource } from "@modules/workspace-context";
+import type { NavigationPaneOpening } from "../capabilities";
 import { npmScriptCommand, packageFolder, type NpmScriptTarget } from "./npmScriptCommand";
 import { hoverScriptTarget, npmViewScriptTarget, VsCodeScriptsView } from "./view";
 

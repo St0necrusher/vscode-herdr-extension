@@ -1,12 +1,16 @@
-import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "@modules/sessions";
 import type { HerdrPane } from "@api/herdr";
-import type { PaneEditorPresence, PaneEditorPresenceSource } from "@modules/pane-editors";
+import type {
+  ActiveSessionProjectionSource,
+  ActiveSessionProjectionState,
+  PaneEditorPresence,
+  PaneEditorPresenceSource,
+} from "./source";
 import type {
   NavigationContextState,
   NavigationContextSource,
   SpaceSelectionOperations,
   VisiblePaneEditorsSource,
-} from "./capabilities";
+} from "./state";
 
 export class NavigationContextModel
   implements NavigationContextSource, SpaceSelectionOperations, VisiblePaneEditorsSource

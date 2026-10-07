@@ -6,7 +6,7 @@ import type {
   HerdrSpace,
   HerdrTab,
 } from "../../../api/herdr/shared/types";
-import type { NavigationContextSource, NavigationContextState } from "../capabilities";
+import type { NavigationContextSource, NavigationContextState } from "@modules/workspace-context";
 import { PanesModel } from "./PanesModel";
 
 function space(id: string, label = id, overrides: Partial<HerdrSpace> = {}): HerdrSpace {

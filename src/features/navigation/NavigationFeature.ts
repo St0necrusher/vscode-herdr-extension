@@ -1,8 +1,12 @@
 import * as vscode from "vscode";
-import type { ActiveSessionCreation, ActiveSessionManagement, ActiveSessionProjectionSource } from "@modules/sessions";
-import type { PaneEditorPresenceSource, PaneTerminalClosing, PaneTerminalOpening } from "@modules/pane-editors";
+import type { ActiveSessionCreation, ActiveSessionManagement } from "@modules/sessions";
+import type { PaneTerminalClosing, PaneTerminalOpening } from "@modules/pane-editors";
+import {
+  NavigationContextModel,
+  type ActiveSessionProjectionSource,
+  type PaneEditorPresenceSource,
+} from "@modules/workspace-context";
 import { AgentsFeature } from "./agents";
-import { NavigationContextModel } from "./NavigationContextModel";
 import { PanesFeature } from "./panes";
 import { ScriptsFeature } from "./scripts";
 import { SpacesFeature } from "./spaces";

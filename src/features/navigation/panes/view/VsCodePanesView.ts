@@ -7,7 +7,7 @@ import type {
   PanesModel,
   PanesState,
 } from "../PanesModel";
-import type { VisiblePaneEditorsSource } from "../../capabilities";
+import type { VisiblePaneEditorsSource } from "@modules/workspace-context";
 import { paneRowUri } from "../../shared/view";
 
 export type PanesTreeItem = PanesGroupTreeItem | PaneTreeItem;

@@ -1,5 +1,5 @@
 import type { HerdrAgent, HerdrPane, HerdrSpace, HerdrTab } from "@api/herdr";
-import type { NavigationContextSource, NavigationContextState } from "../capabilities";
+import type { NavigationContextSource, NavigationContextState } from "@modules/workspace-context";
 import { paneName } from "../shared";
 
 export type AgentNavigationRow = Readonly<{
