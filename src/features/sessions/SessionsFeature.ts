@@ -19,12 +19,11 @@ import type {
   HerdrSessionEventMap,
   HerdrSessionEventName,
   HerdrSessionEventSource,
-  HerdrConfigurationActions,
   HerdrConfigurationSource,
-} from "@capabilities/sessions";
+} from "@modules/sessions";
 import type { CreatedPane, CreatedSpace, HerdrSessionConnectionFactory, HerdrSessionDirectory } from "@api/herdr";
-import type { PersistentKeyValueStorage, SessionsState } from "./capabilities";
-import { SessionsModel } from "./SessionsModel";
+import type { HerdrConfigurationActions } from "./capabilities";
+import { SessionsModel, activeSessionProjection, type PersistentKeyValueStorage } from "@modules/sessions";
 import { VsCodeSessionsView } from "./view";
 import { StatusFeature } from "./status";
 
@@ -159,29 +158,4 @@ export class SessionsFeature
     this.view.dispose();
     this.model.dispose();
   }
-}
-
-function activeSessionProjection(state: SessionsState): ActiveSessionProjectionState {
-  const active = state.active;
-  if (active.kind === "connected") {
-    return { kind: "connected", sessionId: active.session.id, snapshot: active.snapshot };
-  }
-  if (active.kind === "reconnecting" && active.staleProjection !== undefined) {
-    return {
-      kind: "stale",
-      sessionId: active.session.id,
-      reason: "reconnecting",
-      snapshot: active.staleProjection.snapshot,
-    };
-  }
-  if (active.kind === "incompatible" && active.staleProjection !== undefined) {
-    return {
-      kind: "stale",
-      sessionId: active.session.id,
-      reason: "incompatible",
-      snapshot: active.staleProjection.snapshot,
-    };
-  }
-  const sessionId = active.kind === "unselected" ? undefined : active.session.id;
-  return sessionId === undefined ? { kind: "unavailable" } : { kind: "unavailable", sessionId };
 }

@@ -5,17 +5,13 @@ import type {
   CloseSpaceRequest,
   CloseTabRequest,
   MoveTabRequest,
-  CreatePaneRequest,
-  CreateSpaceRequest,
   RenamePaneRequest,
   RenameSpaceRequest,
   RenameTabRequest,
-  RunCommandRequest,
-  SplitPaneRequest,
-  HerdrConfiguration,
-  HerdrConfigurationSource,
-  HerdrSessionEventMap,
-} from "@capabilities/sessions";
+} from "./management";
+import type { CreatePaneRequest, CreateSpaceRequest, RunCommandRequest, SplitPaneRequest } from "./creation";
+import type { HerdrConfiguration, HerdrConfigurationSource } from "./configuration";
+import type { HerdrSessionEventMap } from "./sessionEvents";
 import type {
   CreatedPane,
   CreatedSpace,
@@ -37,7 +33,7 @@ import type {
   SessionsState,
   SessionsStateSource,
   StaleSessionProjection,
-} from "./capabilities";
+} from "./sessionsState";
 
 const selectedSessionKey = "herdr.selectedSession";
 const reconnectDelays = [500, 1000, 2000, 5000, 10000, 30000] as const;

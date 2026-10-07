@@ -97,7 +97,7 @@ A part imports the files of its own flat sub-parts directly; a part without its 
 
 ### `api/<system>/` — the backend
 
-Herdr is our backend. `api/herdr/` owns the state needed to talk to Herdr correctly: subscriptions, pending requests, bootstrap, one recovery attempt, a consistent snapshot, and the signal that synchronisation is lost.
+Herdr is our backend. `api/herdr/` owns the state needed to talk to Herdr correctly: subscriptions, pending requests, bootstrap, a consistent snapshot, and the signal that synchronisation is lost; it performs the connection and initial synchronisation on request, and the module decides when to retry.
 
 - Exports normalized readonly data (`HerdrSessionSnapshot`, `HerdrSpace`, `HerdrPane`…). Modules use these types directly; a module adds its own type only when its meaning differs.
 - Wire DTOs and decoders stay private.

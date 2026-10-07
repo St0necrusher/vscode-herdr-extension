@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { ActiveSessionCreation, ActiveSessionManagement } from "@capabilities/sessions";
+import type { ActiveSessionCreation, ActiveSessionManagement } from "@modules/sessions";
 import type { CreatedPane, SplitDirection } from "@api/herdr";
 import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
 import type { NavigationContextSource, NavigationPaneOpening, VisiblePaneEditorsSource } from "../capabilities";

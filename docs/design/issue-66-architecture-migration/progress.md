@@ -22,6 +22,8 @@ Execution plan approved by the user on 2026-10-07.
 - **D13. Shape of `api/herdr`** (astra, 2026-10-07). The issue tree is a starting map; §3 decides. Shared Herdr data and `HerdrConnectionFailureError` live in `api/herdr/shared/` (no root `types.ts`); parts reach them through `../shared`, and `api/herdr/index.ts` re-exports what other blocks need, so consumers keep `@api/herdr`. `protocol/` is a part of `connection/` while only the connection uses it; `connection/shared/` only for code several connection parts use. `pane-clients/` and `takeover/` are parts of `api/herdr` taking the executable as a parameter or an injected current-value source. No rules change.
 - **D14. Test decisions go to astra.** The user delegated approval of test changes and architecture questions to astra. First case: `SessionsModel.test.ts:333` asserts `start` with `configuration.executable` instead of `configuration` (D6 changes the dependency contract, not the behavior).
 
+- **D15. Active Session projection after the facade** (astra). `SessionsModel` provides `getActiveSessionProjection()` (its state mapped through `activeSessionProjection`) and `onDidChangeActiveSessionProjection()` (wrapping its own `onDidChange`). No separate object, no second store, no new publish order; the projection test is constructed on `SessionsModel` with its assertions unchanged.
+
 ## Slices
 
 | # | Slice | Status |
@@ -31,7 +33,7 @@ Execution plan approved by the user on 2026-10-07.
 | — | Baseline of test names and assertion lines | pending |
 | 1a | Aliases, ESLint layer rules, `core/` | done |
 | 1b | `api/herdr` (cli, connection, protocol, types) | done |
-| 2a | `modules/sessions` (`SessionsModel` as one unit, projection mapping), `ARCHITECTURE.md:100` | pending |
+| 2a | `modules/sessions` (`SessionsModel` as one unit, projection mapping), `ARCHITECTURE.md:100` | done |
 | 2b | `views/sidebar/sessions`, `views/connection-status`, `features/start-local-session`, `features/configure-executable`; `SessionsFeature` removed | pending |
 | 3a | `modules/pane-editors`, `api/herdr/pane-clients`; `capabilities/terminalSurfaces` dissolved | pending |
 | 3b | `api/herdr/takeover`, `features/manage-takeover-plugin` | pending |
@@ -50,3 +52,4 @@ Execution plan approved by the user on 2026-10-07.
 - 2026-10-07: settings (D6) move in slice 2b instead of 1a: the generic core reader has its first consumer only when `VsCodeHerdrConfiguration` is split.
 - 2026-10-07: 1a accepted after one correction: the core logger is generic (`Logger`, `VsCodeLogger(name)`; composition passes "Herdr"). ESLint layer rules verified by the worker on an allowed/forbidden import matrix (report 1a). Next: 1b.
 - 2026-10-07: 1b accepted after one question round (D13, D14). `src/infrastructure/herdr/` removed; directory operations take the executable path. Assertion changes: D14 and the CLI test call arguments (D6) only.
+- 2026-10-07: 2a accepted after one correction (structural conformance instead of `implements HerdrConfigurationActions` in `VsCodeHerdrConfiguration`, which 2b deletes). `src/capabilities/sessions/` removed; D5 rules text edited. 2b briefed with D15.

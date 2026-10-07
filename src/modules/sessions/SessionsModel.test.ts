@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { HerdrConfiguration } from "@capabilities/sessions";
+import type { HerdrConfiguration } from "./configuration";
 import type {
   CreatedPane,
   CreatedSpace,
@@ -15,7 +15,7 @@ import {
   HerdrConnectionFailureError,
   type HerdrConnectionFailure,
 } from "../../api/herdr/shared/HerdrConnectionFailureError";
-import type { PersistentKeyValueStorage } from "./capabilities";
+import type { PersistentKeyValueStorage } from "./sessionsState";
 import { SessionsModel } from "./SessionsModel";
 
 const configuration: HerdrConfiguration = { executable: "herdr", session: "default" };

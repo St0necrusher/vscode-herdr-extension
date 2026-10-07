@@ -3,7 +3,7 @@ import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import * as vscode from "vscode";
 import type { Logger } from "@core/logger";
-import type { HerdrConfigurationSource } from "@capabilities/sessions";
+import type { HerdrConfigurationSource } from "@modules/sessions";
 
 export const TAKEOVER_PLUGIN_ID = "st0necrusher.vscode-herdr-takeover";
 

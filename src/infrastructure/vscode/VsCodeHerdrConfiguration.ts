@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import type { HerdrConfiguration, HerdrConfigurationActions, HerdrConfigurationSource } from "@capabilities/sessions";
+import type { HerdrConfiguration, HerdrConfigurationSource } from "@modules/sessions";
 
-export class VsCodeHerdrConfiguration implements HerdrConfigurationSource, HerdrConfigurationActions {
+export class VsCodeHerdrConfiguration implements HerdrConfigurationSource {
   read(): HerdrConfiguration {
     const configuration = vscode.workspace.getConfiguration("herdr");
     const executable = configuration.get<string>("executable", "herdr").trim();
