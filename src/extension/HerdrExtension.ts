@@ -5,7 +5,7 @@ import {
   HerdrCliSessionDirectory,
   JsonSocketHerdrSessionConnectionFactory,
   NodeHerdrSocketConnector,
-} from "@infrastructure/herdr";
+} from "@api/herdr";
 import {
   HerdrPaneClientFactory,
   PaneEditorFocusTracker,

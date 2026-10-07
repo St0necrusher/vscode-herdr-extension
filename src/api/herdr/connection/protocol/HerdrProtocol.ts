@@ -1,5 +1,5 @@
-import { HerdrConnectionFailureError } from "@capabilities/sessions";
-import type { CreatedPane, CreatedSpace, HerdrSessionMetadata } from "@capabilities/sessions";
+import { HerdrConnectionFailureError } from "../../shared";
+import type { CreatedPane, CreatedSpace, HerdrSessionMetadata } from "../../shared";
 export type HerdrProtocolRecord = Record<string, unknown>;
 
 export const supportedProtocol = 22;

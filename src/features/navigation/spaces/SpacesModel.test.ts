@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { HerdrSessionSnapshot } from "@capabilities/sessions";
+import type { HerdrSessionSnapshot } from "../../../api/herdr/shared/types";
 import type { NavigationContextSource, NavigationContextState } from "../capabilities";
 import { SpacesModel } from "./SpacesModel";
 import type { SpacesState } from "./SpacesModel";

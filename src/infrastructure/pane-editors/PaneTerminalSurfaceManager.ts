@@ -7,7 +7,8 @@ import type {
   PaneTerminalOpenRequest,
   PaneTerminalOpening,
 } from "@capabilities/terminalSurfaces";
-import type { HerdrPaneMovedEvent, HerdrSessionEventSource } from "@capabilities/sessions";
+import type { HerdrSessionEventSource } from "@capabilities/sessions";
+import type { HerdrPaneMovedEvent } from "@api/herdr";
 import type { PaneEditorSelection, SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import type { PaneTerminalSurface, PaneTerminalSurfaceFactory } from "./PaneTerminalSurface";
 

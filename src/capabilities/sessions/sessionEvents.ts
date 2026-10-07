@@ -1,10 +1,4 @@
-import type { HerdrPane } from "./snapshot";
-
-export type HerdrPaneMovedEvent = Readonly<{
-  sessionId: string;
-  previousPaneId: string;
-  currentPane: HerdrPane;
-}>;
+import type { HerdrPaneMovedEvent } from "@api/herdr";
 
 export type HerdrSessionEventMap = Readonly<{
   "pane.moved": HerdrPaneMovedEvent;

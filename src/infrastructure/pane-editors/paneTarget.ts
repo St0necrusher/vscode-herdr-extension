@@ -1,4 +1,5 @@
-import type { ActiveSessionProjectionState, HerdrPane } from "@capabilities/sessions";
+import type { ActiveSessionProjectionState } from "@capabilities/sessions";
+import type { HerdrPane } from "@api/herdr";
 import type { SelectedPaneEditor } from "./PaneEditorSelectionModel";
 
 type LivePaneTarget = Readonly<{ kind: "live"; sessionId: string; pane: HerdrPane }>;

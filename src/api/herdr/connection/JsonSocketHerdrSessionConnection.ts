@@ -1,16 +1,15 @@
-import { HerdrConnectionFailureError } from "@capabilities/sessions";
+import { HerdrConnectionFailureError } from "../shared";
 import type {
   CreatedPane,
   CreatedSpace,
   HerdrConnectionFailure,
   HerdrPaneMovedEvent,
   HerdrResolvedSession,
-  HerdrSessionConnection,
   HerdrSessionMetadata,
-  HerdrSessionProjectionConsumer,
   HerdrSessionSnapshot,
   SplitDirection,
-} from "@capabilities/sessions";
+} from "../shared";
+import type { HerdrSessionConnection, HerdrSessionProjectionConsumer } from "./connection";
 import type { Logger } from "@core/logger";
 import {
   invalidResponse,
@@ -21,9 +20,11 @@ import {
   parseWorkspaceCreatedResult,
   requireResultType,
   type HerdrProtocolRecord,
-} from "./protocol/HerdrProtocol";
-import { parseHerdrPane, parseSnapshotResult } from "./protocol/HerdrSessionSnapshotDecoder";
-import { subscriptionsForPanes, validateEventMessage } from "./protocol/HerdrSubscriptions";
+  parseHerdrPane,
+  parseSnapshotResult,
+  subscriptionsForPanes,
+  validateEventMessage,
+} from "./protocol";
 import type { HerdrSocketConnector, HerdrSocketTransport } from "./NodeHerdrSocketConnector";
 import { asFailure, JsonSocketClient } from "./JsonSocketClient";
 

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type {
-  ActiveSessionProjectionSource,
-  ActiveSessionProjectionState,
-  HerdrSessionSnapshot,
-} from "@capabilities/sessions";
+import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "@capabilities/sessions";
+import type { HerdrSessionSnapshot } from "../../api/herdr/shared/types";
 import type { PaneEditorPresence, PaneEditorPresenceSource } from "@capabilities/terminalSurfaces";
 import { NavigationContextModel } from "./NavigationContextModel";
 import type { NavigationContextState } from "./capabilities";

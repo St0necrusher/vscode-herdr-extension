@@ -1,4 +1,4 @@
-import type { HerdrAgent, HerdrPane, HerdrSpace, HerdrTab } from "@capabilities/sessions";
+import type { HerdrAgent, HerdrPane, HerdrSpace, HerdrTab } from "@api/herdr";
 import type { NavigationContextSource, NavigationContextState } from "../capabilities";
 import { paneName } from "../shared";
 

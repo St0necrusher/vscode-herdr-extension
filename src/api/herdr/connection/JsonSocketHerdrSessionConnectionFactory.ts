@@ -1,9 +1,6 @@
 import type { Logger } from "@core/logger";
-import type {
-  HerdrResolvedSession,
-  HerdrSessionConnection,
-  HerdrSessionConnectionFactory,
-} from "@capabilities/sessions";
+import type { HerdrResolvedSession } from "../shared";
+import type { HerdrSessionConnection, HerdrSessionConnectionFactory } from "./connection";
 import { JsonSocketHerdrSessionConnection } from "./JsonSocketHerdrSessionConnection";
 import type { HerdrSocketConnector } from "./NodeHerdrSocketConnector";
 

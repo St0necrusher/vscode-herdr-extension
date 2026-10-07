@@ -1,7 +1,4 @@
-export type SplitDirection = "right" | "down";
-
-export type CreatedSpace = Readonly<{ spaceId: string; paneId: string }>;
-export type CreatedPane = Readonly<{ paneId: string }>;
+import type { SplitDirection, CreatedSpace, CreatedPane } from "@api/herdr";
 
 export type CreateSpaceRequest = Readonly<{ sessionId: string; cwd: string }>;
 export type CreatePaneRequest = Readonly<{ sessionId: string; spaceId: string; cwd?: string; label?: string }>;

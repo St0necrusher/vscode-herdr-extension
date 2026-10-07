@@ -1,3 +1,29 @@
+export type HerdrSessionId = string;
+
+export type HerdrSessionDescriptor = Readonly<{
+  id: HerdrSessionId;
+  isDefault: boolean;
+  availability: "running" | "stopped";
+  endpoint?: string;
+}>;
+
+export type HerdrSessionMetadata = Readonly<{
+  version: string;
+  protocol: number;
+  endpointProtocolGeneration?: number;
+  capabilities?: Readonly<{
+    detachedServerDaemon?: boolean;
+    healthCheck?: boolean;
+    liveHandoff?: boolean;
+    surfaceInterest?: boolean;
+  }>;
+}>;
+
+export type HerdrResolvedSession = Readonly<{
+  id: HerdrSessionId;
+  endpoint: string;
+}>;
+
 export type HerdrAgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
 
 export type HerdrAgentSessionReference = Readonly<{
@@ -132,4 +158,15 @@ export type HerdrSessionSnapshot = Readonly<{
   focusedSpaceId?: string;
   focusedHerdrTabId?: string;
   focusedPaneId?: string;
+}>;
+
+export type SplitDirection = "right" | "down";
+
+export type CreatedSpace = Readonly<{ spaceId: string; paneId: string }>;
+export type CreatedPane = Readonly<{ paneId: string }>;
+
+export type HerdrPaneMovedEvent = Readonly<{
+  sessionId: string;
+  previousPaneId: string;
+  currentPane: HerdrPane;
 }>;

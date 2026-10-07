@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { HerdrAgentStatus } from "@capabilities/sessions";
+import type { HerdrAgentStatus } from "@api/herdr";
 import type { VisiblePaneEditorsSource } from "../../capabilities";
 import { agentRowUri } from "../../shared/view";
 import type { AgentNavigationRow, AgentsModel, AgentsState } from "../AgentsModel";

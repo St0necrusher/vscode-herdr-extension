@@ -1,4 +1,4 @@
-import type { HerdrPane } from "@capabilities/sessions";
+import type { HerdrPane } from "@api/herdr";
 import type { PaneClientRequest } from "./HerdrPaneClientFactory";
 
 export type PaneEditorVisibility = "hidden" | "blurred" | "focused";

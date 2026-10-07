@@ -1,10 +1,5 @@
-import type {
-  HerdrConfiguration,
-  HerdrResolvedSession,
-  HerdrSessionDescriptor,
-  HerdrSessionDirectory,
-  HerdrSessionListResult,
-} from "@capabilities/sessions";
+import type { HerdrResolvedSession, HerdrSessionDescriptor } from "../shared";
+import type { HerdrSessionDirectory, HerdrSessionListResult } from "./directory";
 import type { ProcessRunner } from "@core/process";
 
 interface SessionRecord {
@@ -28,9 +23,9 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
     this.runner = runner;
   }
 
-  async list(configuration: HerdrConfiguration): Promise<HerdrSessionListResult> {
+  async list(executable: string): Promise<HerdrSessionListResult> {
     try {
-      const response = await this.runner.run(configuration.executable, ["session", "list", "--json"]);
+      const response = await this.runner.run(executable, ["session", "list", "--json"]);
       const sessions = parseSessionList(response.stdout);
       return {
         kind: "success",
@@ -41,8 +36,8 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
     }
   }
 
-  async resolve(configuration: HerdrConfiguration, sessionId: string): Promise<HerdrResolvedSession> {
-    const response = await this.runner.run(configuration.executable, ["session", "list", "--json"]);
+  async resolve(executable: string, sessionId: string): Promise<HerdrResolvedSession> {
+    const response = await this.runner.run(executable, ["session", "list", "--json"]);
     const sessions = parseSessionList(response.stdout);
     const session = sessions.find((candidate) => candidate.name === sessionId);
     if (session === undefined) throw new Error(`Herdr Session "${sessionId}" is no longer known.`);
@@ -52,7 +47,7 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
       return { id: sessionId, endpoint: session.socket_path };
     }
 
-    const statusResponse = await this.runner.run(configuration.executable, statusArgs(sessionId));
+    const statusResponse = await this.runner.run(executable, statusArgs(sessionId));
     const status = parseStatus(statusResponse.stdout);
     if (
       status.server?.running !== true ||
@@ -64,8 +59,8 @@ export class HerdrCliSessionDirectory implements HerdrSessionDirectory {
     return { id: sessionId, endpoint: status.server.socket };
   }
 
-  async start(configuration: HerdrConfiguration, sessionId: string): Promise<void> {
-    await this.runner.spawnDetached(configuration.executable, serverArgs(sessionId));
+  async start(executable: string, sessionId: string): Promise<void> {
+    await this.runner.spawnDetached(executable, serverArgs(sessionId));
   }
 }
 

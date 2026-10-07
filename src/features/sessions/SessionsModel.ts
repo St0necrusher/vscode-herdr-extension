@@ -5,8 +5,6 @@ import type {
   CloseSpaceRequest,
   CloseTabRequest,
   MoveTabRequest,
-  CreatedPane,
-  CreatedSpace,
   CreatePaneRequest,
   CreateSpaceRequest,
   RenamePaneRequest,
@@ -16,17 +14,21 @@ import type {
   SplitPaneRequest,
   HerdrConfiguration,
   HerdrConfigurationSource,
+  HerdrSessionEventMap,
+} from "@capabilities/sessions";
+import type {
+  CreatedPane,
+  CreatedSpace,
   HerdrConnectionFailure,
   HerdrResolvedSession,
   HerdrSessionConnection,
   HerdrSessionConnectionFactory,
   HerdrSessionDescriptor,
   HerdrSessionDirectory,
-  HerdrSessionEventMap,
   HerdrPaneMovedEvent,
   HerdrSessionMetadata,
   HerdrSessionSnapshot,
-} from "@capabilities/sessions";
+} from "@api/herdr";
 import type {
   ActiveSessionState,
   PersistentKeyValueStorage,
@@ -166,7 +168,7 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations, A
     this.publish({ configuration, catalog: { kind: "checking" }, active: { kind: "unselected" } });
     this.logger.info(`Discovering Herdr Session "${configuration.session}" with ${configuration.executable}.`);
     try {
-      const result = await this.directory.list(configuration);
+      const result = await this.directory.list(configuration.executable);
       if (!this.isCurrentRevision(requestRevision)) return;
       switch (result.kind) {
         case "success":
@@ -219,7 +221,7 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations, A
     const generation = this.generation;
     const sessionId = session.id;
     try {
-      await this.directory.start(this.state.configuration, sessionId);
+      await this.directory.start(this.state.configuration.executable, sessionId);
       if (this.isCurrentStart(revision, generation, sessionId)) await this.refresh();
     } catch (error) {
       if (!this.isCurrentStart(revision, generation, sessionId)) return;
@@ -353,7 +355,7 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations, A
       this.publishReconnecting(session, recovery, { kind: "attempting" });
     }
     try {
-      resolved = await this.directory.resolve(configuration, session.id);
+      resolved = await this.directory.resolve(configuration.executable, session.id);
       if (!this.isCurrentAttempt(generation, attempt)) return;
       if (reconnect) {
         if (recovery === undefined) return;

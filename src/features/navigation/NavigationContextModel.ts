@@ -1,4 +1,5 @@
-import type { ActiveSessionProjectionSource, ActiveSessionProjectionState, HerdrPane } from "@capabilities/sessions";
+import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "@capabilities/sessions";
+import type { HerdrPane } from "@api/herdr";
 import type { PaneEditorPresence, PaneEditorPresenceSource } from "@capabilities/terminalSurfaces";
 import type {
   NavigationContextState,

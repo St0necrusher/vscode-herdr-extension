@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { Logger } from "@core/logger";
-import type { ActiveSessionProjectionSource, ActiveSessionProjectionState, HerdrPane } from "@capabilities/sessions";
+import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "@capabilities/sessions";
+import type { HerdrPane } from "@api/herdr";
 import type { PaneEditorFocusTracker } from "./PaneEditorFocusTracker";
 import type { PaneClientFactory, PaneClientRequest } from "./HerdrPaneClientFactory";
 import type { PaneAttach } from "./HerdrPaneAttach";
