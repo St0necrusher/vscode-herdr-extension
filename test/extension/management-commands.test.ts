@@ -8,15 +8,12 @@ import type {
   ClosePaneRequest,
   CloseSpaceRequest,
   CloseTabRequest,
-  HerdrPane,
-  HerdrSessionSnapshot,
-  HerdrSpace,
-  HerdrTab,
   MoveTabRequest,
   RenamePaneRequest,
   RenameSpaceRequest,
   RenameTabRequest,
 } from "../../src/capabilities/sessions";
+import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
 import type { PaneTerminalClosing } from "../../src/capabilities/terminalSurfaces";
 import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
 import { PanesGroupTreeItem, PaneTreeItem } from "../../src/features/navigation/panes/view/VsCodePanesView";

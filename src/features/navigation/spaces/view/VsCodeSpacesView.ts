@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { HerdrSpace } from "@capabilities/sessions";
+import type { HerdrSpace } from "@api/herdr";
 import { spaceRowUri } from "../../shared/view";
 import type { SpaceNavigationEntry, SpacesModel, SpacesState } from "../SpacesModel";
 

@@ -1,11 +1,7 @@
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { Terminal } from "@xterm/headless";
-import type {
-  ActiveSessionProjectionSource,
-  ActiveSessionProjectionState,
-  HerdrPane,
-  HerdrSessionSnapshot,
-} from "@capabilities/sessions";
+import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "@capabilities/sessions";
+import type { HerdrPane, HerdrSessionSnapshot } from "../../api/herdr/shared/types";
 import type { Logger } from "@core/logger";
 import type * as vscode from "vscode";
 import type { PaneClientFactory, PaneClientRequest } from "./HerdrPaneClientFactory";

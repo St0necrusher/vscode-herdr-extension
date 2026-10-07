@@ -30,7 +30,7 @@ Execution plan approved by the user on 2026-10-07.
 | 0b | Real-composition extension test against a fake herdr | done |
 | — | Baseline of test names and assertion lines | pending |
 | 1a | Aliases, ESLint layer rules, `core/` | done |
-| 1b | `api/herdr` (cli, connection, protocol, types) | pending |
+| 1b | `api/herdr` (cli, connection, protocol, types) | done |
 | 2a | `modules/sessions` (`SessionsModel` as one unit, projection mapping), `ARCHITECTURE.md:100` | pending |
 | 2b | `views/sidebar/sessions`, `views/connection-status`, `features/start-local-session`, `features/configure-executable`; `SessionsFeature` removed | pending |
 | 3a | `modules/pane-editors`, `api/herdr/pane-clients`; `capabilities/terminalSurfaces` dissolved | pending |
@@ -49,3 +49,4 @@ Execution plan approved by the user on 2026-10-07.
 - 2026-10-07: baseline of test titles and assertion lines taken at `2519366` (177 `test`/`it` titles, 1095 lines). After each slice: lines of the baseline missing from the current snapshot must be explained by D3 or reviewed as import/construction changes.
 - 2026-10-07: settings (D6) move in slice 2b instead of 1a: the generic core reader has its first consumer only when `VsCodeHerdrConfiguration` is split.
 - 2026-10-07: 1a accepted after one correction: the core logger is generic (`Logger`, `VsCodeLogger(name)`; composition passes "Herdr"). ESLint layer rules verified by the worker on an allowed/forbidden import matrix (report 1a). Next: 1b.
+- 2026-10-07: 1b accepted after one question round (D13, D14). `src/infrastructure/herdr/` removed; directory operations take the executable path. Assertion changes: D14 and the CLI test call arguments (D6) only.

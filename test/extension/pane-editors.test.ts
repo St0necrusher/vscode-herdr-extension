@@ -4,13 +4,11 @@ import type { Logger } from "@core/logger";
 import type {
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
-  HerdrPane,
-  HerdrPaneMovedEvent,
   HerdrSessionEventMap,
   HerdrSessionEventName,
   HerdrSessionEventSource,
-  HerdrSessionSnapshot,
 } from "../../src/capabilities/sessions";
+import type { HerdrPane, HerdrPaneMovedEvent, HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
 import type { PaneTerminalOpenRequest } from "../../src/capabilities/terminalSurfaces";
 import type { PaneAttach } from "../../src/infrastructure/pane-editors/HerdrPaneAttach";
 import type { PaneClientFactory } from "../../src/infrastructure/pane-editors/HerdrPaneClientFactory";

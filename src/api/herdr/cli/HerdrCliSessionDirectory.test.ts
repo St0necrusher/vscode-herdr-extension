@@ -20,7 +20,7 @@ function createRunner(outputs: (ReturnType<typeof result> | Error)[]) {
   };
 }
 
-const defaults = { executable: "herdr", session: "default" };
+const executable = "herdr";
 
 function sessionList() {
   return result({
@@ -47,7 +47,7 @@ describe("Herdr CLI Session directory", () => {
   it("maps all known Sessions and their availability", async () => {
     const { runner } = createRunner([sessionList()]);
 
-    await expect(new HerdrCliSessionDirectory(runner).list(defaults)).resolves.toEqual({
+    await expect(new HerdrCliSessionDirectory(runner).list(executable)).resolves.toEqual({
       kind: "success",
       sessions: [
         { id: "default", isDefault: true, availability: "running", endpoint: "/tmp/default.sock" },
@@ -59,7 +59,7 @@ describe("Herdr CLI Session directory", () => {
   it("resolves a named running Session from its listed endpoint", async () => {
     const { runner } = createRunner([sessionList()]);
 
-    await expect(new HerdrCliSessionDirectory(runner).resolve(defaults, "default")).resolves.toEqual({
+    await expect(new HerdrCliSessionDirectory(runner).resolve(executable, "default")).resolves.toEqual({
       id: "default",
       endpoint: "/tmp/default.sock",
     });
@@ -73,7 +73,7 @@ describe("Herdr CLI Session directory", () => {
       result({ server: { running: true, socket: "/tmp/status.sock" }, unknown_field: "ignored" }),
     ]);
 
-    await expect(new HerdrCliSessionDirectory(runner).resolve(defaults, "default")).resolves.toEqual({
+    await expect(new HerdrCliSessionDirectory(runner).resolve(executable, "default")).resolves.toEqual({
       id: "default",
       endpoint: "/tmp/status.sock",
     });
@@ -84,19 +84,19 @@ describe("Herdr CLI Session directory", () => {
     const { runner } = createRunner([result({ sessions: [{ default: false, name: "work", running: false }] })]);
     const directory = new HerdrCliSessionDirectory(runner);
 
-    await expect(directory.resolve(defaults, "work")).rejects.toThrow('Herdr Session "work" is stopped.');
+    await expect(directory.resolve(executable, "work")).rejects.toThrow('Herdr Session "work" is stopped.');
   });
 
   it("maps a missing executable and process failure", async () => {
     const missing = Object.assign(new Error("spawn herdr ENOENT"), { code: "ENOENT" });
     const first = createRunner([missing]);
-    await expect(new HerdrCliSessionDirectory(first.runner).list(defaults)).resolves.toEqual({
+    await expect(new HerdrCliSessionDirectory(first.runner).list(executable)).resolves.toEqual({
       kind: "missing-executable",
     });
 
     const failure = Object.assign(new Error("Herdr failed"), { stderr: "Session discovery failed" });
     const second = createRunner([failure]);
-    await expect(new HerdrCliSessionDirectory(second.runner).list(defaults)).resolves.toEqual({
+    await expect(new HerdrCliSessionDirectory(second.runner).list(executable)).resolves.toEqual({
       kind: "failure",
       diagnostic: "Session discovery failed",
     });
@@ -106,13 +106,7 @@ describe("Herdr CLI Session directory", () => {
     const { runner, spawnDetached } = createRunner([]);
     const directory = new HerdrCliSessionDirectory(runner);
 
-    await directory.start(
-      {
-        executable: "/usr/local/bin/herdr",
-        session: "default",
-      },
-      "work",
-    );
+    await directory.start("/usr/local/bin/herdr", "work");
 
     expect(spawnDetached).toHaveBeenCalledWith("/usr/local/bin/herdr", ["--session", "work", "server"]);
   });

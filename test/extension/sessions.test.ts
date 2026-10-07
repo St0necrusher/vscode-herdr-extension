@@ -2,7 +2,8 @@ import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import { SessionsFeature } from "../../src/features/sessions/SessionsFeature";
 import { VsCodeSessionsView } from "../../src/features/sessions/view/VsCodeSessionsView";
-import type { HerdrSessionConnection, ActiveSessionProjectionState } from "../../src/capabilities/sessions";
+import type { ActiveSessionProjectionState } from "../../src/capabilities/sessions";
+import type { HerdrSessionConnection } from "../../src/api/herdr/connection/connection";
 import type { SessionsState, SessionsStateSource } from "../../src/features/sessions/capabilities";
 
 let sequence = 0;
@@ -83,7 +84,7 @@ function dependencies(options: { list?: () => Promise<never>; configurationFailu
               sessions: [{ id: "default", isDefault: true, availability: "stopped" as const }],
             })),
         resolve: () => Promise.reject(new Error("stopped Session must not resolve")),
-        start: (_configuration: typeof configuration, sessionId: string) => {
+        start: (_executable: string, sessionId: string) => {
           assert.equal(sessionId, "default");
           calls.push("start");
           return Promise.resolve();

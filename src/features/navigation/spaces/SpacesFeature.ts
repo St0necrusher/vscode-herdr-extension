@@ -1,11 +1,6 @@
 import * as vscode from "vscode";
-import type {
-  ActiveSessionCreation,
-  ActiveSessionManagement,
-  CreatedSpace,
-  HerdrPane,
-  HerdrSpace,
-} from "@capabilities/sessions";
+import type { ActiveSessionCreation, ActiveSessionManagement } from "@capabilities/sessions";
+import type { CreatedSpace, HerdrPane, HerdrSpace } from "@api/herdr";
 import type { PaneTerminalClosing } from "@capabilities/terminalSurfaces";
 import type { NavigationPaneOpening, SpaceSelectionOperations, NavigationContextSource } from "../capabilities";
 import { SpacesModel, type SpaceNavigationEntry } from "./SpacesModel";

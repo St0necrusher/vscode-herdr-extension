@@ -1,4 +1,4 @@
-import type { HerdrPane } from "@capabilities/sessions";
+import type { HerdrPane } from "@api/herdr";
 
 export function paneName(pane: HerdrPane): string {
   return nonEmpty(pane.label) ?? nonEmpty(pane.terminalTitle) ?? `Pane ${pane.id}`;

@@ -7,8 +7,6 @@ import type {
   CloseSpaceRequest,
   CloseTabRequest,
   MoveTabRequest,
-  CreatedPane,
-  CreatedSpace,
   CreatePaneRequest,
   CreateSpaceRequest,
   RenamePaneRequest,
@@ -23,9 +21,8 @@ import type {
   HerdrSessionEventSource,
   HerdrConfigurationActions,
   HerdrConfigurationSource,
-  HerdrSessionConnectionFactory,
-  HerdrSessionDirectory,
 } from "@capabilities/sessions";
+import type { CreatedPane, CreatedSpace, HerdrSessionConnectionFactory, HerdrSessionDirectory } from "@api/herdr";
 import type { PersistentKeyValueStorage, SessionsState } from "./capabilities";
 import { SessionsModel } from "./SessionsModel";
 import { VsCodeSessionsView } from "./view";

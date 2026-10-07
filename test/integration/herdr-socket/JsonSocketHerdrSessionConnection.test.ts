@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   HerdrSessionConnection,
   HerdrSessionProjectionConsumer,
-  HerdrSessionSnapshot,
-} from "../../../src/capabilities/sessions";
-import { JsonSocketHerdrSessionConnectionFactory } from "../../../src/infrastructure/herdr/socket/JsonSocketHerdrSessionConnectionFactory";
+} from "../../../src/api/herdr/connection/connection";
+import type { HerdrSessionSnapshot } from "../../../src/api/herdr/shared/types";
+import { JsonSocketHerdrSessionConnectionFactory } from "../../../src/api/herdr/connection/JsonSocketHerdrSessionConnectionFactory";
 import type {
   HerdrSocketConnector,
   HerdrSocketTransport,
-} from "../../../src/infrastructure/herdr/socket/NodeHerdrSocketConnector";
+} from "../../../src/api/herdr/connection/NodeHerdrSocketConnector";
 
 type Request = Readonly<{
   id: string;

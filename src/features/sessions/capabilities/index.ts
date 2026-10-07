@@ -1,10 +1,10 @@
+import type { HerdrConfiguration } from "@capabilities/sessions";
 import type {
-  HerdrConfiguration,
   HerdrConnectionFailure,
   HerdrSessionDescriptor,
   HerdrSessionMetadata,
   HerdrSessionSnapshot,
-} from "@capabilities/sessions";
+} from "@api/herdr";
 
 export type SessionsCatalogState =
   | Readonly<{ kind: "checking" }>

@@ -1,4 +1,4 @@
-import type { HerdrSessionSnapshot } from "@capabilities/sessions";
+import type { HerdrSessionSnapshot } from "@api/herdr";
 
 export type UnavailableNavigationContextState = Readonly<{
   kind: "unavailable";

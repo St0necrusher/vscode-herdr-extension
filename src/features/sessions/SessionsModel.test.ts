@@ -1,19 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { HerdrConfiguration } from "@capabilities/sessions";
 import type {
   CreatedPane,
   CreatedSpace,
-  HerdrConfiguration,
-  HerdrConnectionFailure,
   HerdrResolvedSession,
-  HerdrSessionConnection,
-  HerdrSessionConnectionFactory,
-  HerdrSessionDirectory,
   HerdrSessionMetadata,
   HerdrSessionSnapshot,
   HerdrSessionDescriptor,
   SplitDirection,
-} from "@capabilities/sessions";
-import { HerdrConnectionFailureError } from "@capabilities/sessions";
+} from "../../api/herdr/shared/types";
+import type { HerdrSessionConnection, HerdrSessionConnectionFactory } from "../../api/herdr/connection/connection";
+import type { HerdrSessionDirectory } from "../../api/herdr/cli/directory";
+import {
+  HerdrConnectionFailureError,
+  type HerdrConnectionFailure,
+} from "../../api/herdr/shared/HerdrConnectionFailureError";
 import type { PersistentKeyValueStorage } from "./capabilities";
 import { SessionsModel } from "./SessionsModel";
 
@@ -111,9 +112,7 @@ function createHarness(options: HarnessOptions = {}) {
   const records: ConnectionRecord[] = [];
   const list = options.list ?? (() => Promise.resolve(options.listResult ?? success(options.sessions)));
   const start = vi.fn(options.start ?? (() => Promise.resolve()));
-  const resolve = vi.fn((_nextConfiguration: HerdrConfiguration, id: string) =>
-    Promise.resolve({ id, endpoint: `/tmp/${id}.sock` }),
-  );
+  const resolve = vi.fn((_executable: string, id: string) => Promise.resolve({ id, endpoint: `/tmp/${id}.sock` }));
   const directory: HerdrSessionDirectory = { list: vi.fn(list), resolve, start };
   const storage: PersistentKeyValueStorage = {
     get: () => saved,
@@ -330,7 +329,7 @@ describe("SessionsModel", () => {
     });
     await h.model.initialize();
     await h.model.startSelectedSession();
-    expect(h.start).toHaveBeenCalledWith(configuration, "work");
+    expect(h.start).toHaveBeenCalledWith(configuration.executable, "work");
     expect(h.records).toHaveLength(1);
   });
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { HerdrAgent, HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "@capabilities/sessions";
+import type {
+  HerdrAgent,
+  HerdrPane,
+  HerdrSessionSnapshot,
+  HerdrSpace,
+  HerdrTab,
+} from "../../../api/herdr/shared/types";
 import type { NavigationContextSource, NavigationContextState } from "../capabilities";
 import { PanesModel } from "./PanesModel";
 

@@ -1,4 +1,4 @@
-import type { HerdrSessionSnapshot } from "./snapshot";
+import type { HerdrSessionSnapshot } from "@api/herdr";
 
 export type UnavailableActiveSessionProjectionState = Readonly<{
   kind: "unavailable";

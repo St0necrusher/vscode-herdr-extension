@@ -5,12 +5,9 @@ import type {
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
   CreatePaneRequest,
-  HerdrPane,
-  HerdrSessionSnapshot,
-  HerdrSpace,
-  HerdrTab,
   RunCommandRequest,
 } from "../../src/capabilities/sessions";
+import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
 import type { PaneTerminalOpenRequest } from "../../src/capabilities/terminalSurfaces";
 import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
 

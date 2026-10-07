@@ -1,11 +1,8 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import type { Logger } from "@core/logger";
-import type {
-  ActiveSessionProjectionSource,
-  ActiveSessionProjectionState,
-  HerdrSessionSnapshot,
-} from "../../src/capabilities/sessions";
+import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "../../src/capabilities/sessions";
+import type { HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
 import type { PaneEditorPresence } from "../../src/capabilities/terminalSurfaces";
 import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
 import type { PaneAttach } from "../../src/infrastructure/pane-editors/HerdrPaneAttach";
