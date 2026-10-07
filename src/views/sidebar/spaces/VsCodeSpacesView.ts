@@ -1,17 +1,24 @@
 import * as vscode from "vscode";
-import type { HerdrSpace } from "@api/herdr";
+import type { NavigationContextSource, SpaceSelectionOperations } from "@modules/workspace-context";
 import { spaceRowUri } from "../shared";
-import type { SpaceNavigationEntry, SpacesModel, SpacesState } from "./SpacesModel";
+import { SpacesModel, type SpaceNavigationEntry, type SpacesState } from "./SpacesModel";
 
 export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<SpaceTreeItem | undefined | null>();
   private readonly subscription: { dispose(): void };
+  private readonly command: vscode.Disposable;
+  private readonly model: SpacesModel;
   private readonly view: vscode.TreeView<SpaceTreeItem>;
   private disposed = false;
   readonly onDidChangeTreeData = this.changes.event;
 
-  constructor(private readonly model: SpacesModel) {
+  constructor(context: NavigationContextSource, operations: SpaceSelectionOperations) {
+    const model = new SpacesModel(context);
+    this.model = model;
     this.view = vscode.window.createTreeView("herdr.spaces", { treeDataProvider: this });
+    this.command = vscode.commands.registerCommand("herdr.selectSpace", (spaceId: unknown) => {
+      if (typeof spaceId === "string") operations.selectSpace(spaceId);
+    });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
       setSpaceActionsEnabled(state);
@@ -20,67 +27,6 @@ export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>,
     const state = model.getState();
     setMessage(this.view, state);
     setSpaceActionsEnabled(state);
-  }
-
-  async chooseSpaceFolder(): Promise<string | undefined> {
-    const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
-    if (workspaceFolders.length === 0) {
-      void vscode.window.showErrorMessage("Open a folder to create a Herdr Space.");
-      return undefined;
-    }
-    if (workspaceFolders.length === 1) return workspaceFolders[0]?.uri.fsPath;
-
-    const selected = await vscode.window.showWorkspaceFolderPick({
-      placeHolder: "Choose a folder for the new Herdr Space",
-    });
-    return selected?.uri.fsPath;
-  }
-
-  async promptSpaceName(currentLabel: string): Promise<string | undefined> {
-    return vscode.window.showInputBox({
-      title: "Rename Space",
-      value: currentLabel,
-      validateInput: (value) => (value.trim().length === 0 ? "Space name cannot be empty." : undefined),
-    });
-  }
-
-  async confirmCloseSpace(space: HerdrSpace): Promise<boolean> {
-    const action = await vscode.window.showWarningMessage(
-      `Close Space "${space.label}"?`,
-      { modal: true, detail: "Every Tab and Pane in this Space will be closed." },
-      "Close Space",
-    );
-    return action === "Close Space";
-  }
-
-  async confirmCloseGroup(primary: HerdrSpace, members: readonly HerdrSpace[]): Promise<boolean> {
-    const memberLabels = members.map((space) => `• ${space.label}`).join("\n");
-    const action = await vscode.window.showWarningMessage(
-      `Close Group "${primary.label}"?`,
-      { modal: true, detail: `This will close every Space in the group:\n${memberLabels}` },
-      "Close Group",
-    );
-    return action === "Close Group";
-  }
-
-  showSpaceRenameError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not rename Space: ${errorMessage(error)}`);
-  }
-
-  showSpaceCloseError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not close Space: ${errorMessage(error)}`);
-  }
-
-  showGroupCloseError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not close Group: ${errorMessage(error)}`);
-  }
-
-  showSpaceCreationError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not create Space: ${errorMessage(error)}`);
-  }
-
-  showCreatedSpaceOpenError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Space was created but its Pane could not be opened: ${errorMessage(error)}`);
   }
 
   getTreeItem(item: SpaceTreeItem): vscode.TreeItem {
@@ -98,9 +44,11 @@ export class VsCodeSpacesView implements vscode.TreeDataProvider<SpaceTreeItem>,
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.command.dispose();
     this.subscription.dispose();
     this.view.dispose();
     this.changes.dispose();
+    this.model.dispose();
   }
 }
 
@@ -130,10 +78,6 @@ export class SpaceTreeItem extends vscode.TreeItem {
       arguments: [space.id],
     };
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function setSpaceActionsEnabled(state: SpacesState): void {

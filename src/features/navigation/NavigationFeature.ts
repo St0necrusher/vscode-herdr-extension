@@ -6,11 +6,18 @@ import {
   type ActiveSessionProjectionSource,
   type PaneEditorPresenceSource,
 } from "@modules/workspace-context";
-import { AgentsFeature } from "./agents";
-import { PanesFeature } from "./panes";
+import { CloseFeature } from "@features/close";
+import { CreatePaneFeature } from "@features/create-pane";
+import { CreateSpaceFeature } from "@features/create-space";
+import { RenameFeature } from "@features/rename";
+import { RevealPaneFeature } from "@features/reveal-pane";
+import {
+  VisiblePaneEditorDecorationProvider,
+  VsCodeAgentsView,
+  VsCodePanesView,
+  VsCodeSpacesView,
+} from "@views/sidebar";
 import { ScriptsFeature } from "./scripts";
-import { SpacesFeature } from "./spaces";
-import { VisiblePaneEditorDecorationProvider } from "@views/sidebar";
 
 export type NavigationFeatureDependencies = Readonly<{
   sessionProjection: ActiveSessionProjectionSource;
@@ -23,44 +30,60 @@ export type NavigationFeatureDependencies = Readonly<{
 
 export class NavigationFeature {
   private readonly context: NavigationContextModel;
-  private readonly panes: PanesFeature;
-  private readonly spaces: SpacesFeature;
+  private readonly panes: VsCodePanesView;
+  private readonly spaces: VsCodeSpacesView;
   private readonly scripts: ScriptsFeature;
-  private readonly agents: AgentsFeature;
+  private readonly agents: VsCodeAgentsView;
   private readonly decorationProvider: VisiblePaneEditorDecorationProvider;
   private readonly decorations: vscode.Disposable;
+  private readonly createSpace: CreateSpaceFeature;
+  private readonly createPane: CreatePaneFeature;
+  private readonly rename: RenameFeature;
+  private readonly close: CloseFeature;
+  private readonly revealPane: RevealPaneFeature;
   private disposed = false;
 
   constructor(dependencies: NavigationFeatureDependencies) {
     const context = new NavigationContextModel(dependencies.sessionProjection, dependencies.paneEditorPresence);
-    const panes = new PanesFeature(
+    const panes = new VsCodePanesView(context, context, dependencies.paneTerminalOpening, dependencies.management);
+    const spaces = new VsCodeSpacesView(context, context);
+    const scripts = new ScriptsFeature(context, dependencies.creation, dependencies.paneTerminalOpening);
+    const agents = new VsCodeAgentsView(context, context);
+    const decorationProvider = new VisiblePaneEditorDecorationProvider(context, context);
+    const decorations = vscode.window.registerFileDecorationProvider(decorationProvider);
+    const createSpace = new CreateSpaceFeature(
       context,
       context,
+      dependencies.creation,
       dependencies.paneTerminalOpening,
-      dependencies.creation,
-      dependencies.management,
-      dependencies.paneClosing,
     );
-    const spaces = new SpacesFeature(
-      context,
-      context,
-      dependencies.creation,
-      panes,
-      dependencies.management,
-      dependencies.paneClosing,
-    );
+    const createPane = new CreatePaneFeature(context, dependencies.creation, dependencies.paneTerminalOpening);
+    const rename = new RenameFeature(context, dependencies.management);
+    const close = new CloseFeature(context, dependencies.management, dependencies.paneClosing);
+    const revealPane = new RevealPaneFeature(context, context, dependencies.paneTerminalOpening);
+
     this.context = context;
     this.panes = panes;
     this.spaces = spaces;
-    this.scripts = new ScriptsFeature(context, dependencies.creation, panes);
-    this.agents = new AgentsFeature(context, context, panes, context);
-    this.decorationProvider = new VisiblePaneEditorDecorationProvider(context, context);
-    this.decorations = vscode.window.registerFileDecorationProvider(this.decorationProvider);
+    this.scripts = scripts;
+    this.agents = agents;
+    this.decorationProvider = decorationProvider;
+    this.decorations = decorations;
+    this.createSpace = createSpace;
+    this.createPane = createPane;
+    this.rename = rename;
+    this.close = close;
+    this.revealPane = revealPane;
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.revealPane.dispose();
+    this.close.dispose();
+    this.rename.dispose();
+    this.createPane.dispose();
+    this.createSpace.dispose();
     this.decorations.dispose();
     this.decorationProvider.dispose();
     this.agents.dispose();

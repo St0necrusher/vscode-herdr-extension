@@ -28,6 +28,8 @@ Execution plan approved by the user on 2026-10-07.
 - **D17. Pane opening request** (astra; amended after 5a1). Add the pure `paneTerminalOpenRequest(sessionId, pane, name)` to `modules/pane-editors` and update `ScriptsFeature` minimally in 5a2, removing `NavigationPaneOpening` without a replacement facade. Features/views compute the name through `paneName(pane)` from `@modules/sessions` and pass it as data; Pane Editors never imports its peer module or duplicates the naming rule. Callers retain current-context lookup timing, connected/Stale support and absent-Pane handling; the helper only builds the request. Pure sidebar models do not import this runtime helper. Review the Scripts change in 5a2 and carry it into the 5b baseline. See `answers/5a.md` and the signature amendment in `answers/5a1.md`.
 - **D18. Command arguments and Pane command test** (astra). Features accept structural identifier arguments instead of importing view classes; `PanesGroupTreeItem` exposes `tabId`. Replacing class checks with required-field checks is approved at the command boundary, not as a relaxation of action availability: preserve current Session/Selected Space, freshness, existence and closability guards, including the Close Tab group guard. `herdr.openPane` keeps its string argument. `herdr.openAgentPane` belongs to `features/reveal-pane`; `pane-command.test.ts` constructs `VsCodePanesView` instead of `PanesFeature`, retaining all assertions and the tree-to-command-to-open-request path. See `answers/5a.md`.
 
+- **D19. Feature entry file names** (astra). Apply ARCHITECTURE §6: function/type files use camelCase (`closePane.ts`, `closeTab.ts`, `renameTab.ts`, `splitPane.ts`); files whose main export is a class use PascalCase. Feature folders remain kebab-case. Correct the inconsistent §4 examples to camelCase in the same PR and update imports after renaming files. This corrects an example, not the architecture rule or behavior; test assertions stay unchanged. See `answers/5a2.md`.
+
 ## Slices
 
 | # | Slice | Status |
@@ -43,7 +45,7 @@ Execution plan approved by the user on 2026-10-07.
 | 3b | `modules/pane-editors`, `api/herdr/pane-clients`; `capabilities/terminalSurfaces` dissolved | done |
 | 4 | `modules/workspace-context` | done |
 | 5a1 | Sidebar trees to `views/sidebar`; `worktreeGroup`, closability, `paneName` to `modules/sessions` | done |
-| 5a2 | Features create-space, create-pane, rename, close, reveal-pane; trivial clicks in views (D16–D18) | pending |
+| 5a2 | Features create-space, create-pane, rename, close, reveal-pane; trivial clicks in views (D16–D18) | done |
 | 5b | `views/npm-scripts`, `features/run-npm-script`; `NavigationFeature` removed | pending |
 | 6 | Remove `capabilities/`, `infrastructure/`, old ESLint elements; verify ESLint; doc paths | pending |
 
@@ -66,3 +68,5 @@ Execution plan approved by the user on 2026-10-07.
 - 2026-10-07: 4 accepted on the first review (reviewer verdict accept; spot-checked the publication order at `NavigationContextModel.ts:109-114` and the absence of peer imports). `modules/workspace-context` declares its own Session and Pane Editor source types; `NavigationFeature` still builds the model until 5b.
 - 2026-10-07: user decision: slices after 5a1 (5a2, 5b, 6) are implemented by pi `openai-codex/gpt-6-luna --thinking max` instead of sol medium (amends D12); 5a1 stays on sol.
 - 2026-10-07: 5a1 accepted on the first review (spot-checked `closability.ts` and its call in `PanesModel.ts:91-92`). The first worker died after its report; a replacement (`sol-5a1b`) finished the D16 amendment (astra: `paneName` → `modules/sessions`, no test mocks; `answers/5a1.md`). Slice 5a was split into 5a1/5a2 by the brief author.
+- 2026-10-08: 5a2 first review: corrections requested (`reviews/5a2.md`): the worker had added re-checks after prompts/confirmations and a Pane existence check on split that the old features lacked; plus exports, helper shape, naming. D19 (astra): §6 file naming wins; §4 example fixed. `luna-5a2` exceeded the context budget (162k) after finishing, so a fresh worker applies the corrections.
+- 2026-10-08: 5a2 accepted after three correction rounds (workers `luna-5a2`, `luna-5a2b`, `luna-5a2c`, each replaced to stay within the context budget). Round 2: the reviewer's loosely worded split correction had dropped the Selected Space guard — restored (old `PanesModel` was `connected` only with a Selected Space); `create-pane` flattened. Round 3: an out-of-scope ESLint widening reverted; `create-pane/shared/index.ts` added. `NavigationFeature` composes the new views and features until 5b.

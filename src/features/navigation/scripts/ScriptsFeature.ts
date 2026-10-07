@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import type { ActiveSessionCreation } from "@modules/sessions";
+import { paneName, type ActiveSessionCreation } from "@modules/sessions";
 import type { NavigationContextSource } from "@modules/workspace-context";
-import type { NavigationPaneOpening } from "../capabilities";
+import { paneTerminalOpenRequest, type PaneTerminalOpenRequest, type PaneTerminalOpening } from "@modules/pane-editors";
 import { npmScriptCommand, packageFolder, type NpmScriptTarget } from "./npmScriptCommand";
 import { hoverScriptTarget, npmViewScriptTarget, VsCodeScriptsView } from "./view";
 
@@ -13,7 +13,7 @@ export class ScriptsFeature {
   constructor(
     private readonly context: NavigationContextSource,
     private readonly creation: ActiveSessionCreation,
-    private readonly paneOpening: NavigationPaneOpening,
+    private readonly paneOpening: PaneTerminalOpening,
   ) {
     this.view = new VsCodeScriptsView(context);
     this.commands = vscode.Disposable.from(
@@ -74,9 +74,20 @@ export class ScriptsFeature {
     }
 
     try {
-      this.paneOpening.openPane(paneId);
+      this.openPane(paneId);
     } catch (error) {
       this.view.showScriptPaneOpenError(error);
     }
+  }
+
+  private openPane(paneId: string): void {
+    const state = this.context.getState();
+    let request: PaneTerminalOpenRequest | undefined;
+    if (state.kind !== "unavailable") {
+      const pane = state.snapshot.panes.find((candidate) => candidate.id === paneId);
+      if (pane !== undefined) request = paneTerminalOpenRequest(state.sessionId, pane, paneName(pane));
+    }
+    if (request === undefined) throw new Error(`Pane ${paneId} is not in the current Session snapshot`);
+    this.paneOpening.openPane(request);
   }
 }

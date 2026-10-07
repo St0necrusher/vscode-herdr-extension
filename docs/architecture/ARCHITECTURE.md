@@ -121,7 +121,7 @@ A module may own the VS Code resources that embody the domain thing: a Pane Edit
 A feature owns a scenario end to end: prompts, confirmation, execution through modules, consequences across modules, the result and error messages.
 
 - A feature registers the commands of its scenario. Views create the UI that triggers them, also outside the sidebar (a hover, an editor menu, VS Code's npm view), and pass plain data (`{ paneId }`, `{ spaceId }`); a feature never imports view classes.
-- A feature with several entries keeps one file per entry (`close-pane.ts`, `close-tab.ts`…). Shared parts appear when behavior actually matches, not as one handler with flags.
+- A feature with several entries keeps one file per entry (`closePane.ts`, `closeTab.ts`…). Shared parts appear when behavior actually matches, not as one handler with flags.
 - A feature keeps no copy of module state.
 
 **Not every verb is a feature.** A click that calls one module operation (refresh, select, retry, open settings) is wired by its view.

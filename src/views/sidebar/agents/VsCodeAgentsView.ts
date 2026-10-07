@@ -1,12 +1,13 @@
 import * as vscode from "vscode";
 import type { HerdrAgentStatus } from "@api/herdr";
-import type { VisiblePaneEditorsSource } from "@modules/workspace-context";
+import type { NavigationContextSource, VisiblePaneEditorsSource } from "@modules/workspace-context";
 import { agentRowUri } from "../shared";
-import type { AgentNavigationRow, AgentsModel, AgentsState } from "./AgentsModel";
+import { AgentsModel, type AgentNavigationRow, type AgentsState } from "./AgentsModel";
 
 export class VsCodeAgentsView implements vscode.TreeDataProvider<AgentTreeItem>, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<AgentTreeItem | undefined | null>();
   private readonly subscription: { dispose(): void };
+  private readonly model: AgentsModel;
   private readonly focusSubscription: { dispose(): void };
   private readonly visibilitySubscription: { dispose(): void };
   private readonly view: vscode.TreeView<AgentTreeItem>;
@@ -14,9 +15,11 @@ export class VsCodeAgentsView implements vscode.TreeDataProvider<AgentTreeItem>,
   readonly onDidChangeTreeData = this.changes.event;
 
   constructor(
-    private readonly model: AgentsModel,
+    context: NavigationContextSource,
     private readonly paneEditors: VisiblePaneEditorsSource,
   ) {
+    const model = new AgentsModel(context);
+    this.model = model;
     this.view = vscode.window.createTreeView("herdr.agents", { treeDataProvider: this });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
@@ -52,6 +55,7 @@ export class VsCodeAgentsView implements vscode.TreeDataProvider<AgentTreeItem>,
     this.visibilitySubscription.dispose();
     this.view.dispose();
     this.changes.dispose();
+    this.model.dispose();
   }
 
   // Like the Explorer: reveal opens its view, so a hidden view waits until it is shown and catches up then.
