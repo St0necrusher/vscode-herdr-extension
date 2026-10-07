@@ -24,6 +24,10 @@ Execution plan approved by the user on 2026-10-07.
 
 - **D15. Active Session projection after the facade** (astra). `SessionsModel` provides `getActiveSessionProjection()` (its state mapped through `activeSessionProjection`) and `onDidChangeActiveSessionProjection()` (wrapping its own `onDidChange`). No separate object, no second store, no new publish order; the projection test is constructed on `SessionsModel` with its assertions unchanged.
 
+- **D16. Shared Pane name** (astra). `paneName` belongs to `modules/pane-editors`, publicly exported for views and features, with its body unchanged. When independent module parts such as `paneTerminalOpenRequest` consume it, place it in the module's `shared/` and re-export through the public entry; no sideways part import. It is not owned by a sidebar surface. See `answers/5a.md`.
+- **D17. Pane opening request** (astra). Add the pure `paneTerminalOpenRequest(sessionId, pane)` to `modules/pane-editors` and update `ScriptsFeature` minimally in 5a2, removing `NavigationPaneOpening` without a replacement facade. Callers retain current-context lookup timing, connected/Stale support and absent-Pane handling; the helper only builds the request. Review the Scripts change in 5a2 and carry it into the 5b baseline. See `answers/5a.md`.
+- **D18. Command arguments and Pane command test** (astra). Features accept structural identifier arguments instead of importing view classes; `PanesGroupTreeItem` exposes `tabId`. Replacing class checks with required-field checks is approved at the command boundary, not as a relaxation of action availability: preserve current Session/Selected Space, freshness, existence and closability guards, including the Close Tab group guard. `herdr.openPane` keeps its string argument. `herdr.openAgentPane` belongs to `features/reveal-pane`; `pane-command.test.ts` constructs `VsCodePanesView` instead of `PanesFeature`, retaining all assertions and the tree-to-command-to-open-request path. See `answers/5a.md`.
+
 ## Slices
 
 | # | Slice | Status |
