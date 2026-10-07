@@ -35,7 +35,7 @@ Execution plan approved by the user on 2026-10-07.
 | 1b | `api/herdr` (cli, connection, protocol, types) | done |
 | 2a | `modules/sessions` (`SessionsModel` as one unit, projection mapping), `ARCHITECTURE.md:100` | done |
 | 2b | `views/sidebar/sessions`, `views/connection-status`, `features/start-local-session`, `features/configure-executable`; `SessionsFeature` removed | done |
-| 3a | `api/herdr/takeover`, `features/manage-takeover-plugin` (moved before the module: `PaneTerminalSurface` imports takeover) | pending |
+| 3a | `api/herdr/takeover`, `features/manage-takeover-plugin` (moved before the module: `PaneTerminalSurface` imports takeover) | done |
 | 3b | `modules/pane-editors`, `api/herdr/pane-clients`; `capabilities/terminalSurfaces` dissolved | pending |
 | 4 | `modules/workspace-context` | pending |
 | 5a | `views/sidebar/{spaces,panes,agents,shared}`, create-space, create-pane, rename, close, reveal-pane | pending |
@@ -54,3 +54,5 @@ Execution plan approved by the user on 2026-10-07.
 - 2026-10-07: 1b accepted after one question round (D13, D14). `src/infrastructure/herdr/` removed; directory operations take the executable path. Assertion changes: D14 and the CLI test call arguments (D6) only.
 - 2026-10-07: 2a accepted after one correction (structural conformance instead of `implements HerdrConfigurationActions` in `VsCodeHerdrConfiguration`, which 2b deletes). `src/capabilities/sessions/` removed; D5 rules text edited. 2b briefed with D15.
 - 2026-10-07: 2b accepted after one review round (flat constructor cleanup in `HerdrExtension`, single dispose on initialization failure, status owner renamed `ConnectionStatus`). `src/features/sessions/` and `src/infrastructure/vscode/` removed; D3 tests rewritten per owner (mapping in report 2b). Slices 3a/3b swapped: takeover moves before the Pane Editors module.
+- 2026-10-07: delegation workflow revised (user-approved retro, `.claude/skills/delegating-slices.md`): from the slice after 3a, slice briefs come from a brief-author subagent (sonnet, medium) — 3b keeps the brief the coordinator had already written; every slice gets a shadow review (reviewer subagent, opus, high, plus the coordinator's own diff review), both findings recorded here; astra answers questions in `answers/<slice>.md` and adds the D-entry itself; waiting and watching use `multi-agent-delegate/scripts/{wait-report,watch-pi}`; the common brief now asks for foreground validation, a summary of at most 20 lines, and excerpt reading.
+- 2026-10-07: 3a accepted after one correction. Shadow review: the reviewer (opus) found an unused `TAKEOVER_PLUGIN_ID` export added to `api/herdr/takeover/index.ts`, which the coordinator missed; the coordinator found nothing the reviewer missed. `src/infrastructure/pane-editors/takeover/` removed; the api part takes a narrow `HerdrExecutableSource`.

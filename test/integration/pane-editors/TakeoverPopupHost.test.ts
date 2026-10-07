@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Logger } from "@core/logger";
 import type { HerdrConfigurationSource } from "../../../src/modules/sessions/configuration";
-import { TakeoverPopupHost } from "../../../src/infrastructure/pane-editors/takeover/TakeoverPopupHost";
-import { TAKEOVER_PLUGIN_ID } from "../../../src/infrastructure/pane-editors/takeover/TakeoverPluginRegistration";
+import { TakeoverPopupHost } from "../../../src/api/herdr/takeover/TakeoverPopupHost";
+import { TAKEOVER_PLUGIN_ID } from "../../../src/api/herdr/takeover/TakeoverPluginRegistration";
 
 vi.mock("vscode", () => ({}));
 

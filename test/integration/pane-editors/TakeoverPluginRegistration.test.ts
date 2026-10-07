@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Logger } from "@core/logger";
 import type { HerdrConfigurationSource } from "../../../src/modules/sessions/configuration";
-import { TakeoverPluginRegistration } from "../../../src/infrastructure/pane-editors/takeover/TakeoverPluginRegistration";
+import { TakeoverPluginRegistration } from "../../../src/api/herdr/takeover/TakeoverPluginRegistration";
+import { ManageTakeoverPluginFeature } from "../../../src/features/manage-takeover-plugin/ManageTakeoverPluginFeature";
 
 const vscodeMock = vi.hoisted(() => {
   const commandHandlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -103,16 +104,15 @@ if (isPluginList) {
     copyDirectory,
     invocationLogPath,
     pluginListPath,
-    createRegistration: () =>
-      new TakeoverPluginRegistration(
-        {
-          read: () => ({ executable, session: "default" }),
-          onDidChange: () => ({ dispose: () => undefined }),
-        } satisfies HerdrConfigurationSource,
-        logger,
-        packageDirectory,
-        copyDirectory,
-      ),
+    createRegistration: () => {
+      const configuration = {
+        read: () => ({ executable, session: "default" }),
+        onDidChange: () => ({ dispose: () => undefined }),
+      } satisfies HerdrConfigurationSource;
+      const registration = new TakeoverPluginRegistration(configuration, logger, packageDirectory, copyDirectory);
+      new ManageTakeoverPluginFeature(registration, logger);
+      return registration;
+    },
   };
 }
 

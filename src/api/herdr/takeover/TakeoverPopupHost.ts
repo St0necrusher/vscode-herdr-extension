@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type Server, type Socket } from "node:net";
-import type { HerdrConfigurationSource } from "@modules/sessions";
+import type { HerdrExecutableSource } from "./herdrExecutableSource";
 import type { Logger } from "@core/logger";
 import { TAKEOVER_PLUGIN_ID } from "./TakeoverPluginRegistration";
 
@@ -65,7 +65,7 @@ export class TakeoverPopupHost implements TakeoverOffers {
   private disposed = false;
 
   constructor(
-    private readonly configuration: HerdrConfigurationSource,
+    private readonly configuration: HerdrExecutableSource,
     private readonly registration: TakeoverPluginRegistrationState,
     private readonly logger: Logger,
   ) {}

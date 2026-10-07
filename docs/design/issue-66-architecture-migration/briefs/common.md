@@ -9,10 +9,10 @@ The coordinator is the Claude session `claude-migration` (Herdr pane `w3:p4G`). 
 - `gh issue view 66`: goal, target structure, where today's code goes, constraints.
 - `docs/architecture/ARCHITECTURE.md` and `docs/architecture/IMPLEMENTATION.md`: the rules. They decide placement.
 - `docs/adr/0014-*.md`, `docs/adr/0015-*.md`, `CONTEXT.md` for domain terms.
-- `docs/design/issue-66-architecture-migration/progress.md`: decisions D1–D12 made for this migration. They override the issue table where the two differ.
+- `docs/design/issue-66-architecture-migration/progress.md`: the D-decisions made for this migration. They override the issue table where the two differ.
 - `/Users/kuzmichev/dev/vscode-herdr-extension/.claude/skills/implement-slice/SKILL.md`: how to work a slice. One override: in this task tests are part of your slice as your slice brief says, so the rule "tests remain unchanged" there is replaced by the test rules below.
 
-Read the source your slice touches. Do not read the whole repository.
+Read the source your slice touches. Do not read the whole repository. Read excerpts with `rg` and `sed -n`, not `cat` over many files.
 
 ## Rules
 
@@ -30,7 +30,7 @@ Read the source your slice touches. Do not read the whole repository.
 
 ## Validation
 
-Run `npm run typecheck`, `npm run lint`, `npm run format:check` and the tests your slice touches (`npx vitest run <paths>`; `npm run test:extension` when your slice brief says so). The coordinator runs the full suite after review.
+Run `npm run typecheck`, `npm run lint`, `npm run format:check` and the tests your slice touches (`npx vitest run <paths>`; `npm run test:extension` when your slice brief says so). Run validation in the foreground, so your turn ends only when the result exists; do not leave checks running in a background job.
 
 ## Context budget
 
@@ -38,11 +38,11 @@ Keep your context under about 150k tokens: read excerpts, not whole large files 
 
 ## Questions
 
-Do not ask interactive questions; nobody answers them. When you hit a decision the rules and decisions do not settle, finish the work you can, then list each question with its evidence (file:line) and your proposed answer in the final message.
+Do not ask interactive questions; nobody answers them. When you hit a decision the rules and decisions do not settle, finish the work you can, then list each question in the report's `## Questions` section with its evidence (file:line) and your proposed answer.
 
 ## Report
 
-Write your report to `docs/design/issue-66-architecture-migration/reports/<slice>.md` and end with a final message containing the same text:
+Write your report to `docs/design/issue-66-architecture-migration/reports/<slice>.md`. It opens with a summary of at most 20 lines (status, checks, deviations, questions); details follow below. Put each question in a `## Questions` section with evidence (file:line) and your proposed answer. End with a final message containing the same text. The details cover:
 
 - each done criterion and where it is satisfied, or why not;
 - changed, moved and new files;

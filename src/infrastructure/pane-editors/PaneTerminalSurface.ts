@@ -10,7 +10,7 @@ import type { SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import type { PaneOutputSink } from "./PaneOutputSink";
 import { observerFailurePlaceholder, paneName, paneTarget, type PaneTarget } from "./paneTarget";
 import { desiredClient, type AttachIntent, type DesiredClient, type PaneEditorVisibility } from "./paneClientPolicy";
-import type { TakeoverOffer, TakeoverOffers } from "./takeover";
+import type { TakeoverOffer, TakeoverOffers } from "@api/herdr";
 
 export interface PaneTerminalSurface {
   readonly terminal: vscode.Terminal;

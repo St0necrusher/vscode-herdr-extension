@@ -5,18 +5,19 @@ import { VsCodeSessionsView } from "@views/sidebar";
 import { ConnectionStatus } from "@views/connection-status";
 import { StartLocalSessionFeature } from "@features/start-local-session";
 import { ConfigureExecutableFeature } from "@features/configure-executable";
+import { ManageTakeoverPluginFeature } from "@features/manage-takeover-plugin";
 import {
   HerdrCliSessionDirectory,
   JsonSocketHerdrSessionConnectionFactory,
   NodeHerdrSocketConnector,
+  TakeoverPluginRegistration,
+  TakeoverPopupHost,
 } from "@api/herdr";
 import {
   HerdrPaneClientFactory,
   PaneEditorFocusTracker,
   PaneEditorSelectionModel,
   PaneTerminalSurfaceManager,
-  TakeoverPluginRegistration,
-  TakeoverPopupHost,
   VsCodePaneTerminalSurface,
 } from "@infrastructure/pane-editors";
 import { HerdrSettings } from "./HerdrSettings";
@@ -36,6 +37,7 @@ export class HerdrExtension implements vscode.Disposable {
   private readonly navigation: NavigationFeature;
   private readonly takeoverPopupHost: TakeoverPopupHost;
   private readonly takeoverPluginRegistration: TakeoverPluginRegistration;
+  private readonly manageTakeoverPlugin: ManageTakeoverPluginFeature;
   private disposed = false;
 
   constructor(context: vscode.ExtensionContext) {
@@ -50,15 +52,16 @@ export class HerdrExtension implements vscode.Disposable {
     let paneTerminalSurfaceManager: PaneTerminalSurfaceManager | undefined;
     let navigation: NavigationFeature | undefined;
     let takeoverPopupHost: TakeoverPopupHost | undefined;
-    let takeoverPluginRegistration: TakeoverPluginRegistration | undefined;
+    let manageTakeoverPlugin: ManageTakeoverPluginFeature | undefined;
     try {
       const configuration = new HerdrSettings();
-      takeoverPluginRegistration = new TakeoverPluginRegistration(
+      const takeoverPluginRegistration = new TakeoverPluginRegistration(
         configuration,
         logger,
         context.asAbsolutePath("dist/herdr-plugin"),
         vscode.Uri.joinPath(context.globalStorageUri, "herdr-plugin").fsPath,
       );
+      manageTakeoverPlugin = new ManageTakeoverPluginFeature(takeoverPluginRegistration, logger);
       const popupHost = new TakeoverPopupHost(configuration, takeoverPluginRegistration, logger);
       takeoverPopupHost = popupHost;
       sessions = new SessionsModel(
@@ -117,6 +120,7 @@ export class HerdrExtension implements vscode.Disposable {
       this.navigation = navigationFeature;
       this.takeoverPopupHost = popupHost;
       this.takeoverPluginRegistration = takeoverPluginRegistration;
+      this.manageTakeoverPlugin = manageTakeoverPlugin;
     } catch (error) {
       navigation?.dispose();
       paneTerminalSurfaceManager?.dispose();
@@ -128,7 +132,7 @@ export class HerdrExtension implements vscode.Disposable {
       startLocalSession?.dispose();
       sessionsView?.dispose();
       sessions?.dispose();
-      takeoverPluginRegistration?.dispose();
+      manageTakeoverPlugin?.dispose();
       logger.dispose();
       throw error;
     }
@@ -158,7 +162,7 @@ export class HerdrExtension implements vscode.Disposable {
     this.startLocalSession.dispose();
     this.sessionsView.dispose();
     this.sessions.dispose();
-    this.takeoverPluginRegistration.dispose();
+    this.manageTakeoverPlugin.dispose();
     this.logger.dispose();
   }
 }

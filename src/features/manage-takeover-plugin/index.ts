@@ -1,0 +1,1 @@
+export { ManageTakeoverPluginFeature } from "./ManageTakeoverPluginFeature";
