@@ -23,7 +23,7 @@ Execution plan approved by the user on 2026-10-07.
 
 | # | Slice | Status |
 |---|---|---|
-| 0a | Characterization tests in existing test files | pending |
+| 0a | Characterization tests in existing test files | done |
 | 0b | Real-composition extension test against a fake herdr | pending |
 | — | Baseline of test names and assertion lines | pending |
 | 1a | Aliases, ESLint layer rules, `core/` | pending |
@@ -38,3 +38,6 @@ Execution plan approved by the user on 2026-10-07.
 | 6 | Remove `capabilities/`, `infrastructure/`, old ESLint elements; verify ESLint; doc paths | pending |
 
 ## Log
+- 2026-10-07: baseline on `054c1bc` — lint, format, Vitest (140 tests) green; `test:extension` 47 passing, 1 failing locally (`Run Script in Herdr › package.json hover offers Run in Herdr while connected…`: 2 links instead of 1). CI on the same commit is green; the failure reproduces with fresh VS Code user data. Treated as a known local exception; CI is the gate.
+- 2026-10-07: 0a dispatched to pi `sol-0a` (pane `w3:p4J`, worktree `-66`); 0b dispatched to pi `sol-0b` (pane `w3:p4K`, worktree `-66-0b`, branch `refactor/66-0b`). Each worktree has its own `.vscode-test/user-data`.
+- 2026-10-07: 0a accepted after review: 11 new tests (7 behaviors), no existing assertion changed. Criterion 2 limits accepted: Agent rows carry no contextValue; the npm scripts tree belongs to VS Code's npm extension; a non-closable grouped Pane row is unreachable. Validation: Vitest 141 passed; extension 57 passing, 1 known local failure.

@@ -212,6 +212,8 @@ type NavigationHarness = Readonly<{
   panesProvider: vscode.TreeDataProvider<vscode.TreeItem>;
   panesDragAndDrop: vscode.TreeDragAndDropController<vscode.TreeItem>;
   spacesProvider: vscode.TreeDataProvider<vscode.TreeItem>;
+  agentsProvider: vscode.TreeDataProvider<vscode.TreeItem>;
+  registeredViews: readonly string[];
   closedPaneEditors: readonly ClosedPaneEditors[];
   errors: readonly string[];
   warningCalls: readonly WarningCall[];
@@ -239,6 +241,8 @@ async function withNavigationFeature(
   let panesProvider: vscode.TreeDataProvider<vscode.TreeItem> | undefined;
   let panesDragAndDrop: vscode.TreeDragAndDropController<vscode.TreeItem> | undefined;
   let spacesProvider: vscode.TreeDataProvider<vscode.TreeItem> | undefined;
+  let agentsProvider: vscode.TreeDataProvider<vscode.TreeItem> | undefined;
+  const registeredViews: string[] = [];
   let inputResult: string | undefined;
   let warningResult: string | undefined;
   let feature: NavigationFeature | undefined;
@@ -255,13 +259,16 @@ async function withNavigationFeature(
       return executeOriginal(command, ...args);
     }) as typeof originalExecuteCommand;
     vscode.window.createTreeView = <T>(viewId: string, options: vscode.TreeViewOptions<T>) => {
+      registeredViews.push(viewId);
       if (viewId === "herdr.panes") {
         panesProvider = options.treeDataProvider as unknown as vscode.TreeDataProvider<vscode.TreeItem>;
         panesDragAndDrop = options.dragAndDropController as unknown as
           vscode.TreeDragAndDropController<vscode.TreeItem> | undefined;
       } else if (viewId === "herdr.spaces")
         spacesProvider = options.treeDataProvider as unknown as vscode.TreeDataProvider<vscode.TreeItem>;
-      else if (viewId !== "herdr.agents") assert.fail(`Unexpected Tree View ${viewId}`);
+      else if (viewId === "herdr.agents")
+        agentsProvider = options.treeDataProvider as unknown as vscode.TreeDataProvider<vscode.TreeItem>;
+      else assert.fail(`Unexpected Tree View ${viewId}`);
       return mockTreeView as vscode.TreeView<T>;
     };
     vscode.window.showErrorMessage = (message: string) => {
@@ -305,6 +312,7 @@ async function withNavigationFeature(
     assert.ok(panesProvider);
     assert.ok(panesDragAndDrop);
     assert.ok(spacesProvider);
+    assert.ok(agentsProvider);
     await run({
       prefix,
       projection,
@@ -312,6 +320,8 @@ async function withNavigationFeature(
       panesProvider,
       panesDragAndDrop,
       spacesProvider,
+      agentsProvider,
+      registeredViews,
       closedPaneEditors,
       errors,
       warningCalls,
@@ -557,6 +567,153 @@ function isSpaceTreeItemFor(item: vscode.TreeItem, spaceId: string): item is Spa
 }
 
 suite("Management commands", () => {
+  test("Select Space changes the selected row and the Panes being browsed", async () => {
+    await withNavigationFeature(connectedProjection(), async (harness) => {
+      await vscode.commands.executeCommand(`${harness.prefix}herdr.selectSpace`, "space-other");
+      const rows = await treeChildren(harness.spacesProvider);
+      const selected = rows.find((item) => isSpaceTreeItemFor(item, "space-other"));
+      assert.ok(selected);
+      assert.equal(selected.contextValue, "herdr.space.selected");
+      assert.deepEqual(await rowLabels(harness), ["Other Herdr Tab"]);
+    });
+  });
+
+  test("Rename Space sends the selected label to Herdr", async () => {
+    await withNavigationFeature(connectedProjection(), async (harness) => {
+      const rows = await treeChildren(harness.spacesProvider);
+      const row = rows.find((item) => isSpaceTreeItemFor(item, "space-other"));
+      assert.ok(row);
+      harness.setInputResult("Renamed Space");
+      await vscode.commands.executeCommand(`${harness.prefix}herdr.renameSpace`, row);
+      assert.deepEqual(harness.management.renameSpaceRequests, [
+        { sessionId, spaceId: "space-other", label: "Renamed Space" },
+      ]);
+      assert.deepEqual(harness.errors, []);
+    });
+  });
+
+  test("Canceling Rename Space sends no request", async () => {
+    await withNavigationFeature(connectedProjection(), async (harness) => {
+      const rows = await treeChildren(harness.spacesProvider);
+      const row = rows.find((item) => isSpaceTreeItemFor(item, "space-other"));
+      assert.ok(row);
+      harness.setInputResult(undefined);
+      await vscode.commands.executeCommand(`${harness.prefix}herdr.renameSpace`, row);
+      assert.deepEqual(harness.management.renameSpaceRequests, []);
+      assert.deepEqual(harness.errors, []);
+    });
+  });
+
+  test("A rejected Rename Space shows Herdr's error", async () => {
+    await withNavigationFeature(connectedProjection(), async (harness) => {
+      const rows = await treeChildren(harness.spacesProvider);
+      const row = rows.find((item) => isSpaceTreeItemFor(item, "space-other"));
+      assert.ok(row);
+      harness.setInputResult("Rejected label");
+      harness.management.renameSpace = (request) => {
+        harness.management.renameSpaceRequests.push(request);
+        return Promise.reject(new Error("server denied"));
+      };
+      await vscode.commands.executeCommand(`${harness.prefix}herdr.renameSpace`, row);
+      assert.deepEqual(harness.management.renameSpaceRequests, [
+        { sessionId, spaceId: "space-other", label: "Rejected label" },
+      ]);
+      assert.deepEqual(harness.errors, ["Could not rename Space: server denied"]);
+    });
+  });
+
+  test("registered sidebar views and every Spaces and Panes context variant match the manifest", async () => {
+    const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
+    assert.ok(extension);
+    const manifest = extension.packageJSON as {
+      contributes: { views: Record<string, { id: string }[]>; menus: Record<string, { when?: string }[]> };
+    };
+    const contributedViews = Object.values(manifest.contributes.views)
+      .flat()
+      .map(({ id }) => id);
+    const contexts = new Map<string, Set<string>>();
+    const collect = async (provider: vscode.TreeDataProvider<vscode.TreeItem>, viewId: string): Promise<void> => {
+      const values = contexts.get(viewId) ?? new Set<string>();
+      contexts.set(viewId, values);
+      const roots = await treeChildren(provider);
+      for (const root of roots) {
+        if (root.contextValue !== undefined) values.add(root.contextValue);
+        const children = await treeChildren(provider, root);
+        children.forEach((child) => {
+          if (child.contextValue !== undefined) values.add(child.contextValue);
+        });
+      }
+    };
+    const baseWithAgent = snapshot();
+    const agentPane = baseWithAgent.panes[0];
+    assert.ok(agentPane);
+    const withAgent = {
+      ...baseWithAgent,
+      agents: [
+        {
+          ...agentPane,
+          paneId: agentPane.id,
+          name: "Test Agent",
+          interactiveReady: true,
+          launchPending: false,
+          screenDetectionSkipped: false,
+          stateChangeSequence: 1,
+        },
+      ],
+    };
+    await withNavigationFeature(connectedProjection(withAgent), async (harness) => {
+      harness.registeredViews.forEach((viewId) =>
+        assert.ok(contributedViews.includes(viewId), `Registered view ${viewId} is contributed`),
+      );
+      const agents = await treeChildren(harness.agentsProvider);
+      assert.equal(agents.length, 1);
+      assert.equal(agents[0]?.contextValue, undefined, "Agent rows carry no menu context");
+      assert.equal(agents[0]?.command?.command, "herdr.openAgentPane");
+      await collect(harness.spacesProvider, "herdr.spaces");
+      await collect(harness.panesProvider, "herdr.panes");
+      await vscode.commands.executeCommand(`${harness.prefix}herdr.selectSpace`, "space-other");
+      await collect(harness.spacesProvider, "herdr.spaces");
+      await collect(harness.panesProvider, "herdr.panes");
+      const base = snapshot();
+      harness.projection.publish(
+        connectedProjection({
+          ...base,
+          spaces: [space("space-primary", 1, "Primary", 2, 1, "tab-group")],
+          herdrTabs: [tab("tab-group", "space-primary", "Only Tab", 2)],
+          panes: base.panes.slice(0, 2),
+        }),
+      );
+      await collect(harness.panesProvider, "herdr.panes");
+    });
+    contexts.forEach((values, viewId) => {
+      assert.ok(contributedViews.includes(viewId));
+      const patterns = (manifest.contributes.menus["view/item/context"] ?? [])
+        .filter(({ when }) => when?.includes(`view == ${viewId}`))
+        .map(({ when }) => when?.match(/viewItem =~ \/(.+)\//)?.[1])
+        .filter((pattern): pattern is string => pattern !== undefined)
+        .map((pattern) => new RegExp(pattern));
+      values.forEach((value) =>
+        assert.ok(
+          patterns.some((pattern) => pattern.test(value)),
+          `${viewId}: ${value} matches a menu`,
+        ),
+      );
+    });
+    assert.deepEqual([...(contexts.get("herdr.spaces") ?? [])].sort(), [
+      "herdr.space",
+      "herdr.space.group",
+      "herdr.space.selected",
+      "herdr.space.selected.group",
+    ]);
+    assert.deepEqual([...(contexts.get("herdr.panes") ?? [])].sort(), [
+      "herdr.panes.group",
+      "herdr.panes.group.closable",
+      "herdr.panes.pane.closable",
+      "herdr.panes.singleton",
+      "herdr.panes.singleton.closable",
+    ]);
+  });
+
   suiteSetup(async () => {
     const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
     assert.ok(extension, "Extension is installed in the test host");
