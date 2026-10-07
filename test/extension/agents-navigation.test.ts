@@ -5,9 +5,23 @@ import type {
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
 } from "../../src/modules/sessions/activeSessionProjection";
+import type { ActiveSessionCreation } from "../../src/modules/sessions/creation";
+import type { ActiveSessionManagement } from "../../src/modules/sessions/management";
 import type { HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
-import type { PaneEditorPresence } from "../../src/modules/pane-editors";
-import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
+import type { PaneEditorPresence, PaneTerminalClosing, PaneTerminalOpening } from "../../src/modules/pane-editors";
+import type { PaneEditorPresenceSource } from "../../src/modules/workspace-context";
+import { NavigationContextModel } from "../../src/modules/workspace-context/NavigationContextModel";
+import { CloseFeature } from "../../src/features/close/CloseFeature";
+import { CreatePaneFeature } from "../../src/features/create-pane/CreatePaneFeature";
+import { CreateSpaceFeature } from "../../src/features/create-space/CreateSpaceFeature";
+import { RenameFeature } from "../../src/features/rename/RenameFeature";
+import { RevealPaneFeature } from "../../src/features/reveal-pane/RevealPaneFeature";
+import { RunNpmScriptFeature } from "../../src/features/run-npm-script/RunNpmScriptFeature";
+import { VsCodeNpmScriptsView } from "../../src/views/npm-scripts/VsCodeNpmScriptsView";
+import { VsCodeAgentsView } from "../../src/views/sidebar/agents/VsCodeAgentsView";
+import { VsCodePanesView } from "../../src/views/sidebar/panes/VsCodePanesView";
+import { VsCodeSpacesView } from "../../src/views/sidebar/spaces/VsCodeSpacesView";
+import { VisiblePaneEditorDecorationProvider } from "../../src/views/sidebar/shared/visiblePaneEditorDecoration";
 import type { PaneAttach } from "../../src/api/herdr/pane-clients/HerdrPaneAttach";
 import type { PaneClientFactory } from "../../src/api/herdr/pane-clients/HerdrPaneClientFactory";
 import type { PaneObserver } from "../../src/api/herdr/pane-clients/HerdrPaneObserver";
@@ -378,7 +392,7 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
   const tokenSource = new vscode.CancellationTokenSource();
   let decorations: vscode.FileDecorationProvider | undefined;
   let decorationSubscription: vscode.Disposable | undefined;
-  let feature: NavigationFeature | undefined;
+  let navigation: vscode.Disposable | undefined;
 
   try {
     vscode.commands.registerCommand = (...args: Parameters<typeof originalRegisterCommand>) =>
@@ -411,7 +425,7 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
       return { dispose: () => undefined };
     };
     const unused = (): Promise<never> => Promise.reject(new Error("not used"));
-    feature = new NavigationFeature({
+    navigation = createNavigation({
       sessionProjection: projection,
       paneTerminalOpening: manager,
       paneEditorPresence: manager,
@@ -440,7 +454,7 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
     });
   } finally {
     decorationSubscription?.dispose();
-    feature?.dispose();
+    navigation?.dispose();
     manager.dispose();
     focusTracker.dispose();
     selection.dispose();
@@ -450,6 +464,64 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
     vscode.window.registerFileDecorationProvider = originalRegisterDecorations;
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   }
+}
+
+type NavigationDependencies = Readonly<{
+  sessionProjection: ActiveSessionProjectionSource;
+  paneTerminalOpening: PaneTerminalOpening;
+  paneClosing: PaneTerminalClosing;
+  paneEditorPresence: PaneEditorPresenceSource;
+  creation: ActiveSessionCreation;
+  management: ActiveSessionManagement;
+}>;
+
+function createNavigation(dependencies: NavigationDependencies): vscode.Disposable {
+  const navigationContext = new NavigationContextModel(dependencies.sessionProjection, dependencies.paneEditorPresence);
+  const panes = new VsCodePanesView(
+    navigationContext,
+    navigationContext,
+    dependencies.paneTerminalOpening,
+    dependencies.management,
+  );
+  const spaces = new VsCodeSpacesView(navigationContext, navigationContext);
+  const npmScripts = new VsCodeNpmScriptsView(navigationContext);
+  const runNpmScript = new RunNpmScriptFeature(
+    navigationContext,
+    dependencies.creation,
+    dependencies.paneTerminalOpening,
+    npmScripts,
+  );
+  const agents = new VsCodeAgentsView(navigationContext, navigationContext);
+  const decorationProvider = new VisiblePaneEditorDecorationProvider(navigationContext, navigationContext);
+  const decorations = vscode.window.registerFileDecorationProvider(decorationProvider);
+  const createSpace = new CreateSpaceFeature(
+    navigationContext,
+    navigationContext,
+    dependencies.creation,
+    dependencies.paneTerminalOpening,
+  );
+  const createPane = new CreatePaneFeature(navigationContext, dependencies.creation, dependencies.paneTerminalOpening);
+  const rename = new RenameFeature(navigationContext, dependencies.management);
+  const close = new CloseFeature(navigationContext, dependencies.management, dependencies.paneClosing);
+  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneTerminalOpening);
+
+  return {
+    dispose() {
+      revealPane.dispose();
+      close.dispose();
+      rename.dispose();
+      createPane.dispose();
+      createSpace.dispose();
+      decorations.dispose();
+      decorationProvider.dispose();
+      agents.dispose();
+      runNpmScript.dispose();
+      npmScripts.dispose();
+      spaces.dispose();
+      panes.dispose();
+      navigationContext.dispose();
+    },
+  };
 }
 
 async function treeRows(harness: NavigationHarness, viewId: string): Promise<vscode.TreeItem[]> {

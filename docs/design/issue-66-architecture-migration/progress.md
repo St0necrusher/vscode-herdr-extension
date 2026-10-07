@@ -46,7 +46,7 @@ Execution plan approved by the user on 2026-10-07.
 | 4 | `modules/workspace-context` | done |
 | 5a1 | Sidebar trees to `views/sidebar`; `worktreeGroup`, closability, `paneName` to `modules/sessions` | done |
 | 5a2 | Features create-space, create-pane, rename, close, reveal-pane; trivial clicks in views (D16–D18) | done |
-| 5b | `views/npm-scripts`, `features/run-npm-script`; `NavigationFeature` removed | pending |
+| 5b | `views/npm-scripts`, `features/run-npm-script`; `NavigationFeature` removed | done |
 | 6 | Remove `capabilities/`, `infrastructure/`, old ESLint elements; verify ESLint; doc paths | pending |
 
 ## Log
@@ -70,3 +70,4 @@ Execution plan approved by the user on 2026-10-07.
 - 2026-10-07: 5a1 accepted on the first review (spot-checked `closability.ts` and its call in `PanesModel.ts:91-92`). The first worker died after its report; a replacement (`sol-5a1b`) finished the D16 amendment (astra: `paneName` → `modules/sessions`, no test mocks; `answers/5a1.md`). Slice 5a was split into 5a1/5a2 by the brief author.
 - 2026-10-08: 5a2 first review: corrections requested (`reviews/5a2.md`): the worker had added re-checks after prompts/confirmations and a Pane existence check on split that the old features lacked; plus exports, helper shape, naming. D19 (astra): §6 file naming wins; §4 example fixed. `luna-5a2` exceeded the context budget (162k) after finishing, so a fresh worker applies the corrections.
 - 2026-10-08: 5a2 accepted after three correction rounds (workers `luna-5a2`, `luna-5a2b`, `luna-5a2c`, each replaced to stay within the context budget). Round 2: the reviewer's loosely worded split correction had dropped the Selected Space guard — restored (old `PanesModel` was `connected` only with a Selected Space); `create-pane` flattened. Round 3: an out-of-scope ESLint widening reverted; `create-pane/shared/index.ts` added. `NavigationFeature` composes the new views and features until 5b.
+- 2026-10-08: 5b accepted after one mechanical correction (merged duplicate test imports; `HerdrExtension` field renamed `navigationContext`), applied by a fresh worker (`luna-5bc`) because `luna-5b` was at 141k. `src/features/navigation/` removed; `HerdrExtension` composes the navigation pieces directly in the former order, with reverse disposal and constructor-failure cleanup. Reviewer note for slice 6: views importing features (e.g. `ConnectionStatus`) is allowed by §1.
