@@ -1,6 +1,6 @@
 import type { HerdrPane, HerdrSpace, HerdrTab } from "@api/herdr";
 import type { NavigationContextSource } from "@modules/workspace-context";
-import { paneName } from "../shared";
+import { paneName, isPaneClosable, isTabClosable } from "@modules/sessions";
 
 export type PaneNavigationRow = Readonly<{
   pane: HerdrPane;
@@ -88,8 +88,8 @@ export class PanesModel {
 
     const tabs = context.snapshot.herdrTabs.filter((tab) => tab.spaceId === selectedSpaceId);
     const panes = context.snapshot.panes.filter((pane) => pane.spaceId === selectedSpaceId);
-    const paneClosable = panes.length > 1;
-    const tabClosable = tabs.length > 1;
+    const paneClosable = isPaneClosable(panes);
+    const tabClosable = isTabClosable(tabs);
     const items: PaneNavigationItem[] = [];
     tabs.forEach((tab) => {
       const tabPanes = panes

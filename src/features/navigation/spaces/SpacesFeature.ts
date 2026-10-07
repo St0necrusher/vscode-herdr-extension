@@ -4,8 +4,7 @@ import type { CreatedSpace, HerdrPane, HerdrSpace } from "@api/herdr";
 import type { PaneTerminalClosing } from "@modules/pane-editors";
 import type { SpaceSelectionOperations, NavigationContextSource } from "@modules/workspace-context";
 import type { NavigationPaneOpening } from "../capabilities";
-import { SpacesModel, type SpaceNavigationEntry } from "./SpacesModel";
-import { SpaceTreeItem, VsCodeSpacesView } from "./view";
+import { SpacesModel, SpaceTreeItem, VsCodeSpacesView, type SpaceNavigationEntry } from "@views/sidebar";
 
 export class SpacesFeature {
   private readonly model: SpacesModel;

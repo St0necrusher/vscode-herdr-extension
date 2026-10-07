@@ -6,9 +6,9 @@ import type {
   PaneNavigationSingleton,
   PanesModel,
   PanesState,
-} from "../PanesModel";
+} from "./PanesModel";
 import type { VisiblePaneEditorsSource } from "@modules/workspace-context";
-import { paneRowUri } from "../../shared/view";
+import { paneRowUri } from "../shared";
 
 export type PanesTreeItem = PanesGroupTreeItem | PaneTreeItem;
 

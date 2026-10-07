@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
 import type { HerdrAgentStatus } from "@api/herdr";
 import type { VisiblePaneEditorsSource } from "@modules/workspace-context";
-import { agentRowUri } from "../../shared/view";
-import type { AgentNavigationRow, AgentsModel, AgentsState } from "../AgentsModel";
+import { agentRowUri } from "../shared";
+import type { AgentNavigationRow, AgentsModel, AgentsState } from "./AgentsModel";
 
 export class VsCodeAgentsView implements vscode.TreeDataProvider<AgentTreeItem>, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<AgentTreeItem | undefined | null>();

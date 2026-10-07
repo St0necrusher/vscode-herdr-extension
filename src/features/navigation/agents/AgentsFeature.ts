@@ -5,8 +5,7 @@ import type {
   VisiblePaneEditorsSource,
 } from "@modules/workspace-context";
 import type { NavigationPaneOpening } from "../capabilities";
-import { AgentsModel } from "./AgentsModel";
-import { VsCodeAgentsView } from "./view";
+import { AgentsModel, VsCodeAgentsView } from "@views/sidebar";
 
 export class AgentsFeature {
   private readonly model: AgentsModel;
