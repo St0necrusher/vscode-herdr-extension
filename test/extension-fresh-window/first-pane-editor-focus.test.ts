@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import type { Logger } from "@core/logger";
-import type { ActiveSessionProjectionSource } from "../../src/capabilities/sessions";
+import type { ActiveSessionProjectionSource } from "../../src/modules/sessions/activeSessionProjection";
 import type { HerdrPane } from "../../src/api/herdr/shared/types";
 import type { PaneClientFactory } from "../../src/infrastructure/pane-editors/HerdrPaneClientFactory";
 import type { PaneOutputSink } from "../../src/infrastructure/pane-editors/PaneOutputSink";

@@ -1,4 +1,4 @@
-import type { ActiveSessionProjectionState } from "@capabilities/sessions";
+import type { ActiveSessionProjectionState } from "@modules/sessions";
 import type { HerdrPane } from "@api/herdr";
 import type { SelectedPaneEditor } from "./PaneEditorSelectionModel";
 

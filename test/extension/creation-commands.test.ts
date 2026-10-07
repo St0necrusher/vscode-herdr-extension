@@ -1,13 +1,15 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import type {
-  ActiveSessionCreation,
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
+} from "../../src/modules/sessions/activeSessionProjection";
+import type {
+  ActiveSessionCreation,
   CreatePaneRequest,
   CreateSpaceRequest,
   SplitPaneRequest,
-} from "../../src/capabilities/sessions";
+} from "../../src/modules/sessions/creation";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
 import type { PaneTerminalOpenRequest } from "../../src/capabilities/terminalSurfaces";
 import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";

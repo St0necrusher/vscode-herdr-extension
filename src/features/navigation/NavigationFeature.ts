@@ -1,9 +1,5 @@
 import * as vscode from "vscode";
-import type {
-  ActiveSessionCreation,
-  ActiveSessionManagement,
-  ActiveSessionProjectionSource,
-} from "@capabilities/sessions";
+import type { ActiveSessionCreation, ActiveSessionManagement, ActiveSessionProjectionSource } from "@modules/sessions";
 import type {
   PaneEditorPresenceSource,
   PaneTerminalClosing,

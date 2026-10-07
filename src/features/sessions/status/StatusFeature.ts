@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import type { HerdrConfigurationActions } from "@capabilities/sessions";
+import type { HerdrConfigurationActions } from "../capabilities";
 import type { Logger } from "@core/logger";
-import type { SessionsOperations, SessionsStateSource } from "../capabilities";
+import type { SessionsOperations, SessionsStateSource } from "@modules/sessions";
 import { statusModel } from "./statusModel";
 import { VsCodeStatusView } from "./view/VsCodeStatusView";
 

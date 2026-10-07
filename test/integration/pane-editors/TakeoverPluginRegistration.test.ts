@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Logger } from "@core/logger";
-import type { HerdrConfigurationSource } from "../../../src/capabilities/sessions";
+import type { HerdrConfigurationSource } from "../../../src/modules/sessions/configuration";
 import { TakeoverPluginRegistration } from "../../../src/infrastructure/pane-editors/takeover/TakeoverPluginRegistration";
 
 const vscodeMock = vi.hoisted(() => {

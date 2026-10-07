@@ -1,10 +1,12 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
+import type { ActiveSessionCreation } from "../../src/modules/sessions/creation";
 import type {
-  ActiveSessionCreation,
-  ActiveSessionManagement,
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
+} from "../../src/modules/sessions/activeSessionProjection";
+import type {
+  ActiveSessionManagement,
   ClosePaneRequest,
   CloseSpaceRequest,
   CloseTabRequest,
@@ -12,7 +14,7 @@ import type {
   RenamePaneRequest,
   RenameSpaceRequest,
   RenameTabRequest,
-} from "../../src/capabilities/sessions";
+} from "../../src/modules/sessions/management";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
 import type { PaneTerminalClosing } from "../../src/capabilities/terminalSurfaces";
 import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";

@@ -1,4 +1,4 @@
-import type { HerdrConfigurationSource } from "@capabilities/sessions";
+import type { HerdrConfigurationSource } from "@modules/sessions";
 import type { Logger } from "@core/logger";
 import { HerdrPaneAttach, type PaneAttach } from "./HerdrPaneAttach";
 import { HerdrPaneObserver, type PaneObserver } from "./HerdrPaneObserver";

@@ -2,9 +2,9 @@ import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import { SessionsFeature } from "../../src/features/sessions/SessionsFeature";
 import { VsCodeSessionsView } from "../../src/features/sessions/view/VsCodeSessionsView";
-import type { ActiveSessionProjectionState } from "../../src/capabilities/sessions";
+import type { ActiveSessionProjectionState } from "../../src/modules/sessions/activeSessionProjection";
 import type { HerdrSessionConnection } from "../../src/api/herdr/connection/connection";
-import type { SessionsState, SessionsStateSource } from "../../src/features/sessions/capabilities";
+import type { SessionsState, SessionsStateSource } from "../../src/modules/sessions/sessionsState";
 
 let sequence = 0;
 const commandIds = [
