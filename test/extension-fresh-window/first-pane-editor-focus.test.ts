@@ -3,14 +3,14 @@ import * as vscode from "vscode";
 import type { Logger } from "@core/logger";
 import type { ActiveSessionProjectionSource } from "../../src/modules/sessions/activeSessionProjection";
 import type { HerdrPane } from "../../src/api/herdr/shared/types";
-import type { PaneClientFactory } from "../../src/infrastructure/pane-editors/HerdrPaneClientFactory";
-import type { PaneOutputSink } from "../../src/infrastructure/pane-editors/PaneOutputSink";
+import type { PaneClientFactory } from "../../src/api/herdr/pane-clients/HerdrPaneClientFactory";
+import type { PaneOutputSink } from "../../src/api/herdr/pane-clients/PaneOutputSink";
 import {
   PaneEditorFocusTracker,
   PaneEditorSelectionModel,
   PaneTerminalSurfaceManager,
   VsCodePaneTerminalSurface,
-} from "../../src/infrastructure/pane-editors";
+} from "../../src/modules/pane-editors";
 
 // xterm.js answers each switch-on of focus reporting with whether its textarea holds keyboard focus.
 const FOCUS_REPORTING_ON = "\x1b[?1004l\x1b[?1004h";

@@ -6,17 +6,17 @@ import type {
   ActiveSessionProjectionState,
 } from "../../src/modules/sessions/activeSessionProjection";
 import type { HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
-import type { PaneEditorPresence } from "../../src/capabilities/terminalSurfaces";
+import type { PaneEditorPresence } from "../../src/modules/pane-editors";
 import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
-import type { PaneAttach } from "../../src/infrastructure/pane-editors/HerdrPaneAttach";
-import type { PaneClientFactory } from "../../src/infrastructure/pane-editors/HerdrPaneClientFactory";
-import type { PaneObserver } from "../../src/infrastructure/pane-editors/HerdrPaneObserver";
+import type { PaneAttach } from "../../src/api/herdr/pane-clients/HerdrPaneAttach";
+import type { PaneClientFactory } from "../../src/api/herdr/pane-clients/HerdrPaneClientFactory";
+import type { PaneObserver } from "../../src/api/herdr/pane-clients/HerdrPaneObserver";
 import {
   PaneEditorFocusTracker,
   PaneEditorSelectionModel,
   PaneTerminalSurfaceManager,
   VsCodePaneTerminalSurface,
-} from "../../src/infrastructure/pane-editors";
+} from "../../src/modules/pane-editors";
 
 class FakePaneClients implements PaneClientFactory {
   createObserver(): PaneObserver {

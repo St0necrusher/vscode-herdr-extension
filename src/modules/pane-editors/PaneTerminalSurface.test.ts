@@ -1,18 +1,19 @@
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { Terminal } from "@xterm/headless";
+import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "./session-source";
 import type {
-  ActiveSessionProjectionSource,
-  ActiveSessionProjectionState,
-} from "../../modules/sessions/activeSessionProjection";
-import type { HerdrPane, HerdrSessionSnapshot } from "../../api/herdr/shared/types";
+  HerdrPane,
+  HerdrSessionSnapshot,
+  PaneClientFactory,
+  PaneClientRequest,
+  PaneOutputSink,
+  TakeoverOffers,
+} from "@api/herdr";
 import type { Logger } from "@core/logger";
 import type * as vscode from "vscode";
-import type { PaneClientFactory, PaneClientRequest } from "./HerdrPaneClientFactory";
-import type { PaneOutputSink } from "./PaneOutputSink";
 import { PaneEditorFocusTracker } from "./PaneEditorFocusTracker";
 import { PaneEditorSelectionModel, type SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import { VsCodePaneTerminalSurface } from "./PaneTerminalSurface";
-import type { TakeoverOffers } from "@api/herdr";
 
 const vscodeStub = vi.hoisted(() => {
   class MockEventEmitter<T> {

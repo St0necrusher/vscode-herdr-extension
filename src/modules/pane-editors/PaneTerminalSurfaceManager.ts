@@ -1,13 +1,8 @@
 import * as vscode from "vscode";
-import type {
-  PaneEditorPresence,
-  PaneEditorPresenceSource,
-  PaneEditorReference,
-  PaneTerminalClosing,
-  PaneTerminalOpenRequest,
-  PaneTerminalOpening,
-} from "@capabilities/terminalSurfaces";
-import type { HerdrSessionEventSource } from "@modules/sessions";
+import type { PaneEditorPresence, PaneEditorPresenceSource, PaneEditorReference } from "./paneEditorPresence";
+import type { PaneTerminalClosing } from "./paneTerminalClosing";
+import type { PaneTerminalOpenRequest, PaneTerminalOpening } from "./paneTerminalOpening";
+import type { HerdrSessionEventSource } from "./session-source";
 import type { HerdrPaneMovedEvent } from "@api/herdr";
 import type { PaneEditorSelection, SelectedPaneEditor } from "./PaneEditorSelectionModel";
 import type { PaneTerminalSurface, PaneTerminalSurfaceFactory } from "./PaneTerminalSurface";

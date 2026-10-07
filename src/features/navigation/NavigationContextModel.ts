@@ -1,6 +1,6 @@
 import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "@modules/sessions";
 import type { HerdrPane } from "@api/herdr";
-import type { PaneEditorPresence, PaneEditorPresenceSource } from "@capabilities/terminalSurfaces";
+import type { PaneEditorPresence, PaneEditorPresenceSource } from "@modules/pane-editors";
 import type {
   NavigationContextState,
   NavigationContextSource,

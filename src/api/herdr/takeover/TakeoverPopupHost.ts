@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type Server, type Socket } from "node:net";
-import type { HerdrExecutableSource } from "./herdrExecutableSource";
+import type { HerdrExecutableSource } from "../shared";
 import type { Logger } from "@core/logger";
 import { TAKEOVER_PLUGIN_ID } from "./TakeoverPluginRegistration";
 

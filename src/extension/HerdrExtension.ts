@@ -7,6 +7,7 @@ import { StartLocalSessionFeature } from "@features/start-local-session";
 import { ConfigureExecutableFeature } from "@features/configure-executable";
 import { ManageTakeoverPluginFeature } from "@features/manage-takeover-plugin";
 import {
+  HerdrPaneClientFactory,
   HerdrCliSessionDirectory,
   JsonSocketHerdrSessionConnectionFactory,
   NodeHerdrSocketConnector,
@@ -14,12 +15,11 @@ import {
   TakeoverPopupHost,
 } from "@api/herdr";
 import {
-  HerdrPaneClientFactory,
   PaneEditorFocusTracker,
   PaneEditorSelectionModel,
   PaneTerminalSurfaceManager,
   VsCodePaneTerminalSurface,
-} from "@infrastructure/pane-editors";
+} from "@modules/pane-editors";
 import { HerdrSettings } from "./HerdrSettings";
 import { VsCodeLogger } from "@core/logger";
 import { NodeProcessRunner } from "@core/process";

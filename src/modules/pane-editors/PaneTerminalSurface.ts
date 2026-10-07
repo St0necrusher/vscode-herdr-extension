@@ -1,16 +1,20 @@
 import * as vscode from "vscode";
 import type { Logger } from "@core/logger";
-import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "@modules/sessions";
-import type { HerdrPane } from "@api/herdr";
+import type { ActiveSessionProjectionSource, ActiveSessionProjectionState } from "./session-source";
+import type {
+  HerdrPane,
+  PaneClientFactory,
+  PaneClientRequest,
+  PaneAttach,
+  PaneObserver,
+  PaneOutputSink,
+  TakeoverOffer,
+  TakeoverOffers,
+} from "@api/herdr";
 import type { PaneEditorFocusTracker } from "./PaneEditorFocusTracker";
-import type { PaneClientFactory, PaneClientRequest } from "./HerdrPaneClientFactory";
-import type { PaneAttach } from "./HerdrPaneAttach";
-import type { PaneObserver } from "./HerdrPaneObserver";
 import type { SelectedPaneEditor } from "./PaneEditorSelectionModel";
-import type { PaneOutputSink } from "./PaneOutputSink";
 import { observerFailurePlaceholder, paneName, paneTarget, type PaneTarget } from "./paneTarget";
 import { desiredClient, type AttachIntent, type DesiredClient, type PaneEditorVisibility } from "./paneClientPolicy";
-import type { TakeoverOffer, TakeoverOffers } from "@api/herdr";
 
 export interface PaneTerminalSurface {
   readonly terminal: vscode.Terminal;

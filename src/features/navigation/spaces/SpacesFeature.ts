@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { ActiveSessionCreation, ActiveSessionManagement } from "@modules/sessions";
 import type { CreatedSpace, HerdrPane, HerdrSpace } from "@api/herdr";
-import type { PaneTerminalClosing } from "@capabilities/terminalSurfaces";
+import type { PaneTerminalClosing } from "@modules/pane-editors";
 import type { NavigationPaneOpening, SpaceSelectionOperations, NavigationContextSource } from "../capabilities";
 import { SpacesModel, type SpaceNavigationEntry } from "./SpacesModel";
 import { SpaceTreeItem, VsCodeSpacesView } from "./view";

@@ -11,7 +11,7 @@ import type {
   SplitPaneRequest,
 } from "../../src/modules/sessions/creation";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
-import type { PaneTerminalOpenRequest } from "../../src/capabilities/terminalSurfaces";
+import type { PaneTerminalOpenRequest } from "../../src/modules/pane-editors";
 import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
 import { PanesGroupTreeItem, PaneTreeItem } from "../../src/features/navigation/panes/view/VsCodePanesView";
 

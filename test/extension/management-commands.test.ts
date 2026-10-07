@@ -16,7 +16,7 @@ import type {
   RenameTabRequest,
 } from "../../src/modules/sessions/management";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
-import type { PaneTerminalClosing } from "../../src/capabilities/terminalSurfaces";
+import type { PaneTerminalClosing } from "../../src/modules/pane-editors";
 import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
 import { PanesGroupTreeItem, PaneTreeItem } from "../../src/features/navigation/panes/view/VsCodePanesView";
 import { SpaceTreeItem } from "../../src/features/navigation/spaces/view/VsCodeSpacesView";

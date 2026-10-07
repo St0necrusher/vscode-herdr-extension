@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "@core/logger";
-import type { PaneOutputSink } from "../../../src/infrastructure/pane-editors/PaneOutputSink";
-import { HerdrPaneAttach } from "../../../src/infrastructure/pane-editors/HerdrPaneAttach";
-import { HerdrPaneObserver } from "../../../src/infrastructure/pane-editors/HerdrPaneObserver";
+import type { PaneOutputSink } from "../../../src/api/herdr/pane-clients/PaneOutputSink";
+import { HerdrPaneAttach } from "../../../src/api/herdr/pane-clients/HerdrPaneAttach";
+import { HerdrPaneObserver } from "../../../src/api/herdr/pane-clients/HerdrPaneObserver";
 
 type OutputEvent = Readonly<{ kind: "append" | "replace"; data: string }>;
 type FakeInvocation = Readonly<{ argv: string[]; configPath: string | undefined; pid: number }>;

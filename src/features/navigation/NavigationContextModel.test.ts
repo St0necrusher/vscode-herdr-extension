@@ -4,7 +4,7 @@ import type {
   ActiveSessionProjectionState,
 } from "../../modules/sessions/activeSessionProjection";
 import type { HerdrSessionSnapshot } from "../../api/herdr/shared/types";
-import type { PaneEditorPresence, PaneEditorPresenceSource } from "@capabilities/terminalSurfaces";
+import type { PaneEditorPresence, PaneEditorPresenceSource } from "@modules/pane-editors";
 import { NavigationContextModel } from "./NavigationContextModel";
 import type { NavigationContextState } from "./capabilities";
 

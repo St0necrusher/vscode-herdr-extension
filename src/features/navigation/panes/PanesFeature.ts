@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { ActiveSessionCreation, ActiveSessionManagement } from "@modules/sessions";
 import type { CreatedPane, SplitDirection } from "@api/herdr";
-import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@capabilities/terminalSurfaces";
+import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "@modules/pane-editors";
 import type { NavigationContextSource, NavigationPaneOpening, VisiblePaneEditorsSource } from "../capabilities";
 import { paneName } from "../shared";
 import { PanesModel, tabInsertIndex, type PaneNavigationItem, type PaneNavigationRow } from "./PanesModel";
