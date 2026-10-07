@@ -1,5 +1,4 @@
-import type { HerdrPane } from "@api/herdr";
-import type { PaneClientRequest } from "./HerdrPaneClientFactory";
+import type { HerdrPane, PaneClientRequest } from "@api/herdr";
 
 export type PaneEditorVisibility = "hidden" | "blurred" | "focused";
 export type AttachIntent = "wanted" | "displaced" | "failed";

@@ -11,16 +11,16 @@ import type {
   HerdrSessionEventSource,
 } from "../../src/modules/sessions/sessionEvents";
 import type { HerdrPane, HerdrPaneMovedEvent, HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
-import type { PaneTerminalOpenRequest } from "../../src/capabilities/terminalSurfaces";
-import type { PaneAttach } from "../../src/infrastructure/pane-editors/HerdrPaneAttach";
-import type { PaneClientFactory } from "../../src/infrastructure/pane-editors/HerdrPaneClientFactory";
-import type { PaneObserver } from "../../src/infrastructure/pane-editors/HerdrPaneObserver";
+import type { PaneTerminalOpenRequest } from "../../src/modules/pane-editors";
+import type { PaneAttach } from "../../src/api/herdr/pane-clients/HerdrPaneAttach";
+import type { PaneClientFactory } from "../../src/api/herdr/pane-clients/HerdrPaneClientFactory";
+import type { PaneObserver } from "../../src/api/herdr/pane-clients/HerdrPaneObserver";
 import {
   PaneEditorFocusTracker,
   PaneEditorSelectionModel,
   PaneTerminalSurfaceManager,
   VsCodePaneTerminalSurface,
-} from "../../src/infrastructure/pane-editors";
+} from "../../src/modules/pane-editors";
 
 interface ClientRecord {
   request: Parameters<PaneClientFactory["createAttach"]>[0];

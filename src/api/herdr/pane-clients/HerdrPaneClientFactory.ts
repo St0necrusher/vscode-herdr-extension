@@ -1,4 +1,4 @@
-import type { HerdrConfigurationSource } from "@modules/sessions";
+import type { HerdrExecutableSource } from "../shared";
 import type { Logger } from "@core/logger";
 import { HerdrPaneAttach, type PaneAttach } from "./HerdrPaneAttach";
 import { HerdrPaneObserver, type PaneObserver } from "./HerdrPaneObserver";
@@ -18,7 +18,7 @@ export interface PaneClientFactory {
 
 export class HerdrPaneClientFactory implements PaneClientFactory {
   constructor(
-    private readonly configuration: HerdrConfigurationSource,
+    private readonly configuration: HerdrExecutableSource,
     private readonly attachConfigPath: string,
     private readonly logger: Logger,
   ) {}

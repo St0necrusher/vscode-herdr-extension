@@ -2,7 +2,7 @@ import type { IDisposable, IPty } from "node-pty";
 import { spawn } from "node-pty";
 import type { Logger } from "@core/logger";
 import type { PaneOutputSink } from "./PaneOutputSink";
-import { stopWithEscalation } from "./stopWithEscalation";
+import { stopWithEscalation } from "@core/process";
 
 export interface PaneAttachRequest {
   readonly executable: string;

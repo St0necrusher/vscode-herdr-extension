@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Logger } from "@core/logger";
-import type { HerdrExecutableSource } from "./herdrExecutableSource";
+import type { HerdrExecutableSource } from "../shared";
 
 export const TAKEOVER_PLUGIN_ID = "st0necrusher.vscode-herdr-takeover";
 

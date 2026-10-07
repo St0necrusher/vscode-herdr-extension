@@ -1,3 +1,4 @@
+export type { HerdrExecutableSource } from "./herdrExecutableSource";
 export type {
   HerdrSessionId,
   HerdrSessionDescriptor,

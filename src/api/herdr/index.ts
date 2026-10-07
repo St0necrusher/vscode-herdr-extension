@@ -1,3 +1,11 @@
+export {
+  HerdrPaneClientFactory,
+  type PaneClientFactory,
+  type PaneClientRequest,
+  type PaneAttach,
+  type PaneObserver,
+  type PaneOutputSink,
+} from "./pane-clients";
 export { TakeoverPluginRegistration, TakeoverPopupHost, type TakeoverOffer, type TakeoverOffers } from "./takeover";
 export { HerdrCliSessionDirectory, type HerdrSessionDirectory, type HerdrSessionListResult } from "./cli";
 export {
