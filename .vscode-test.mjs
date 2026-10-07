@@ -14,4 +14,10 @@ export default defineConfig([
   { label: "extension", files: "dist/test/extension/**/*.test.js", ...shared },
   // Each file here gets a window of its own, for behavior that only a fresh window shows.
   { label: "fresh-window", files: "dist/test/extension-fresh-window/**/*.test.js", ...shared },
+  {
+    ...shared,
+    label: "composition",
+    files: "dist/test/extension-composition/**/*.test.js",
+    workspaceFolder: "./test/fixtures/composition-workspace",
+  },
 ]);
