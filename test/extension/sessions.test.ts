@@ -1,25 +1,31 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-import { SessionsFeature } from "../../src/features/sessions/SessionsFeature";
-import { VsCodeSessionsView } from "../../src/features/sessions/view/VsCodeSessionsView";
+import { SessionsModel } from "../../src/modules/sessions/SessionsModel";
+import { VsCodeSessionsView } from "../../src/views/sidebar/sessions/VsCodeSessionsView";
+import { ConnectionStatus } from "../../src/views/connection-status/ConnectionStatus";
+import { StartLocalSessionFeature } from "../../src/features/start-local-session/StartLocalSessionFeature";
+import { ConfigureExecutableFeature } from "../../src/features/configure-executable/ConfigureExecutableFeature";
+import { HerdrExtension } from "../../src/extension/HerdrExtension";
+import { HerdrSettings } from "../../src/extension/HerdrSettings";
 import type { ActiveSessionProjectionState } from "../../src/modules/sessions/activeSessionProjection";
 import type { HerdrSessionConnection } from "../../src/api/herdr/connection/connection";
 import type { SessionsState, SessionsStateSource } from "../../src/modules/sessions/sessionsState";
 
 let sequence = 0;
 const commandIds = [
-  "herdr.showStatusActions",
-  "herdr.start",
-  "herdr.retryDiscovery",
-  "herdr.selectExecutable",
-  "herdr.openSettings",
   "herdr.selectSession",
   "herdr.refreshSessions",
+  "herdr.start",
+  "herdr.selectExecutable",
+  "herdr.showStatusActions",
+  "herdr.retryDiscovery",
+  "herdr.openSettings",
 ];
 
 async function withNamespacedCommands(
   run: (prefix: string, registered: string[]) => Promise<void>,
   failAt?: number,
+  sessionsOnly = false,
 ): Promise<void> {
   const original = vscode.commands.registerCommand;
   const prefix = `herdr.test.${++sequence}.`;
@@ -27,7 +33,8 @@ async function withNamespacedCommands(
   vscode.commands.registerCommand = (...args: Parameters<typeof original>) => {
     if (registered.length === failAt) throw new Error("registration failed");
     const result = original(prefix + args[0], args[1], args[2]);
-    registered.push(args[0]);
+    const shouldRecordCommand = !sessionsOnly || commandIds.includes(args[0]);
+    if (shouldRecordCommand) registered.push(args[0]);
     return result;
   };
   try {
@@ -142,6 +149,88 @@ function dependencies(options: { list?: () => Promise<never>; configurationFailu
   };
 }
 
+function sessionBindings(value: {
+  directory: ConstructorParameters<typeof SessionsModel>[0];
+  connectionFactory: ConstructorParameters<typeof SessionsModel>[1];
+  configuration: ConstructorParameters<typeof SessionsModel>[2];
+  storage: ConstructorParameters<typeof SessionsModel>[3];
+  logger: ConstructorParameters<typeof SessionsModel>[4];
+  configurationActions: ReturnType<typeof dependencies>["value"]["configurationActions"];
+}) {
+  const model = new SessionsModel(
+    value.directory,
+    value.connectionFactory,
+    value.configuration,
+    value.storage,
+    value.logger,
+  );
+  const resources: vscode.Disposable[] = [model];
+  const executeCommand = vscode.commands.executeCommand;
+  vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
+    if (command === "workbench.action.openSettings") return value.configurationActions.openSettings();
+    return executeCommand(command, ...args);
+  }) as typeof executeCommand;
+  resources.push({
+    dispose: () => {
+      vscode.commands.executeCommand = executeCommand;
+    },
+  });
+  try {
+    const view = new VsCodeSessionsView(model, model);
+    resources.push(view);
+    const start = new StartLocalSessionFeature(model);
+    resources.push(start);
+    const configure = new ConfigureExecutableFeature();
+    configure.selectExecutable = value.configurationActions.selectExecutable;
+    resources.push(configure);
+    const status = new ConnectionStatus(model, model, start, configure, value.logger);
+    resources.push(status);
+    return {
+      model,
+      dispose: () =>
+        resources.reverse().forEach((resource) => {
+          resource.dispose();
+        }),
+    };
+  } catch (error) {
+    resources.reverse().forEach((resource) => {
+      resource.dispose();
+    });
+    throw error;
+  }
+}
+
+function extensionForLifecycle(d: ReturnType<typeof dependencies>): { extension: HerdrExtension; dispose(): void } {
+  const descriptors = Object.getOwnPropertyDescriptors(HerdrSettings.prototype);
+  const createOutputChannel = vscode.window.createOutputChannel;
+  vscode.window.createOutputChannel = () =>
+    ({ ...d.value.logger, dispose: () => undefined }) as unknown as vscode.LogOutputChannel;
+  HerdrSettings.prototype.read = d.value.configuration.read;
+  HerdrSettings.prototype.onDidChange = d.value.configuration.onDidChange;
+  const installed = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
+  assert.ok(installed);
+  const context = {
+    workspaceState: d.value.storage,
+    asAbsolutePath: (path: string) => vscode.Uri.joinPath(installed.extensionUri, path).fsPath,
+    globalStorageUri: vscode.Uri.joinPath(installed.extensionUri, ".vscode-test", "sessions-lifecycle"),
+  } as unknown as vscode.ExtensionContext;
+  try {
+    const extension = new HerdrExtension(context);
+    return {
+      extension,
+      dispose: () => {
+        extension.dispose();
+        Object.defineProperties(HerdrSettings.prototype, descriptors);
+      },
+    };
+  } catch (error) {
+    Object.defineProperties(HerdrSettings.prototype, descriptors);
+    throw error;
+  } finally {
+    vscode.window.createOutputChannel = createOutputChannel;
+  }
+}
+
 suite("Sessions feature host bindings and lifecycle", () => {
   test("the registered Sessions view is contributed in package.json", async () => {
     await withNamespacedCommands(() => {
@@ -157,9 +246,9 @@ suite("Sessions feature host bindings and lifecycle", () => {
         registered.push(viewId);
         return original(viewId, provider);
       };
-      let feature: SessionsFeature | undefined;
+      let feature: ReturnType<typeof sessionBindings> | undefined;
       try {
-        feature = new SessionsFeature(dependencies().value);
+        feature = sessionBindings(dependencies().value);
         assert.deepEqual(registered, ["herdr.sessions"]);
         registered.forEach((id) => assert.ok(contributed.includes(id)));
       } finally {
@@ -184,7 +273,8 @@ suite("Sessions feature host bindings and lifecycle", () => {
       d.value.logger.show = () => {
         d.calls.push("diagnostics");
       };
-      const feature = new SessionsFeature(d.value);
+      const bindings = sessionBindings(d.value);
+      const feature = bindings.model;
       const original = vscode.window.showQuickPick;
       let choice = "";
       const offered: string[][] = [];
@@ -214,10 +304,11 @@ suite("Sessions feature host bindings and lifecycle", () => {
         assert.equal(offered.length, 4);
       } finally {
         vscode.window.showQuickPick = original;
-        feature.dispose();
+        bindings.dispose();
       }
       const missing = dependencies({ list: () => Promise.resolve({ kind: "missing-executable" }) as Promise<never> });
-      const missingFeature = new SessionsFeature(missing.value);
+      const missingBindings = sessionBindings(missing.value);
+      const missingFeature = missingBindings.model;
       vscode.window.showQuickPick = ((items: readonly (vscode.QuickPickItem & { id: string })[]) => {
         const item = items.find((item) => item.id === "select-executable");
         assert.ok(item);
@@ -229,7 +320,7 @@ suite("Sessions feature host bindings and lifecycle", () => {
         assert.deepEqual(missing.calls, ["select-executable"]);
       } finally {
         vscode.window.showQuickPick = original;
-        missingFeature.dispose();
+        missingBindings.dispose();
       }
     });
   });
@@ -262,7 +353,8 @@ suite("Sessions feature host bindings and lifecycle", () => {
           }),
         },
       };
-      const feature = new SessionsFeature(value);
+      const bindings = sessionBindings(value);
+      const feature = bindings.model;
       const changes: ActiveSessionProjectionState[] = [];
       const subscription = feature.onDidChangeActiveSessionProjection((state) => changes.push(state));
       try {
@@ -286,7 +378,7 @@ suite("Sessions feature host bindings and lifecycle", () => {
         assert.equal(changes.at(-1)?.kind, "unavailable");
       } finally {
         subscription.dispose();
-        feature.dispose();
+        bindings.dispose();
       }
     });
   });
@@ -300,7 +392,8 @@ suite("Sessions feature host bindings and lifecycle", () => {
   test("Feature owns command registration, routes commands, and disposes all resources", async () => {
     await withNamespacedCommands(async (prefix, registered) => {
       const d = dependencies();
-      const feature = new SessionsFeature(d.value);
+      const bindings = sessionBindings(d.value);
+      const feature = bindings.model;
       try {
         assert.deepEqual(registered, commandIds);
         await feature.initialize();
@@ -311,7 +404,7 @@ suite("Sessions feature host bindings and lifecycle", () => {
         await vscode.commands.executeCommand(prefix + "herdr.selectSession", "default");
         assert.equal(d.calls.filter((call) => call === "start").length, 1);
       } finally {
-        feature.dispose();
+        bindings.dispose();
       }
       assert.equal(d.subscribed(), false);
       const remaining = await vscode.commands.getCommands(true);
@@ -319,117 +412,359 @@ suite("Sessions feature host bindings and lifecycle", () => {
     });
   });
 
-  test("Sessions View keeps all rows visible, exposes Start diagnostics, and preserves selection intent", () => {
-    const defaultSession = { id: "default", isDefault: true, availability: "running" as const };
-    const workSession = { id: "work", isDefault: false, availability: "stopped" as const };
-    const initial: SessionsState = {
-      configuration: { executable: "herdr", session: "work" },
-      catalog: { kind: "ready", sessions: [defaultSession, workSession] },
-      active: { kind: "start-failed", session: workSession, diagnostic: "start denied" },
-    };
-    const harness = stateSource(initial);
-    const view = new VsCodeSessionsView(harness.source);
-    try {
-      const rows = view.getChildren();
-      assert.equal(rows.length, 2);
-      const selected = rows.find((row) => row.id === "work");
-      const other = rows.find((row) => row.id === "default");
-      assert.ok(selected);
-      assert.ok(other);
-      assert.match(tooltipText(selected), /Diagnostic: start denied/);
-      assert.equal(other.command?.command, "herdr.selectSession");
-
-      harness.setState({
-        ...initial,
-        active: {
-          kind: "incompatible",
-          session: defaultSession,
-          endpoint: "/tmp/default.sock",
-          failure: { kind: "incompatible", diagnostic: "unsupported", version: "0.9.1", protocol: 22 },
-        },
+  test("Sessions View keeps all rows visible, exposes Start diagnostics, and preserves selection intent", async () => {
+    await withNamespacedCommands(() => {
+      const defaultSession = { id: "default", isDefault: true, availability: "running" as const };
+      const workSession = { id: "work", isDefault: false, availability: "stopped" as const };
+      const initial: SessionsState = {
+        configuration: { executable: "herdr", session: "work" },
+        catalog: { kind: "ready", sessions: [defaultSession, workSession] },
+        active: { kind: "start-failed", session: workSession, diagnostic: "start denied" },
+      };
+      const harness = stateSource(initial);
+      const view = new VsCodeSessionsView(harness.source, {
+        selectSession: () => Promise.resolve(),
+        refresh: () => Promise.resolve(),
       });
-      const compatibleMetadata = rowsFor(view, "default");
-      assert.match(tooltipText(compatibleMetadata), /Version: 0.9.1/);
-      assert.match(tooltipText(compatibleMetadata), /Protocol: 22/);
+      try {
+        const rows = view.getChildren();
+        assert.equal(rows.length, 2);
+        const selected = rows.find((row) => row.id === "work");
+        const other = rows.find((row) => row.id === "default");
+        assert.ok(selected);
+        assert.ok(other);
+        assert.match(tooltipText(selected), /Diagnostic: start denied/);
+        assert.equal(other.command?.command, "herdr.selectSession");
 
-      harness.setState({
-        ...initial,
-        active: {
-          kind: "reconnecting",
-          session: defaultSession,
-          endpoint: "/tmp/default.sock",
-          staleProjection: {
-            metadata: { version: "0.9.1", protocol: 22 },
-            snapshot: { version: "0.9.1", protocol: 22, spaces: [], herdrTabs: [], panes: [], layouts: [], agents: [] },
+        harness.setState({
+          ...initial,
+          active: {
+            kind: "incompatible",
+            session: defaultSession,
+            endpoint: "/tmp/default.sock",
+            failure: { kind: "incompatible", diagnostic: "unsupported", version: "0.9.1", protocol: 22 },
           },
-          failure: { kind: "transport", diagnostic: "socket closed" },
-          phase: { kind: "waiting", retryAt: Date.now() + 1000 },
-        },
-      });
-      const reconnectingMetadata = rowsFor(view, "default");
-      assert.match(reconnectingMetadata.description as string, /reconnecting/);
-      assert.doesNotMatch(reconnectingMetadata.description as string, /disconnected/);
-      assert.match(tooltipText(reconnectingMetadata), /State: reconnecting/);
-      assert.match(tooltipText(reconnectingMetadata), /Diagnostic: socket closed/);
-      assert.match(tooltipText(reconnectingMetadata), /Version: 0.9.1/);
-      assert.match(tooltipText(reconnectingMetadata), /Protocol: 22/);
-      assert.match(tooltipText(reconnectingMetadata), /Next attempt:/);
+        });
+        const compatibleMetadata = rowsFor(view, "default");
+        assert.match(tooltipText(compatibleMetadata), /Version: 0.9.1/);
+        assert.match(tooltipText(compatibleMetadata), /Protocol: 22/);
 
-      harness.setState({
-        ...initial,
-        active: {
-          kind: "incompatible",
-          session: defaultSession,
-          failure: { kind: "incompatible", diagnostic: "metadata unavailable" },
-        },
-      });
-      const unavailableMetadata = rowsFor(view, "default");
-      assert.doesNotMatch(tooltipText(unavailableMetadata), /Version:/);
-      assert.doesNotMatch(tooltipText(unavailableMetadata), /Protocol:/);
-    } finally {
-      view.dispose();
-    }
+        harness.setState({
+          ...initial,
+          active: {
+            kind: "reconnecting",
+            session: defaultSession,
+            endpoint: "/tmp/default.sock",
+            staleProjection: {
+              metadata: { version: "0.9.1", protocol: 22 },
+              snapshot: {
+                version: "0.9.1",
+                protocol: 22,
+                spaces: [],
+                herdrTabs: [],
+                panes: [],
+                layouts: [],
+                agents: [],
+              },
+            },
+            failure: { kind: "transport", diagnostic: "socket closed" },
+            phase: { kind: "waiting", retryAt: Date.now() + 1000 },
+          },
+        });
+        const reconnectingMetadata = rowsFor(view, "default");
+        assert.match(reconnectingMetadata.description as string, /reconnecting/);
+        assert.doesNotMatch(reconnectingMetadata.description as string, /disconnected/);
+        assert.match(tooltipText(reconnectingMetadata), /State: reconnecting/);
+        assert.match(tooltipText(reconnectingMetadata), /Diagnostic: socket closed/);
+        assert.match(tooltipText(reconnectingMetadata), /Version: 0.9.1/);
+        assert.match(tooltipText(reconnectingMetadata), /Protocol: 22/);
+        assert.match(tooltipText(reconnectingMetadata), /Next attempt:/);
+
+        harness.setState({
+          ...initial,
+          active: {
+            kind: "incompatible",
+            session: defaultSession,
+            failure: { kind: "incompatible", diagnostic: "metadata unavailable" },
+          },
+        });
+        const unavailableMetadata = rowsFor(view, "default");
+        assert.doesNotMatch(tooltipText(unavailableMetadata), /Version:/);
+        assert.doesNotMatch(tooltipText(unavailableMetadata), /Protocol:/);
+      } finally {
+        view.dispose();
+      }
+      return Promise.resolve();
+    });
   });
 
   test("partial Feature command registration cleans earlier registrations and Views", async () => {
-    await withNamespacedCommands((_prefix, registered) => {
+    await withNamespacedCommands(
+      async (prefix, registered) => {
+        const d = dependencies();
+        assert.throws(() => extensionForLifecycle(d), /registration failed/);
+        assert.equal(registered.length, 2);
+        const remaining = await vscode.commands.getCommands(true);
+        assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
+        assert.equal(
+          remaining.some((id) => id.startsWith(prefix)),
+          false,
+        );
+      },
+      2,
+      true,
+    );
+  });
+
+  test("Sessions View owns its commands, routes clicks, and disposes registrations", async () => {
+    await withNamespacedCommands(async (prefix, registered) => {
       const d = dependencies();
-      assert.throws(() => new SessionsFeature(d.value), /registration failed/);
-      assert.equal(registered.length, 2);
+      const model = new SessionsModel(
+        d.value.directory,
+        d.value.connectionFactory,
+        d.value.configuration,
+        d.value.storage,
+        d.value.logger,
+      );
+      const calls: string[] = [];
+      const view = new VsCodeSessionsView(model, {
+        selectSession: (id) => {
+          calls.push(`select:${id}`);
+          return Promise.resolve();
+        },
+        refresh: () => {
+          calls.push("refresh");
+          return Promise.resolve();
+        },
+      });
+      try {
+        assert.deepEqual(registered, ["herdr.selectSession", "herdr.refreshSessions"]);
+        await vscode.commands.executeCommand(prefix + "herdr.selectSession", "work");
+        await vscode.commands.executeCommand(prefix + "herdr.selectSession", undefined);
+        await vscode.commands.executeCommand(prefix + "herdr.refreshSessions");
+        assert.deepEqual(calls, ["select:work", "refresh"]);
+      } finally {
+        view.dispose();
+        model.dispose();
+      }
+      const remaining = await vscode.commands.getCommands(true);
+      assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
+    });
+  });
+
+  test("connection status owns its three commands and disposes them", async () => {
+    await withNamespacedCommands(async (prefix, registered) => {
+      const d = dependencies();
+      const model = new SessionsModel(
+        d.value.directory,
+        d.value.connectionFactory,
+        d.value.configuration,
+        d.value.storage,
+        d.value.logger,
+      );
+      const calls: string[] = [];
+      const executeCommand = vscode.commands.executeCommand;
+      vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
+        if (command === "workbench.action.openSettings") {
+          assert.deepEqual(args, ["@ext:St0necrusher.vscode-herdr-extension"]);
+          calls.push("open-settings");
+          return Promise.resolve();
+        }
+        return executeCommand(command, ...args);
+      }) as typeof executeCommand;
+      const choose = vscode.window.showQuickPick;
+      vscode.window.showQuickPick = () => Promise.resolve(undefined);
+      const status = new ConnectionStatus(
+        model,
+        {
+          refresh: () => Promise.resolve(),
+          selectSession: () => Promise.resolve(),
+          startSelectedSession: () => Promise.resolve(),
+          retry: () => {
+            calls.push("retry");
+            return Promise.resolve();
+          },
+        },
+        { start: () => Promise.resolve() },
+        { selectExecutable: () => Promise.resolve() },
+        d.value.logger,
+      );
+      try {
+        assert.deepEqual(registered, ["herdr.showStatusActions", "herdr.retryDiscovery", "herdr.openSettings"]);
+        await vscode.commands.executeCommand(prefix + "herdr.showStatusActions");
+        await vscode.commands.executeCommand(prefix + "herdr.retryDiscovery");
+        await vscode.commands.executeCommand(prefix + "herdr.openSettings");
+        assert.deepEqual(calls, ["retry", "open-settings"]);
+      } finally {
+        status.dispose();
+        model.dispose();
+        vscode.commands.executeCommand = executeCommand;
+        vscode.window.showQuickPick = choose;
+      }
+      const remaining = await vscode.commands.getCommands(true);
+      assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
+    });
+  });
+
+  test("each scenario owns, routes, and disposes its single command", async () => {
+    await withNamespacedCommands(async (prefix, registered) => {
+      const calls: string[] = [];
+      const start = new StartLocalSessionFeature({
+        startSelectedSession: () => {
+          calls.push("start");
+          return Promise.resolve();
+        },
+      });
+      const configure = new ConfigureExecutableFeature();
+      configure.selectExecutable = () => {
+        calls.push("select-executable");
+        return Promise.resolve();
+      };
+      try {
+        assert.deepEqual(registered, ["herdr.start", "herdr.selectExecutable"]);
+        await vscode.commands.executeCommand(prefix + "herdr.start");
+        await vscode.commands.executeCommand(prefix + "herdr.selectExecutable");
+        assert.deepEqual(calls, ["start", "select-executable"]);
+      } finally {
+        configure.dispose();
+        start.dispose();
+      }
+      const remaining = await vscode.commands.getCommands(true);
+      assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
+    });
+  });
+
+  test("each multi-command view cleans earlier registrations, subscriptions, and host resources on failure", async () => {
+    for (const owner of ["sessions", "status"] as const) {
+      await withNamespacedCommands(
+        async (prefix, registered) => {
+          const d = dependencies();
+          const model = new SessionsModel(
+            d.value.directory,
+            d.value.connectionFactory,
+            d.value.configuration,
+            d.value.storage,
+            d.value.logger,
+          );
+          let subscribed = false;
+          const source: SessionsStateSource = {
+            getState: () => model.getState(),
+            onDidChange: () => {
+              subscribed = true;
+              return {
+                dispose: () => {
+                  subscribed = false;
+                },
+              };
+            },
+          };
+          let hostDisposed = false;
+          const registerTree = vscode.window.registerTreeDataProvider;
+          const createStatus = vscode.window.createStatusBarItem;
+          vscode.window.registerTreeDataProvider = <T>(id: string, provider: vscode.TreeDataProvider<T>) => {
+            const registration = registerTree(id, provider);
+            return {
+              dispose: () => {
+                hostDisposed = true;
+                registration.dispose();
+              },
+            };
+          };
+          vscode.window.createStatusBarItem = ((...args: Parameters<typeof createStatus>) => {
+            const status = createStatus(...args);
+            const dispose = status.dispose.bind(status);
+            status.dispose = () => {
+              hostDisposed = true;
+              dispose();
+            };
+            return status;
+          }) as typeof createStatus;
+          try {
+            assert.throws(
+              () =>
+                owner === "sessions"
+                  ? new VsCodeSessionsView(source, model)
+                  : new ConnectionStatus(
+                      source,
+                      model,
+                      { start: () => Promise.resolve() },
+                      { selectExecutable: () => Promise.resolve() },
+                      d.value.logger,
+                    ),
+              /registration failed/,
+            );
+            assert.equal(registered.length, owner === "sessions" ? 1 : 2);
+            assert.equal(subscribed, false);
+            assert.equal(hostDisposed, true);
+            const remaining = await vscode.commands.getCommands(true);
+            assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
+          } finally {
+            vscode.window.registerTreeDataProvider = registerTree;
+            vscode.window.createStatusBarItem = createStatus;
+            model.dispose();
+          }
+        },
+        owner === "sessions" ? 1 : 2,
+      );
+    }
+  });
+
+  test("single-command scenarios fail loudly when registration fails", async () => {
+    await withNamespacedCommands((_prefix, registered) => {
+      assert.throws(
+        () => new StartLocalSessionFeature({ startSelectedSession: () => Promise.resolve() }),
+        /registration failed/,
+      );
+      assert.throws(() => new ConfigureExecutableFeature(), /registration failed/);
+      assert.equal(registered.length, 0);
       return Promise.resolve();
-    }, 2);
+    }, 0);
   });
 
   test("initialization failure disposes command registrations and configuration subscription", async () => {
-    await withNamespacedCommands(async (prefix, registered) => {
-      const d = dependencies({ configurationFailure: true });
-      const feature = new SessionsFeature(d.value);
-      try {
-        await assert.rejects(feature.initialize(), /configuration subscription failed/);
-        assert.equal(d.subscribed(), false);
-        const remaining = await vscode.commands.getCommands(true);
-        assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
-      } finally {
-        feature.dispose();
-      }
-    });
+    await withNamespacedCommands(
+      async (prefix, registered) => {
+        const d = dependencies({ configurationFailure: true });
+        const owner = extensionForLifecycle(d);
+        const feature = owner.extension;
+        try {
+          await assert.rejects(feature.initialize(), /configuration subscription failed/);
+          assert.equal(d.subscribed(), false);
+          const remaining = await vscode.commands.getCommands(true);
+          assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
+        } finally {
+          owner.dispose();
+        }
+      },
+      undefined,
+      true,
+    );
   });
 
   test("disposal before initialization prevents model initialization and command use", async () => {
-    await withNamespacedCommands(async (prefix, registered) => {
-      const d = dependencies();
-      const feature = new SessionsFeature(d.value);
-      feature.dispose();
-      await feature.initialize();
-      assert.equal(d.calls.length, 0);
-      assert.equal(registered.length, commandIds.length);
-      let commandFailed = false;
-      try {
-        await vscode.commands.executeCommand(prefix + "herdr.start");
-      } catch {
-        commandFailed = true;
-      }
-      assert.equal(commandFailed, true);
-    });
+    await withNamespacedCommands(
+      async (prefix, registered) => {
+        const d = dependencies();
+        const owner = extensionForLifecycle(d);
+        const feature = owner.extension;
+        try {
+          feature.dispose();
+          await feature.initialize();
+          assert.equal(d.calls.length, 0);
+          assert.equal(registered.length, commandIds.length);
+          let commandFailed = false;
+          try {
+            await vscode.commands.executeCommand(prefix + "herdr.start");
+          } catch {
+            commandFailed = true;
+          }
+          assert.equal(commandFailed, true);
+        } finally {
+          owner.dispose();
+        }
+      },
+      undefined,
+      true,
+    );
   });
 });

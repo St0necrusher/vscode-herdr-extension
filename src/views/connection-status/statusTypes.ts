@@ -1,11 +1,5 @@
 import type { ReconnectPhase } from "@modules/sessions";
 
-// Slice 2b removes this contract when configuration actions move to their scenario and view owners.
-export interface HerdrConfigurationActions {
-  selectExecutable(): Promise<void>;
-  openSettings(): Promise<void>;
-}
-
 export type HerdrStatusAction = "start" | "select-executable" | "open-settings" | "retry" | "show-diagnostics";
 
 type HerdrStatusIdentity = Readonly<{
