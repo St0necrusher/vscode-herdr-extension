@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
@@ -52,6 +52,26 @@ await esbuild.build({
   entryPoints: [resolve(root, "test/extension-fresh-window/first-pane-editor-focus.test.ts")],
   outfile: resolve(root, "dist/test/extension-fresh-window/first-pane-editor-focus.test.js"),
 });
+
+await esbuild.build({
+  ...commonOptions,
+  entryPoints: [resolve(root, "test/extension-composition/composition.test.ts")],
+  outfile: resolve(root, "dist/test/extension-composition/composition.test.js"),
+});
+
+const fakeHerdrExecutable = resolve(root, "dist/test/extension-composition/fake-herdr.js");
+await esbuild.build({
+  ...commonOptions,
+  entryPoints: [resolve(root, "test/extension-composition/fake-herdr.ts")],
+  outfile: fakeHerdrExecutable,
+});
+await chmod(fakeHerdrExecutable, 0o755);
+const compositionSettingsDirectory = resolve(root, "test/fixtures/composition-workspace/.vscode");
+await mkdir(compositionSettingsDirectory, { recursive: true });
+await writeFile(
+  resolve(compositionSettingsDirectory, "settings.json"),
+  JSON.stringify({ "herdr.executable": fakeHerdrExecutable, "herdr.session": "composition" }, null, 2) + "\n",
+);
 
 await esbuild.build({
   bundle: true,
