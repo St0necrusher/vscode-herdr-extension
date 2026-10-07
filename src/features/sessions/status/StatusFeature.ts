@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { HerdrConfigurationActions } from "@capabilities/sessions";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type { SessionsOperations, SessionsStateSource } from "../capabilities";
 import { statusModel } from "./statusModel";
 import { VsCodeStatusView } from "./view/VsCodeStatusView";
@@ -9,14 +9,14 @@ export class StatusFeature {
   private readonly view: VsCodeStatusView;
   private readonly subscription: { dispose(): void };
   private readonly commands: { dispose(): void };
-  private readonly logger: HerdrLogger;
+  private readonly logger: Logger;
   private disposed = false;
 
   constructor(
     private readonly source: SessionsStateSource,
     private readonly operations: SessionsOperations,
     private readonly configurationActions: HerdrConfigurationActions,
-    logger: HerdrLogger,
+    logger: Logger,
   ) {
     this.logger = logger;
     const view = new VsCodeStatusView(logger);

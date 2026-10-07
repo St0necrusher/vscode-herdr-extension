@@ -1,4 +1,4 @@
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type {
   HerdrResolvedSession,
   HerdrSessionConnection,
@@ -12,12 +12,12 @@ const defaultConnectTimeoutMs = 5_000;
 
 export class JsonSocketHerdrSessionConnectionFactory implements HerdrSessionConnectionFactory {
   private readonly connector: HerdrSocketConnector;
-  private readonly logger: HerdrLogger;
+  private readonly logger: Logger;
   private readonly requestTimeoutMs: number;
   private readonly connectTimeoutMs: number;
 
   constructor(
-    logger: HerdrLogger,
+    logger: Logger,
     connector: HerdrSocketConnector,
     requestTimeoutMs = defaultRequestTimeoutMs,
     connectTimeoutMs = defaultConnectTimeoutMs,

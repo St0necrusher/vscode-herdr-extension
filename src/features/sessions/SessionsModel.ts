@@ -1,4 +1,4 @@
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type {
   ActiveSessionManagement,
   ClosePaneRequest,
@@ -57,7 +57,7 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations, A
   private readonly connectionFactory: HerdrSessionConnectionFactory;
   private readonly configuration: HerdrConfigurationSource;
   private readonly storage: PersistentKeyValueStorage;
-  private readonly logger: HerdrLogger;
+  private readonly logger: Logger;
   private state: SessionsState;
   private configurationSubscription: Disposable | undefined;
   private connection: HerdrSessionConnection | undefined;
@@ -75,7 +75,7 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations, A
     connectionFactory: HerdrSessionConnectionFactory,
     configuration: HerdrConfigurationSource,
     storage: PersistentKeyValueStorage,
-    logger: HerdrLogger,
+    logger: Logger,
   ) {
     this.directory = directory;
     this.connectionFactory = connectionFactory;

@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-import type { HerdrLogger } from "../../src/capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type { ActiveSessionProjectionSource, HerdrPane } from "../../src/capabilities/sessions";
 import type { PaneClientFactory } from "../../src/infrastructure/pane-editors/HerdrPaneClientFactory";
 import type { PaneOutputSink } from "../../src/infrastructure/pane-editors/PaneOutputSink";
@@ -57,7 +57,7 @@ suite("The first Pane Editor of a window", () => {
       }),
       onDidChangeActiveSessionProjection: () => ({ dispose: () => undefined }),
     };
-    const logger: HerdrLogger = { info: () => undefined, error: () => undefined, show: () => undefined };
+    const logger: Logger = { info: () => undefined, error: () => undefined, show: () => undefined };
     const selection = new PaneEditorSelectionModel();
     // Pane clients attach only in a focused window; the OS decides whether the test host window gets focus.
     const focusedWindow = { state: { focused: true }, onDidChangeWindowState: () => ({ dispose: () => undefined }) };

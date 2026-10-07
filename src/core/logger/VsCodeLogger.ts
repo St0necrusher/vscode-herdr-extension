@@ -1,10 +1,12 @@
 import * as vscode from "vscode";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "./logger";
 
-export class VsCodeHerdrLogger implements HerdrLogger {
-  private readonly output = vscode.window.createOutputChannel("Herdr", {
-    log: true,
-  });
+export class VsCodeLogger implements Logger {
+  private readonly output: vscode.LogOutputChannel;
+
+  constructor(name: string) {
+    this.output = vscode.window.createOutputChannel(name, { log: true });
+  }
 
   info(message: string): void {
     this.output.info(message);

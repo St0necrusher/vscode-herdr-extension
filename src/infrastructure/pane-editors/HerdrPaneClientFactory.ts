@@ -1,5 +1,5 @@
 import type { HerdrConfigurationSource } from "@capabilities/sessions";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import { HerdrPaneAttach, type PaneAttach } from "./HerdrPaneAttach";
 import { HerdrPaneObserver, type PaneObserver } from "./HerdrPaneObserver";
 import type { PaneOutputSink } from "./PaneOutputSink";
@@ -20,7 +20,7 @@ export class HerdrPaneClientFactory implements PaneClientFactory {
   constructor(
     private readonly configuration: HerdrConfigurationSource,
     private readonly attachConfigPath: string,
-    private readonly logger: HerdrLogger,
+    private readonly logger: Logger,
   ) {}
 
   createObserver(request: PaneClientRequest, sink: PaneOutputSink): PaneObserver {

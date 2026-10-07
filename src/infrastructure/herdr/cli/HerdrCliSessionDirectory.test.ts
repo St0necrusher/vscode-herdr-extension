@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { HerdrCliSessionDirectory } from "./HerdrCliSessionDirectory";
-import type { ProcessRunner } from "./ProcessRunner";
+import type { ProcessRunner } from "@core/process";
 
 function result(value: unknown) {
   return { stdout: JSON.stringify(value), stderr: "" };

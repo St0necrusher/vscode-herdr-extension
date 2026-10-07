@@ -3,7 +3,7 @@ import { createConnection, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { HerdrLogger } from "../../../src/capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type { HerdrConfigurationSource } from "../../../src/capabilities/sessions";
 import { TakeoverPopupHost } from "../../../src/infrastructure/pane-editors/takeover/TakeoverPopupHost";
 import { TAKEOVER_PLUGIN_ID } from "../../../src/infrastructure/pane-editors/takeover/TakeoverPluginRegistration";
@@ -90,7 +90,7 @@ async function createFixture(mode: HerdrMode = "success", isRegistered = true) {
   const registration = { isRegistered: () => isRegistered };
   const info = vi.fn();
   const error = vi.fn();
-  const logger: HerdrLogger = {
+  const logger: Logger = {
     info,
     error,
     show: vi.fn(),

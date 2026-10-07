@@ -12,6 +12,76 @@ const element = (type, pattern, capture) => ({
   partialMatch: false,
 });
 
+const layers = ["core", "api", "modules", "features", "views"];
+const layerImports = {
+  core: ["core"],
+  api: ["core", "api"],
+  modules: ["core", "api"],
+  features: ["core", "api", "modules"],
+  views: ["core", "api", "modules", "features"],
+};
+const legacyElements = ["capability", "feature", "feature-child", "infrastructure", "infrastructure-child"];
+const newLayerType = (layer) => `layer-${layer}`;
+const blockPattern = (layer) => (layer === "features" ? "!(navigation|sessions)" : "*");
+const layerElements = layers.flatMap((layer) => [
+  // Describe every directory recursively; source paths express directions within the captured block.
+  element(newLayerType(layer), `src/${layer}/${blockPattern(layer)}/**/*`, ["block", "ancestors", "part"]),
+  element(newLayerType(layer), `src/${layer}/${blockPattern(layer)}`, ["block"]),
+]);
+const layerPolicies = layers.flatMap((layer) => {
+  const type = newLayerType(layer);
+  const sameBlock = { type, captured: { block: "{{ from.element.captured.block }}" } };
+  return [
+    {
+      from: { element: { type } },
+      allow: {
+        to: {
+          element: { type: layerImports[layer].map(newLayerType) },
+          file: { path: "src/*/*/index.ts" },
+        },
+      },
+    },
+    // These override the cross-block policy within a block: only flat files, direct children, and ancestor shared.
+    {
+      from: { element: { type } },
+      disallow: { to: { element: sameBlock } },
+    },
+    {
+      from: { element: { type } },
+      allow: [
+        {
+          to: { element: sameBlock },
+          dependency: { relationship: { from: "internal" }, source: "[.]/*" },
+        },
+        {
+          to: { element: sameBlock, file: { path: "**/index.ts" } },
+          dependency: { source: "[.]/{*,*/index,*/index.ts}" },
+        },
+        {
+          to: { element: { ...sameBlock, captured: { ...sameBlock.captured, part: "shared" } } },
+          dependency: { source: "+([.][.]/)shared{,/*}" },
+        },
+        {
+          to: { element: sameBlock, file: { path: "**/index.ts" } },
+          dependency: { source: "+([.][.]/)shared/{*,*/index,*/index.ts}" },
+        },
+      ],
+    },
+    {
+      disallow: { to: { element: { type }, file: { path: "src/*/*/index.ts" } } },
+      dependency: { source: `!@${layer}/*` },
+      message: `Cross-block ${layer} imports must use @${layer} and the public index.ts.`,
+    },
+    {
+      from: { element: { type } },
+      allow: {
+        to: { element: sameBlock },
+        dependency: { relationship: { from: "internal" }, source: "[.]/*" },
+      },
+    },
+  ];
+});
+
 export default tseslint.config(
   {
     ignores: ["dist/**", "node_modules/**", ".vscode-test/**"],
@@ -40,10 +110,11 @@ export default tseslint.config(
         "@typescript-eslint/parser": [".ts", ".tsx", ".cts", ".mts"],
       },
       "boundaries/elements": [
-        element("feature-child", "src/features/*/*", ["feature", "module"]),
+        ...layerElements,
+        element("feature-child", "src/features/{navigation,sessions}/*", ["feature", "module"]),
         element("infrastructure-child", "src/infrastructure/*/*", ["owner", "module"]),
         element("capability", "src/capabilities/*", ["module"]),
-        element("feature", "src/features/*", ["feature"]),
+        element("feature", "src/features/{navigation,sessions}", ["feature"]),
         element("infrastructure", "src/infrastructure/*", ["owner"]),
         element("extension", "src/extension"),
         element("herdr-plugin", "herdr-plugin"),
@@ -72,7 +143,14 @@ export default tseslint.config(
         "error",
         {
           default: "disallow",
+          checkInternals: true,
           policies: [
+            {
+              from: { element: { type: [...legacyElements, "extension"] } },
+              allow: {
+                to: { element: { type: layers.map(newLayerType) }, file: { path: "src/*/*/index.ts" } },
+              },
+            },
             {
               from: { element: { type: "capability" } },
               allow: {
@@ -213,6 +291,15 @@ export default tseslint.config(
               dependency: { source: "!@infrastructure/*" },
               message: "Top-level infrastructure boundaries must use an @infrastructure import alias.",
             },
+            {
+              from: {
+                element: {
+                  type: [...legacyElements, "extension", "herdr-plugin", "extension-test", "integration-test"],
+                },
+              },
+              allow: { dependency: { relationship: { from: "internal" } } },
+            },
+            ...layerPolicies,
           ],
         },
       ],
@@ -267,6 +354,27 @@ export default tseslint.config(
             {
               regex: String.raw`\.test\.[cm]?[jt]sx?$`,
               message: "Production code must not import test files.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/**/*.ts"],
+    ignores: ["src/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: String.raw`\.test\.[cm]?[jt]sx?$`,
+              message: "Production code must not import test files.",
+            },
+            {
+              regex: String.raw`^@(core|api|modules|features|views)/[^/]+/`,
+              message: "Layer aliases must name a block only, never a private file or child part.",
             },
           ],
         },

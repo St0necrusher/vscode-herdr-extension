@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type { ActiveSessionProjectionSource, ActiveSessionProjectionState, HerdrPane } from "@capabilities/sessions";
 import type { PaneEditorFocusTracker } from "./PaneEditorFocusTracker";
 import type { PaneClientFactory, PaneClientRequest } from "./HerdrPaneClientFactory";
@@ -127,7 +127,7 @@ export class VsCodePaneTerminalSurface implements PaneTerminalSurface, PaneOutpu
     private readonly focusTracker: PaneEditorFocusTracker,
     private readonly paneClients: PaneClientFactory,
     private readonly takeoverOffers: TakeoverOffers,
-    private readonly logger: HerdrLogger,
+    private readonly logger: Logger,
   ) {
     this.selection = selection;
     this.projection = projectionSource.getActiveSessionProjection();

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type Server, type Socket } from "node:net";
 import type { HerdrConfigurationSource } from "@capabilities/sessions";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import { TAKEOVER_PLUGIN_ID } from "./TakeoverPluginRegistration";
 
 const HELLO_TIMEOUT_MS = 5_000;
@@ -67,7 +67,7 @@ export class TakeoverPopupHost implements TakeoverOffers {
   constructor(
     private readonly configuration: HerdrConfigurationSource,
     private readonly registration: TakeoverPluginRegistrationState,
-    private readonly logger: HerdrLogger,
+    private readonly logger: Logger,
   ) {}
 
   offer(request: Readonly<{ sessionId: string; paneId: string; onConfirm(): void }>): TakeoverOffer {

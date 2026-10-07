@@ -16,6 +16,10 @@ const commonOptions = {
   external: ["vscode", "node-pty"],
   sourcemap: true,
   alias: {
+    "@core": resolve(sourceRoot, "core"),
+    "@api": resolve(sourceRoot, "api"),
+    "@modules": resolve(sourceRoot, "modules"),
+    "@views": resolve(sourceRoot, "views"),
     "@capabilities": resolve(sourceRoot, "capabilities"),
     "@features": resolve(sourceRoot, "features"),
     "@infrastructure": resolve(sourceRoot, "infrastructure"),

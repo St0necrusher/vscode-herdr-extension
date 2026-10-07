@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import * as vscode from "vscode";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type { HerdrConfigurationSource } from "@capabilities/sessions";
 
 export const TAKEOVER_PLUGIN_ID = "st0necrusher.vscode-herdr-takeover";
@@ -15,7 +15,7 @@ export class TakeoverPluginRegistration implements vscode.Disposable {
 
   constructor(
     private readonly configuration: HerdrConfigurationSource,
-    private readonly logger: HerdrLogger,
+    private readonly logger: Logger,
     private readonly packagedPluginDirectory: string,
     private readonly copiedPluginDirectory: string,
   ) {
