@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
 import type {
   NavigationContextSource,
-  NavigationPaneOpening,
   SpaceSelectionOperations,
   VisiblePaneEditorsSource,
-} from "../capabilities";
+} from "@modules/workspace-context";
+import type { NavigationPaneOpening } from "../capabilities";
 import { AgentsModel } from "./AgentsModel";
 import { VsCodeAgentsView } from "./view";
 

@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { getLocation, type Node } from "jsonc-parser";
-import type { NavigationContextSource } from "../../capabilities";
+import type { NavigationContextSource } from "@modules/workspace-context";
 import type { NpmScriptTarget } from "../npmScriptCommand";
 
 const hoverCommand = "herdr.runNpmScriptFromHover";

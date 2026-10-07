@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import { PanesFeature } from "../../src/features/navigation/panes/PanesFeature";
-import type { NavigationContextSource, NavigationContextState } from "../../src/features/navigation/capabilities";
+import type { NavigationContextSource, NavigationContextState } from "@modules/workspace-context";
 import type { HerdrPane, HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
 
 let sequence = 0;

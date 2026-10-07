@@ -1,5 +1,5 @@
 import type { HerdrSpace } from "@api/herdr";
-import type { NavigationContextSource } from "../capabilities";
+import type { NavigationContextSource } from "@modules/workspace-context";
 
 export type SpaceNavigationEntry = Readonly<{
   space: HerdrSpace;

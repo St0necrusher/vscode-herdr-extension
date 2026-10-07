@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import type {
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
-} from "../../modules/sessions/activeSessionProjection";
-import type { HerdrSessionSnapshot } from "../../api/herdr/shared/types";
-import type { PaneEditorPresence, PaneEditorPresenceSource } from "@modules/pane-editors";
+  PaneEditorPresence,
+  PaneEditorPresenceSource,
+} from "./source";
+import type { HerdrSessionSnapshot } from "@api/herdr";
 import { NavigationContextModel } from "./NavigationContextModel";
-import type { NavigationContextState } from "./capabilities";
+import type { NavigationContextState } from "./state";
 
 function snapshot(spaceIds: readonly string[], focusedSpaceId?: string): HerdrSessionSnapshot {
   const spaces = spaceIds.map((id, index) => ({
