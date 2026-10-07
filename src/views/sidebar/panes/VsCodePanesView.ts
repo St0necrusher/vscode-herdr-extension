@@ -1,14 +1,17 @@
 import * as vscode from "vscode";
-import type {
-  PaneNavigationGroup,
-  PaneNavigationItem,
-  PaneNavigationRow,
-  PaneNavigationSingleton,
-  PanesModel,
-  PanesState,
-} from "./PanesModel";
-import type { VisiblePaneEditorsSource } from "@modules/workspace-context";
+import { paneName, type ActiveSessionManagement } from "@modules/sessions";
+import type { NavigationContextSource, VisiblePaneEditorsSource } from "@modules/workspace-context";
+import { paneTerminalOpenRequest, type PaneTerminalOpenRequest, type PaneTerminalOpening } from "@modules/pane-editors";
 import { paneRowUri } from "../shared";
+import {
+  PanesModel,
+  tabInsertIndex,
+  type PaneNavigationGroup,
+  type PaneNavigationItem,
+  type PaneNavigationRow,
+  type PaneNavigationSingleton,
+  type PanesState,
+} from "./PanesModel";
 
 export type PanesTreeItem = PanesGroupTreeItem | PaneTreeItem;
 
@@ -21,6 +24,8 @@ const panesTreeMimeType = "application/vnd.code.tree.herdr.panes";
 export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<PanesTreeItem | undefined | null>();
   private readonly subscription: { dispose(): void };
+  private readonly command: vscode.Disposable;
+  private readonly model: PanesModel;
   private readonly expansionSubscription: { dispose(): void };
   private readonly collapseSubscription: { dispose(): void };
   private readonly focusSubscription: { dispose(): void };
@@ -31,13 +36,21 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
   readonly onDidChangeTreeData = this.changes.event;
 
   constructor(
-    private readonly model: PanesModel,
+    private readonly context: NavigationContextSource,
     private readonly paneEditors: VisiblePaneEditorsSource,
-    moveTab: TabMove,
+    private readonly paneTerminalOpening: PaneTerminalOpening,
+    private readonly management: ActiveSessionManagement,
   ) {
+    const model = new PanesModel(context);
+    this.model = model;
     this.view = vscode.window.createTreeView("herdr.panes", {
       treeDataProvider: this,
-      dragAndDropController: new TabDragAndDropController(moveTab),
+      dragAndDropController: new TabDragAndDropController((tabId, targetTabId) => this.moveTab(tabId, targetTabId)),
+    });
+    this.command = vscode.commands.registerCommand("herdr.openPane", (paneId: unknown) => {
+      if (typeof paneId !== "string") return;
+      const request = this.paneTerminalRequest(paneId);
+      if (request !== undefined) this.paneTerminalOpening.openPane(request);
     });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
@@ -81,53 +94,14 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     return group === undefined ? undefined : treeItem(group, this.expanded);
   }
 
-  promptPaneName(currentLabel: string): Thenable<string | undefined> {
-    return vscode.window.showInputBox({ title: "Rename Pane", value: currentLabel });
-  }
-
-  promptTabName(currentLabel: string): Thenable<string | undefined> {
-    return vscode.window.showInputBox({
-      title: "Rename Tab",
-      value: currentLabel,
-      validateInput: (value) => (value.trim().length === 0 ? "Tab name cannot be empty." : undefined),
-    });
-  }
-
-  showPaneRenameError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not rename Pane: ${errorMessage(error)}`);
-  }
-
-  showTabRenameError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not rename Tab: ${errorMessage(error)}`);
-  }
-
-  showTabMoveError(error: unknown): void {
+  private showTabMoveError(error: unknown): void {
     void vscode.window.showErrorMessage(`Could not move Tab: ${errorMessage(error)}`);
-  }
-
-  showPaneCloseError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not close Pane: ${errorMessage(error)}`);
-  }
-
-  showTabCloseError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not close Tab: ${errorMessage(error)}`);
-  }
-
-  showPaneCreationError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not create Pane: ${errorMessage(error)}`);
-  }
-
-  showPaneSplitError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Could not split Pane: ${errorMessage(error)}`);
-  }
-
-  showCreatedPaneOpenError(error: unknown): void {
-    void vscode.window.showErrorMessage(`Pane was created but could not be opened: ${errorMessage(error)}`);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.command.dispose();
     this.subscription.dispose();
     this.expansionSubscription.dispose();
     this.collapseSubscription.dispose();
@@ -136,6 +110,7 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     this.view.dispose();
     this.changes.dispose();
     this.expanded.clear();
+    this.model.dispose();
   }
 
   // Like the Explorer: reveal opens its view, so a hidden view waits until it is shown and catches up then.
@@ -145,12 +120,43 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
     const item = paneTreeItem(this.model.getState(), paneId);
     if (item !== undefined) void this.view.reveal(item, { select: true, focus: false });
   }
+
+  private async moveTab(tabId: string, targetTabId: string | undefined): Promise<void> {
+    const state = this.model.getState();
+    if (state.kind !== "connected") return;
+
+    const insertIndex = tabInsertIndex(
+      state.items.map((item) => item.tab.id),
+      tabId,
+      targetTabId,
+    );
+    if (insertIndex === undefined) return;
+
+    try {
+      await this.management.moveTab({ sessionId: state.sessionId, tabId, insertIndex });
+    } catch (error) {
+      this.showTabMoveError(error);
+    }
+  }
+
+  private paneTerminalRequest(paneId: string): PaneTerminalOpenRequest | undefined {
+    const state = this.context.getState();
+    const hasSnapshot = state.kind === "connected" || state.kind === "stale";
+    if (!hasSnapshot) return undefined;
+
+    const pane = state.snapshot.panes.find((candidate) => candidate.id === paneId);
+    if (pane === undefined) return undefined;
+    return paneTerminalOpenRequest(state.sessionId, pane, paneName(pane));
+  }
 }
 
 export class PanesGroupTreeItem extends vscode.TreeItem {
+  readonly tabId: string;
+
   constructor(readonly group: PaneNavigationGroup) {
     super(group.tab.label, vscode.TreeItemCollapsibleState.Expanded);
     this.id = group.tab.id;
+    this.tabId = group.tab.id;
     this.description = `${group.panes.length} ${group.panes.length === 1 ? "Pane" : "Panes"}`;
     this.contextValue = `herdr.panes.group${group.closable ? ".closable" : ""}`;
     this.iconPath = new vscode.ThemeIcon("folder");

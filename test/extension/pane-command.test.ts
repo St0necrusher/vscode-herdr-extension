@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-import { PanesFeature } from "../../src/features/navigation/panes/PanesFeature";
+import { VsCodePanesView } from "../../src/views/sidebar/panes/VsCodePanesView";
 import type { NavigationContextSource, NavigationContextState } from "@modules/workspace-context";
 import type { HerdrPane, HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
 
@@ -116,7 +116,7 @@ async function withPanesFeature(
   const context = new MutableNavigationContext(initial);
   const requests: { sessionId: string; paneId: string; terminalId: string; name: string }[] = [];
   let provider: vscode.TreeDataProvider<vscode.TreeItem> | undefined;
-  let feature: PanesFeature | undefined;
+  let view: VsCodePanesView | undefined;
   const mockTreeView = testTreeView<vscode.TreeItem>();
 
   vscode.commands.registerCommand = (...args: Parameters<typeof originalRegisterCommand>) =>
@@ -128,7 +128,7 @@ async function withPanesFeature(
   };
 
   try {
-    feature = new PanesFeature(
+    view = new VsCodePanesView(
       context,
       {
         getVisiblePaneIds: () => new Set(),
@@ -142,12 +142,6 @@ async function withPanesFeature(
         },
       },
       {
-        createSpace: () => Promise.reject(new Error("not used")),
-        createPane: () => Promise.reject(new Error("not used")),
-        splitPane: () => Promise.reject(new Error("not used")),
-        runCommand: () => Promise.reject(new Error("not used")),
-      },
-      {
         renamePane: () => Promise.reject(new Error("not used")),
         renameTab: () => Promise.reject(new Error("not used")),
         moveTab: () => Promise.reject(new Error("not used")),
@@ -156,16 +150,11 @@ async function withPanesFeature(
         closeTab: () => Promise.reject(new Error("not used")),
         closeSpace: () => Promise.reject(new Error("not used")),
       },
-      {
-        closePanes: () => {
-          throw new Error("not used");
-        },
-      },
     );
     assert.ok(provider);
     await run(prefix, provider, context, requests);
   } finally {
-    feature?.dispose();
+    view?.dispose();
     vscode.commands.registerCommand = originalRegisterCommand;
     vscode.window.createTreeView = originalCreateTreeView;
   }
