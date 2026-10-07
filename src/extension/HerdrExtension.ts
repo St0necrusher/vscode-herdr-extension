@@ -5,7 +5,6 @@ import {
   HerdrCliSessionDirectory,
   JsonSocketHerdrSessionConnectionFactory,
   NodeHerdrSocketConnector,
-  NodeProcessRunner,
 } from "@infrastructure/herdr";
 import {
   HerdrPaneClientFactory,
@@ -16,10 +15,12 @@ import {
   TakeoverPopupHost,
   VsCodePaneTerminalSurface,
 } from "@infrastructure/pane-editors";
-import { VsCodeHerdrConfiguration, VsCodeHerdrLogger } from "@infrastructure/vscode";
+import { VsCodeHerdrConfiguration } from "@infrastructure/vscode";
+import { VsCodeLogger } from "@core/logger";
+import { NodeProcessRunner } from "@core/process";
 
 export class HerdrExtension implements vscode.Disposable {
-  private readonly logger: VsCodeHerdrLogger;
+  private readonly logger: VsCodeLogger;
   private readonly sessions: SessionsFeature;
   private readonly paneEditorSelection: PaneEditorSelectionModel;
   private readonly paneEditorFocusTracker: PaneEditorFocusTracker;
@@ -30,7 +31,7 @@ export class HerdrExtension implements vscode.Disposable {
   private disposed = false;
 
   constructor(context: vscode.ExtensionContext) {
-    const logger = new VsCodeHerdrLogger();
+    const logger = new VsCodeLogger("Herdr");
     let sessions: SessionsFeature | undefined;
     let paneEditorSelection: PaneEditorSelectionModel | undefined;
     let paneEditorFocusTracker: PaneEditorFocusTracker | undefined;

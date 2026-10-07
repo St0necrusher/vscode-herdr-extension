@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type {
   ActiveSessionCreation,
   ActiveSessionManagement,
@@ -37,7 +37,7 @@ export type SessionsFeatureDependencies = Readonly<{
   configuration: HerdrConfigurationSource;
   configurationActions: HerdrConfigurationActions;
   storage: PersistentKeyValueStorage;
-  logger: HerdrLogger;
+  logger: Logger;
 }>;
 
 export class SessionsFeature

@@ -1,6 +1,6 @@
 import { StringDecoder } from "node:string_decoder";
 import { HerdrConnectionFailureError } from "@capabilities/sessions";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import { herdrError, invalidResponse, type HerdrProtocolRecord } from "./protocol/HerdrProtocol";
 import type { HerdrSocketTransport } from "./NodeHerdrSocketConnector";
 
@@ -8,7 +8,7 @@ const maxLineBytes = 8 * 1024 * 1024;
 
 export class JsonSocketClient {
   private readonly transport: HerdrSocketTransport;
-  private readonly logger: HerdrLogger;
+  private readonly logger: Logger;
   private readonly onEvent: (message: HerdrProtocolRecord) => void;
   private readonly onFailure: (error: unknown) => void;
   private readonly requestTimeoutMs: number;
@@ -29,7 +29,7 @@ export class JsonSocketClient {
 
   constructor(
     transport: HerdrSocketTransport,
-    logger: HerdrLogger,
+    logger: Logger,
     onEvent: (message: HerdrProtocolRecord) => void,
     onFailure: (error: unknown) => void,
     requestTimeoutMs: number,

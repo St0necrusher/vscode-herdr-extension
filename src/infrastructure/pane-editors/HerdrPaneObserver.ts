@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type { PaneOutputSink } from "./PaneOutputSink";
 import { stopWithEscalation } from "./stopWithEscalation";
 
@@ -38,7 +38,7 @@ export class HerdrPaneObserver implements PaneObserver {
   constructor(
     request: PaneObserverRequest,
     private readonly sink: PaneOutputSink,
-    private readonly logger: HerdrLogger,
+    private readonly logger: Logger,
   ) {
     this.completion = new Promise<void>((resolve) => {
       this.resolveCompletion = resolve;

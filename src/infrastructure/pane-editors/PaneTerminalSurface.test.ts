@@ -6,7 +6,7 @@ import type {
   HerdrPane,
   HerdrSessionSnapshot,
 } from "@capabilities/sessions";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type * as vscode from "vscode";
 import type { PaneClientFactory, PaneClientRequest } from "./HerdrPaneClientFactory";
 import type { PaneOutputSink } from "./PaneOutputSink";
@@ -299,7 +299,7 @@ function createHarness(
   const projection = createProjectionSource(options.initialProjection ?? connected(sessionId, [initialPane]));
   const paneClients = createPaneClients();
   const takeoverOffers = createTakeoverOffers();
-  const logger: HerdrLogger = { info: vi.fn(), error: vi.fn(), show: vi.fn() };
+  const logger: Logger = { info: vi.fn(), error: vi.fn(), show: vi.fn() };
   const surfaces: {
     surface: VsCodePaneTerminalSurface;
     pty: vscode.Pseudoterminal;

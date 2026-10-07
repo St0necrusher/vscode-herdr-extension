@@ -11,7 +11,7 @@ import type {
   HerdrSessionSnapshot,
   SplitDirection,
 } from "@capabilities/sessions";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import {
   invalidResponse,
   parsePaneInfoResult,
@@ -32,7 +32,7 @@ const reconciliationDebounceMs = 50;
 export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection {
   private readonly session: HerdrResolvedSession;
   private readonly connector: HerdrSocketConnector;
-  private readonly logger: HerdrLogger;
+  private readonly logger: Logger;
   private readonly requestTimeoutMs: number;
   private readonly connectTimeoutMs: number;
   private readonly clients = new Set<JsonSocketClient>();
@@ -52,7 +52,7 @@ export class JsonSocketHerdrSessionConnection implements HerdrSessionConnection 
   constructor(
     session: HerdrResolvedSession,
     connector: HerdrSocketConnector,
-    logger: HerdrLogger,
+    logger: Logger,
     requestTimeoutMs: number,
     connectTimeoutMs: number,
   ) {

@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-import type { HerdrLogger } from "../../src/capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type {
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
@@ -99,7 +99,7 @@ interface PaneEditorHarness {
 }
 
 let sequence = 0;
-const logger: HerdrLogger = { info: () => undefined, error: () => undefined, show: () => undefined };
+const logger: Logger = { info: () => undefined, error: () => undefined, show: () => undefined };
 suite("Pane editors in VS Code", () => {
   suiteSetup(async () => {
     const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");

@@ -5,7 +5,7 @@ import type {
   HerdrSessionDirectory,
   HerdrSessionListResult,
 } from "@capabilities/sessions";
-import type { ProcessRunner } from "./ProcessRunner";
+import type { ProcessRunner } from "@core/process";
 
 interface SessionRecord {
   name: string;

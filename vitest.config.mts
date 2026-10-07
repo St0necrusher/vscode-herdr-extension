@@ -7,6 +7,10 @@ const sourceRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "src");
 export default defineConfig({
   resolve: {
     alias: {
+      "@core": resolve(sourceRoot, "core"),
+      "@api": resolve(sourceRoot, "api"),
+      "@modules": resolve(sourceRoot, "modules"),
+      "@views": resolve(sourceRoot, "views"),
       "@capabilities": resolve(sourceRoot, "capabilities"),
       "@features": resolve(sourceRoot, "features"),
       "@infrastructure": resolve(sourceRoot, "infrastructure"),

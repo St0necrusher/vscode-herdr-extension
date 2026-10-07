@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { HerdrLogger } from "../../../src/capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type { HerdrConfigurationSource } from "../../../src/capabilities/sessions";
 import { TakeoverPluginRegistration } from "../../../src/infrastructure/pane-editors/takeover/TakeoverPluginRegistration";
 
@@ -37,7 +37,7 @@ const vscodeMock = vi.hoisted(() => {
 vi.mock("vscode", () => vscodeMock);
 
 const TAKEOVER_PLUGIN_ID = "st0necrusher.vscode-herdr-takeover";
-const logger: HerdrLogger = { info: () => undefined, error: () => undefined, show: () => undefined };
+const logger: Logger = { info: () => undefined, error: () => undefined, show: () => undefined };
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {

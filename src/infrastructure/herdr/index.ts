@@ -1,2 +1,2 @@
-export { HerdrCliSessionDirectory, NodeProcessRunner } from "./cli";
+export { HerdrCliSessionDirectory } from "./cli";
 export { JsonSocketHerdrSessionConnectionFactory, NodeHerdrSocketConnector } from "./socket";

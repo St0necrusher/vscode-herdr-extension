@@ -1,14 +1,14 @@
 import * as vscode from "vscode";
-import type { HerdrLogger } from "@capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type { HerdrStatusAction, HerdrStatusModel } from "../../capabilities";
 
 type StatusTone = "checking" | "reconnecting" | "connected" | "failed";
 type Item = vscode.QuickPickItem & Readonly<{ id: HerdrStatusAction }>;
 
 export class VsCodeStatusView implements vscode.Disposable {
-  private readonly logger: HerdrLogger;
+  private readonly logger: Logger;
   private readonly status: vscode.StatusBarItem;
-  constructor(logger: HerdrLogger) {
+  constructor(logger: Logger) {
     this.logger = logger;
     const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
     try {

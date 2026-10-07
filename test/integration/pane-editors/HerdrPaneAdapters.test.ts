@@ -2,7 +2,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { HerdrLogger } from "../../../src/capabilities/runtime";
+import type { Logger } from "@core/logger";
 import type { PaneOutputSink } from "../../../src/infrastructure/pane-editors/PaneOutputSink";
 import { HerdrPaneAttach } from "../../../src/infrastructure/pane-editors/HerdrPaneAttach";
 import { HerdrPaneObserver } from "../../../src/infrastructure/pane-editors/HerdrPaneObserver";
@@ -10,7 +10,7 @@ import { HerdrPaneObserver } from "../../../src/infrastructure/pane-editors/Herd
 type OutputEvent = Readonly<{ kind: "append" | "replace"; data: string }>;
 type FakeInvocation = Readonly<{ argv: string[]; configPath: string | undefined; pid: number }>;
 
-const logger: HerdrLogger = {
+const logger: Logger = {
   info: () => undefined,
   error: () => undefined,
   show: () => undefined,
