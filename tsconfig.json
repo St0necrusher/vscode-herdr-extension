@@ -9,9 +9,7 @@
       "@api/*": ["src/api/*/index.ts"],
       "@modules/*": ["src/modules/*/index.ts"],
       "@views/*": ["src/views/*/index.ts"],
-      "@capabilities/*": ["src/capabilities/*/index.ts"],
-      "@features/*": ["src/features/*/index.ts"],
-      "@infrastructure/*": ["src/infrastructure/*/index.ts"]
+      "@features/*": ["src/features/*/index.ts"]
     },
     "lib": ["ES2022"],
     "rootDir": ".",
