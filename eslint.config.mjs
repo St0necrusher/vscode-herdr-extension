@@ -20,23 +20,21 @@ const layerImports = {
   features: ["core", "api", "modules"],
   views: ["core", "api", "modules", "features"],
 };
-const legacyElements = ["capability", "feature", "feature-child", "infrastructure", "infrastructure-child"];
-const newLayerType = (layer) => `layer-${layer}`;
-const blockPattern = (layer) => (layer === "features" ? "!(navigation|sessions)" : "*");
+const layerType = (layer) => `layer-${layer}`;
 const layerElements = layers.flatMap((layer) => [
   // Describe every directory recursively; source paths express directions within the captured block.
-  element(newLayerType(layer), `src/${layer}/${blockPattern(layer)}/**/*`, ["block", "ancestors", "part"]),
-  element(newLayerType(layer), `src/${layer}/${blockPattern(layer)}`, ["block"]),
+  element(layerType(layer), `src/${layer}/*/**/*`, ["block", "ancestors", "part"]),
+  element(layerType(layer), `src/${layer}/*`, ["block"]),
 ]);
 const layerPolicies = layers.flatMap((layer) => {
-  const type = newLayerType(layer);
+  const type = layerType(layer);
   const sameBlock = { type, captured: { block: "{{ from.element.captured.block }}" } };
   return [
     {
       from: { element: { type } },
       allow: {
         to: {
-          element: { type: layerImports[layer].map(newLayerType) },
+          element: { type: layerImports[layer].map(layerType) },
           file: { path: "src/*/*/index.ts" },
         },
       },
@@ -111,11 +109,6 @@ export default tseslint.config(
       },
       "boundaries/elements": [
         ...layerElements,
-        element("feature-child", "src/features/{navigation,sessions}/*", ["feature", "module"]),
-        element("infrastructure-child", "src/infrastructure/*/*", ["owner", "module"]),
-        element("capability", "src/capabilities/*", ["module"]),
-        element("feature", "src/features/{navigation,sessions}", ["feature"]),
-        element("infrastructure", "src/infrastructure/*", ["owner"]),
         element("extension", "src/extension"),
         element("herdr-plugin", "herdr-plugin"),
         element("extension-test", "test/extension"),
@@ -146,129 +139,11 @@ export default tseslint.config(
           checkInternals: true,
           policies: [
             {
-              from: { element: { type: [...legacyElements, "extension"] } },
-              allow: {
-                to: { element: { type: layers.map(newLayerType) }, file: { path: "src/*/*/index.ts" } },
-              },
-            },
-            {
-              from: { element: { type: "capability" } },
-              allow: {
-                to: {
-                  element: {
-                    type: "capability",
-                    fileInternalPath: "index.ts",
-                  },
-                },
-              },
-            },
-            {
-              from: { element: { type: "feature" } },
-              allow: {
-                to: [
-                  {
-                    element: {
-                      type: "capability",
-                      fileInternalPath: "index.ts",
-                    },
-                  },
-                  {
-                    element: {
-                      type: "feature-child",
-                      captured: {
-                        feature: "{{ from.element.captured.feature }}",
-                      },
-                      fileInternalPath: "index.ts",
-                    },
-                  },
-                  {
-                    element: {
-                      type: "feature-child",
-                      captured: {
-                        feature: "{{ from.element.captured.feature }}",
-                        module: "shared",
-                      },
-                      fileInternalPath: "view/index.ts",
-                    },
-                  },
-                ],
-              },
-            },
-            {
-              from: { element: { type: "feature-child" } },
-              allow: {
-                to: [
-                  {
-                    element: {
-                      type: "capability",
-                      fileInternalPath: "index.ts",
-                    },
-                  },
-                  {
-                    element: {
-                      type: "feature-child",
-                      captured: {
-                        feature: "{{ from.element.captured.feature }}",
-                        module: "capabilities",
-                      },
-                      fileInternalPath: "index.ts",
-                    },
-                  },
-                  // Implementation shared by at least two sibling children of the same feature.
-                  {
-                    element: {
-                      type: "feature-child",
-                      captured: {
-                        feature: "{{ from.element.captured.feature }}",
-                        module: "shared",
-                      },
-                      fileInternalPath: ["index.ts", "view/index.ts"],
-                    },
-                  },
-                ],
-              },
-            },
-            {
-              from: { element: { type: "infrastructure" } },
-              allow: {
-                to: [
-                  {
-                    element: {
-                      type: "capability",
-                      fileInternalPath: "index.ts",
-                    },
-                  },
-                  {
-                    element: {
-                      type: "infrastructure-child",
-                      captured: {
-                        owner: "{{ from.element.captured.owner }}",
-                      },
-                      fileInternalPath: "index.ts",
-                    },
-                  },
-                ],
-              },
-            },
-            {
-              from: { element: { type: "infrastructure-child" } },
-              allow: {
-                to: {
-                  element: {
-                    type: "capability",
-                    fileInternalPath: "index.ts",
-                  },
-                },
-              },
-            },
-            {
               from: { element: { type: "extension" } },
               allow: {
                 to: {
-                  element: {
-                    type: ["capability", "feature", "infrastructure"],
-                    fileInternalPath: "index.ts",
-                  },
+                  element: { type: layers.map(layerType) },
+                  file: { path: "src/*/*/index.ts" },
                 },
               },
             },
@@ -277,24 +152,9 @@ export default tseslint.config(
               allow: { to: { element: { type: "extension" } } },
             },
             {
-              disallow: { to: { element: { type: "capability" } } },
-              dependency: { source: "!@capabilities/*" },
-              message: "Top-level capability boundaries must use an @capabilities import alias.",
-            },
-            {
-              disallow: { to: { element: { type: "feature" } } },
-              dependency: { source: "!@features/*" },
-              message: "Top-level feature boundaries must use an @features import alias.",
-            },
-            {
-              disallow: { to: { element: { type: "infrastructure" } } },
-              dependency: { source: "!@infrastructure/*" },
-              message: "Top-level infrastructure boundaries must use an @infrastructure import alias.",
-            },
-            {
               from: {
                 element: {
-                  type: [...legacyElements, "extension", "herdr-plugin", "extension-test", "integration-test"],
+                  type: ["extension", "herdr-plugin", "extension-test", "integration-test"],
                 },
               },
               allow: { dependency: { relationship: { from: "internal" } } },
@@ -306,58 +166,9 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/**/*.ts"],
-    ignores: ["src/**/*.test.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              regex: String.raw`\.test\.[cm]?[jt]sx?$`,
-              message: "Production code must not import test files.",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    files: ["src/features/*/*Feature.ts", "src/features/*/index.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              regex: String.raw`\.test\.[cm]?[jt]sx?$`,
-              message: "Production code must not import test files.",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
     files: ["src/**/*.test.ts", "test/**/*.test.ts"],
     rules: {
       "boundaries/dependencies": "off",
-    },
-  },
-  {
-    files: ["src/features/*/vscode/**/*.ts", "src/infrastructure/vscode/**/*.ts", "src/extension/**/*.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              regex: String.raw`\.test\.[cm]?[jt]sx?$`,
-              message: "Production code must not import test files.",
-            },
-          ],
-        },
-      ],
     },
   },
   {

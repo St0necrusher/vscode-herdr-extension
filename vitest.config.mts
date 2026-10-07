@@ -11,9 +11,7 @@ export default defineConfig({
       "@api": resolve(sourceRoot, "api"),
       "@modules": resolve(sourceRoot, "modules"),
       "@views": resolve(sourceRoot, "views"),
-      "@capabilities": resolve(sourceRoot, "capabilities"),
       "@features": resolve(sourceRoot, "features"),
-      "@infrastructure": resolve(sourceRoot, "infrastructure"),
     },
   },
   test: {
