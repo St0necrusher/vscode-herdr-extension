@@ -5,9 +5,22 @@ import type {
   ActiveSessionProjectionState,
 } from "../../src/modules/sessions/activeSessionProjection";
 import type { ActiveSessionCreation, CreatePaneRequest, RunCommandRequest } from "../../src/modules/sessions/creation";
+import type { ActiveSessionManagement } from "../../src/modules/sessions/management";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
-import type { PaneTerminalOpenRequest } from "../../src/modules/pane-editors";
-import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
+import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "../../src/modules/pane-editors";
+import type { PaneEditorPresenceSource } from "../../src/modules/workspace-context";
+import { NavigationContextModel } from "../../src/modules/workspace-context/NavigationContextModel";
+import { CloseFeature } from "../../src/features/close/CloseFeature";
+import { CreatePaneFeature } from "../../src/features/create-pane/CreatePaneFeature";
+import { CreateSpaceFeature } from "../../src/features/create-space/CreateSpaceFeature";
+import { RenameFeature } from "../../src/features/rename/RenameFeature";
+import { RevealPaneFeature } from "../../src/features/reveal-pane/RevealPaneFeature";
+import { RunNpmScriptFeature } from "../../src/features/run-npm-script/RunNpmScriptFeature";
+import { VsCodeNpmScriptsView } from "../../src/views/npm-scripts/VsCodeNpmScriptsView";
+import { VsCodeAgentsView } from "../../src/views/sidebar/agents/VsCodeAgentsView";
+import { VsCodePanesView } from "../../src/views/sidebar/panes/VsCodePanesView";
+import { VsCodeSpacesView } from "../../src/views/sidebar/spaces/VsCodeSpacesView";
+import { VisiblePaneEditorDecorationProvider } from "../../src/views/sidebar/shared/visiblePaneEditorDecoration";
 
 const sessionId = "session-current";
 let sequence = 0;
@@ -89,7 +102,7 @@ type ScriptsHarness = Readonly<{
   errors: string[];
 }>;
 
-async function withNavigationFeature(
+async function withNavigation(
   initial: ActiveSessionProjectionState,
   run: (harness: ScriptsHarness) => void | Promise<void>,
 ): Promise<void> {
@@ -103,7 +116,7 @@ async function withNavigationFeature(
   const openRequests: PaneTerminalOpenRequest[] = [];
   const closeRequests: string[] = [];
   const errors: string[] = [];
-  let feature: NavigationFeature | undefined;
+  let navigation: vscode.Disposable | undefined;
   const recordClose = (kind: string) => (request: unknown) => {
     closeRequests.push(`${kind} ${JSON.stringify(request)}`);
     return Promise.resolve();
@@ -126,7 +139,7 @@ async function withNavigationFeature(
       return Promise.resolve(undefined);
     };
 
-    feature = new NavigationFeature({
+    navigation = createNavigation({
       sessionProjection: projection,
       paneEditorPresence: {
         getPaneEditorPresence: () => ({ visible: [] }),
@@ -151,13 +164,71 @@ async function withNavigationFeature(
     });
     await run({ prefix, projection, creation, openRequests, closeRequests, errors });
   } finally {
-    feature?.dispose();
+    navigation?.dispose();
     vscode.commands.registerCommand = originalRegisterCommand;
     vscode.commands.executeCommand = originalExecuteCommand;
     vscode.window.createTreeView = originalCreateTreeView;
     vscode.window.showErrorMessage = originalShowErrorMessage;
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   }
+}
+
+type NavigationDependencies = Readonly<{
+  sessionProjection: ActiveSessionProjectionSource;
+  paneTerminalOpening: PaneTerminalOpening;
+  paneClosing: PaneTerminalClosing;
+  paneEditorPresence: PaneEditorPresenceSource;
+  creation: ActiveSessionCreation;
+  management: ActiveSessionManagement;
+}>;
+
+function createNavigation(dependencies: NavigationDependencies): vscode.Disposable {
+  const navigationContext = new NavigationContextModel(dependencies.sessionProjection, dependencies.paneEditorPresence);
+  const panes = new VsCodePanesView(
+    navigationContext,
+    navigationContext,
+    dependencies.paneTerminalOpening,
+    dependencies.management,
+  );
+  const spaces = new VsCodeSpacesView(navigationContext, navigationContext);
+  const npmScripts = new VsCodeNpmScriptsView(navigationContext);
+  const runNpmScript = new RunNpmScriptFeature(
+    navigationContext,
+    dependencies.creation,
+    dependencies.paneTerminalOpening,
+    npmScripts,
+  );
+  const agents = new VsCodeAgentsView(navigationContext, navigationContext);
+  const decorationProvider = new VisiblePaneEditorDecorationProvider(navigationContext, navigationContext);
+  const decorations = vscode.window.registerFileDecorationProvider(decorationProvider);
+  const createSpace = new CreateSpaceFeature(
+    navigationContext,
+    navigationContext,
+    dependencies.creation,
+    dependencies.paneTerminalOpening,
+  );
+  const createPane = new CreatePaneFeature(navigationContext, dependencies.creation, dependencies.paneTerminalOpening);
+  const rename = new RenameFeature(navigationContext, dependencies.management);
+  const close = new CloseFeature(navigationContext, dependencies.management, dependencies.paneClosing);
+  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneTerminalOpening);
+
+  return {
+    dispose() {
+      revealPane.dispose();
+      close.dispose();
+      rename.dispose();
+      createPane.dispose();
+      createSpace.dispose();
+      decorations.dispose();
+      decorationProvider.dispose();
+      agents.dispose();
+      runNpmScript.dispose();
+      npmScripts.dispose();
+      spaces.dispose();
+      panes.dispose();
+      navigationContext.dispose();
+    },
+  };
 }
 
 function testTreeView<T>(): vscode.TreeView<T> {
@@ -283,7 +354,7 @@ suite("Run Script in Herdr", () => {
   });
 
   test("NPM Scripts view runs the script in a new Tab of the Selected Space and opens its Pane", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const { folder, packageJson } = webPackage();
       const element = npmScriptElement("dev", packageJson);
 
@@ -305,7 +376,7 @@ suite("Run Script in Herdr", () => {
   });
 
   test("Script names that are not shell-safe are quoted in the command", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const { packageJson } = webPackage();
 
       await vscode.commands.executeCommand(
@@ -322,7 +393,7 @@ suite("Run Script in Herdr", () => {
   });
 
   test("package.json hover offers Run in Herdr while connected and its link runs the script", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const { folder, packageJson } = webPackage();
       const document = await vscode.workspace.openTextDocument(packageJson);
       const scriptName = positionOf(document, '"build:prod"');
@@ -352,7 +423,7 @@ suite("Run Script in Herdr", () => {
   });
 
   test("package.json editor menu runs the script whose command is at the cursor", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const { folder, packageJson } = webPackage();
       const editor = await vscode.window.showTextDocument(packageJson);
       const scriptCommand = positionOf(editor.document, '"vite build"');
@@ -375,7 +446,7 @@ suite("Run Script in Herdr", () => {
   });
 
   test("A script that cannot be started keeps its Tab and opens no Pane Editor", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const { packageJson } = webPackage();
       harness.creation.runFailure = new Error("pane is gone");
 
@@ -391,7 +462,7 @@ suite("Run Script in Herdr", () => {
   });
 
   test("Without a Selected Space the script is not run", async () => {
-    await withNavigationFeature(connectedProjection(snapshot([], [], [])), async (harness) => {
+    await withNavigation(connectedProjection(snapshot([], [], [])), async (harness) => {
       const { packageJson } = webPackage();
 
       await vscode.commands.executeCommand(`${harness.prefix}herdr.runNpmScript`, npmScriptElement("dev", packageJson));
@@ -403,7 +474,7 @@ suite("Run Script in Herdr", () => {
   });
 
   test("An NPM Scripts item of an unexpected shape is not run", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       await vscode.commands.executeCommand(`${harness.prefix}herdr.runNpmScript`, { label: "dev" });
 
       assert.deepEqual(harness.creation.paneRequests, []);

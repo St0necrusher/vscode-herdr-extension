@@ -10,10 +10,22 @@ import type {
   CreateSpaceRequest,
   SplitPaneRequest,
 } from "../../src/modules/sessions/creation";
+import type { ActiveSessionManagement } from "../../src/modules/sessions/management";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
-import type { PaneTerminalOpenRequest } from "../../src/modules/pane-editors";
-import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
-import { PanesGroupTreeItem, PaneTreeItem } from "../../src/views/sidebar/panes/VsCodePanesView";
+import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "../../src/modules/pane-editors";
+import type { PaneEditorPresenceSource } from "../../src/modules/workspace-context";
+import { NavigationContextModel } from "../../src/modules/workspace-context/NavigationContextModel";
+import { CloseFeature } from "../../src/features/close/CloseFeature";
+import { CreatePaneFeature } from "../../src/features/create-pane/CreatePaneFeature";
+import { CreateSpaceFeature } from "../../src/features/create-space/CreateSpaceFeature";
+import { RenameFeature } from "../../src/features/rename/RenameFeature";
+import { RevealPaneFeature } from "../../src/features/reveal-pane/RevealPaneFeature";
+import { RunNpmScriptFeature } from "../../src/features/run-npm-script/RunNpmScriptFeature";
+import { VsCodeNpmScriptsView } from "../../src/views/npm-scripts/VsCodeNpmScriptsView";
+import { VsCodeAgentsView } from "../../src/views/sidebar/agents/VsCodeAgentsView";
+import { VsCodeSpacesView } from "../../src/views/sidebar/spaces/VsCodeSpacesView";
+import { VisiblePaneEditorDecorationProvider } from "../../src/views/sidebar/shared/visiblePaneEditorDecoration";
+import { PanesGroupTreeItem, PaneTreeItem, VsCodePanesView } from "../../src/views/sidebar/panes/VsCodePanesView";
 
 const sessionId = "session-current";
 let sequence = 0;
@@ -163,7 +175,7 @@ type NavigationHarness = Readonly<{
   setWorkspaceFolderPickResult(folder: vscode.WorkspaceFolder | undefined): void;
 }>;
 
-async function withNavigationFeature(
+async function withNavigation(
   initial: ActiveSessionProjectionState,
   run: (harness: NavigationHarness) => void | Promise<void>,
 ): Promise<void> {
@@ -185,7 +197,7 @@ async function withNavigationFeature(
   let spacesProvider: vscode.TreeDataProvider<vscode.TreeItem> | undefined;
   let panesProvider: vscode.TreeDataProvider<vscode.TreeItem> | undefined;
   let pickedWorkspaceFolder: vscode.WorkspaceFolder | undefined;
-  let feature: NavigationFeature | undefined;
+  let navigation: vscode.Disposable | undefined;
 
   const setWorkspaceFolders = (folders: readonly vscode.WorkspaceFolder[] | undefined): void => {
     Object.defineProperty(vscode.workspace, "workspaceFolders", {
@@ -227,7 +239,7 @@ async function withNavigationFeature(
     };
     setWorkspaceFolders(originalWorkspaceFolders);
 
-    feature = new NavigationFeature({
+    navigation = createNavigation({
       sessionProjection: projection,
       paneEditorPresence: {
         getPaneEditorPresence: () => ({ visible: [] }),
@@ -270,7 +282,7 @@ async function withNavigationFeature(
       },
     });
   } finally {
-    feature?.dispose();
+    navigation?.dispose();
     vscode.commands.registerCommand = originalRegisterCommand;
     vscode.commands.executeCommand = originalExecuteCommand;
     vscode.window.createTreeView = originalCreateTreeView;
@@ -282,6 +294,64 @@ async function withNavigationFeature(
       Object.defineProperty(vscode.workspace, "workspaceFolders", originalWorkspaceFoldersDescriptor);
     }
   }
+}
+
+type NavigationDependencies = Readonly<{
+  sessionProjection: ActiveSessionProjectionSource;
+  paneTerminalOpening: PaneTerminalOpening;
+  paneClosing: PaneTerminalClosing;
+  paneEditorPresence: PaneEditorPresenceSource;
+  creation: ActiveSessionCreation;
+  management: ActiveSessionManagement;
+}>;
+
+function createNavigation(dependencies: NavigationDependencies): vscode.Disposable {
+  const navigationContext = new NavigationContextModel(dependencies.sessionProjection, dependencies.paneEditorPresence);
+  const panes = new VsCodePanesView(
+    navigationContext,
+    navigationContext,
+    dependencies.paneTerminalOpening,
+    dependencies.management,
+  );
+  const spaces = new VsCodeSpacesView(navigationContext, navigationContext);
+  const npmScripts = new VsCodeNpmScriptsView(navigationContext);
+  const runNpmScript = new RunNpmScriptFeature(
+    navigationContext,
+    dependencies.creation,
+    dependencies.paneTerminalOpening,
+    npmScripts,
+  );
+  const agents = new VsCodeAgentsView(navigationContext, navigationContext);
+  const decorationProvider = new VisiblePaneEditorDecorationProvider(navigationContext, navigationContext);
+  const decorations = vscode.window.registerFileDecorationProvider(decorationProvider);
+  const createSpace = new CreateSpaceFeature(
+    navigationContext,
+    navigationContext,
+    dependencies.creation,
+    dependencies.paneTerminalOpening,
+  );
+  const createPane = new CreatePaneFeature(navigationContext, dependencies.creation, dependencies.paneTerminalOpening);
+  const rename = new RenameFeature(navigationContext, dependencies.management);
+  const close = new CloseFeature(navigationContext, dependencies.management, dependencies.paneClosing);
+  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneTerminalOpening);
+
+  return {
+    dispose() {
+      revealPane.dispose();
+      close.dispose();
+      rename.dispose();
+      createPane.dispose();
+      createSpace.dispose();
+      decorations.dispose();
+      decorationProvider.dispose();
+      agents.dispose();
+      runNpmScript.dispose();
+      npmScripts.dispose();
+      spaces.dispose();
+      panes.dispose();
+      navigationContext.dispose();
+    },
+  };
 }
 
 function testTreeView<T>(): vscode.TreeView<T> {
@@ -398,7 +468,7 @@ suite("Creation commands", () => {
   });
 
   test("New Space uses the single folder, selects the Space, and opens its root Pane", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const fixture = fixtureWorkspaceFolder();
       await vscode.commands.executeCommand(`${harness.prefix}herdr.createSpace`);
 
@@ -425,7 +495,7 @@ suite("Creation commands", () => {
   });
 
   test("New Space uses the picked folder in a multi-root workspace", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const fixture = fixtureWorkspaceFolder();
       const picked = workspaceFolder(`${fixture.uri.fsPath}-picked`, "Picked Folder", 1);
       harness.setWorkspaceFolders([fixture, picked]);
@@ -440,7 +510,7 @@ suite("Creation commands", () => {
   });
 
   test("New Space cancellation and no-folder workspace do not create a Space", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const fixture = fixtureWorkspaceFolder();
       const other = workspaceFolder(`${fixture.uri.fsPath}-other`, "Other Folder", 1);
       harness.setWorkspaceFolders([fixture, other]);
@@ -459,7 +529,7 @@ suite("Creation commands", () => {
   });
 
   test("New Pane uses the Selected Space and opens the created Pane", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       await vscode.commands.executeCommand(`${harness.prefix}herdr.createPane`);
 
       assert.deepEqual(harness.creation.paneRequests, [{ sessionId, spaceId: "space-a" }]);
@@ -481,7 +551,7 @@ suite("Creation commands", () => {
         pane("pane-b", "terminal-b", "tab-a", "space-a", "Pane B"),
       ],
     );
-    await withNavigationFeature(connectedProjection(groupedSnapshot), async (harness) => {
+    await withNavigation(connectedProjection(groupedSnapshot), async (harness) => {
       const paneRoots = await treeChildren(harness.panesProvider);
       const group = paneRoots.find((item) => item instanceof PanesGroupTreeItem);
       assert.ok(group);
@@ -505,7 +575,7 @@ suite("Creation commands", () => {
   });
 
   test("New Pane reports an opening error when the created Pane is absent from the Session snapshot", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       harness.creation.createPane = (request) => {
         harness.creation.paneRequests.push(request);
         return Promise.resolve({ paneId: "pane-created" });
@@ -520,7 +590,7 @@ suite("Creation commands", () => {
   });
 
   test("New Pane reports a creation error when Herdr rejects the request", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       harness.creation.createPane = (request) => {
         harness.creation.paneRequests.push(request);
         return Promise.reject(new Error("server denied"));
@@ -534,7 +604,7 @@ suite("Creation commands", () => {
   });
 
   test("Creation context keys follow Session freshness and Selected Space availability", async () => {
-    await withNavigationFeature(connectedProjection(), (harness) => {
+    await withNavigation(connectedProjection(), (harness) => {
       const spaceKey = "herdr.spaceActionsEnabled";
       const paneKey = "herdr.paneActionsEnabled";
       assert.equal(latestContextValue(harness.contextChanges, spaceKey), true);
@@ -570,7 +640,7 @@ suite("Creation commands", () => {
       [tab("tab-a", "space-a", "Tab A"), secondTab],
       [pane("pane-a", "terminal-a", "tab-a", "space-a", "Pane A"), secondPane],
     );
-    await withNavigationFeature(connectedProjection(initialSnapshot), async (harness) => {
+    await withNavigation(connectedProjection(initialSnapshot), async (harness) => {
       let signalCreationRequestRecorded: () => void = () => undefined;
       const creationRequestRecorded = new Promise<void>((resolve) => {
         signalCreationRequestRecorded = () => resolve();

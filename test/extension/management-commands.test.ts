@@ -16,10 +16,20 @@ import type {
   RenameTabRequest,
 } from "../../src/modules/sessions/management";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
-import type { PaneTerminalClosing } from "../../src/modules/pane-editors";
-import { NavigationFeature } from "../../src/features/navigation/NavigationFeature";
-import { PanesGroupTreeItem, PaneTreeItem } from "../../src/views/sidebar/panes/VsCodePanesView";
-import { SpaceTreeItem } from "../../src/views/sidebar/spaces/VsCodeSpacesView";
+import type { PaneTerminalClosing, PaneTerminalOpening } from "../../src/modules/pane-editors";
+import type { PaneEditorPresenceSource } from "../../src/modules/workspace-context";
+import { NavigationContextModel } from "../../src/modules/workspace-context/NavigationContextModel";
+import { CloseFeature } from "../../src/features/close/CloseFeature";
+import { CreatePaneFeature } from "../../src/features/create-pane/CreatePaneFeature";
+import { CreateSpaceFeature } from "../../src/features/create-space/CreateSpaceFeature";
+import { RenameFeature } from "../../src/features/rename/RenameFeature";
+import { RevealPaneFeature } from "../../src/features/reveal-pane/RevealPaneFeature";
+import { RunNpmScriptFeature } from "../../src/features/run-npm-script/RunNpmScriptFeature";
+import { VsCodeNpmScriptsView } from "../../src/views/npm-scripts/VsCodeNpmScriptsView";
+import { VsCodeAgentsView } from "../../src/views/sidebar/agents/VsCodeAgentsView";
+import { VisiblePaneEditorDecorationProvider } from "../../src/views/sidebar/shared/visiblePaneEditorDecoration";
+import { PanesGroupTreeItem, PaneTreeItem, VsCodePanesView } from "../../src/views/sidebar/panes/VsCodePanesView";
+import { SpaceTreeItem, VsCodeSpacesView } from "../../src/views/sidebar/spaces/VsCodeSpacesView";
 
 const sessionId = "session-current";
 let sequence = 0;
@@ -220,7 +230,7 @@ type NavigationHarness = Readonly<{
   setWarningResult(result: string | undefined): void;
 }>;
 
-async function withNavigationFeature(
+async function withNavigation(
   initial: ActiveSessionProjectionState,
   run: (harness: NavigationHarness) => void | Promise<void>,
 ): Promise<void> {
@@ -244,7 +254,7 @@ async function withNavigationFeature(
   const registeredViews: string[] = [];
   let inputResult: string | undefined;
   let warningResult: string | undefined;
-  let feature: NavigationFeature | undefined;
+  let navigation: vscode.Disposable | undefined;
 
   try {
     vscode.commands.registerCommand = (...args: Parameters<typeof originalRegisterCommand>) =>
@@ -297,7 +307,7 @@ async function withNavigationFeature(
         closedPaneEditors.push({ sessionId: closedSessionId, paneIds: [...paneIds] });
       },
     };
-    feature = new NavigationFeature({
+    navigation = createNavigation({
       sessionProjection: projection,
       paneEditorPresence: {
         getPaneEditorPresence: () => ({ visible: [] }),
@@ -332,7 +342,7 @@ async function withNavigationFeature(
       },
     });
   } finally {
-    feature?.dispose();
+    navigation?.dispose();
     vscode.commands.registerCommand = originalRegisterCommand;
     vscode.commands.executeCommand = originalExecuteCommand;
     vscode.window.createTreeView = originalCreateTreeView;
@@ -340,6 +350,64 @@ async function withNavigationFeature(
     vscode.window.showInputBox = originalShowInputBox;
     vscode.window.showWarningMessage = originalShowWarningMessage;
   }
+}
+
+type NavigationDependencies = Readonly<{
+  sessionProjection: ActiveSessionProjectionSource;
+  paneTerminalOpening: PaneTerminalOpening;
+  paneClosing: PaneTerminalClosing;
+  paneEditorPresence: PaneEditorPresenceSource;
+  creation: ActiveSessionCreation;
+  management: ActiveSessionManagement;
+}>;
+
+function createNavigation(dependencies: NavigationDependencies): vscode.Disposable {
+  const navigationContext = new NavigationContextModel(dependencies.sessionProjection, dependencies.paneEditorPresence);
+  const panes = new VsCodePanesView(
+    navigationContext,
+    navigationContext,
+    dependencies.paneTerminalOpening,
+    dependencies.management,
+  );
+  const spaces = new VsCodeSpacesView(navigationContext, navigationContext);
+  const npmScripts = new VsCodeNpmScriptsView(navigationContext);
+  const runNpmScript = new RunNpmScriptFeature(
+    navigationContext,
+    dependencies.creation,
+    dependencies.paneTerminalOpening,
+    npmScripts,
+  );
+  const agents = new VsCodeAgentsView(navigationContext, navigationContext);
+  const decorationProvider = new VisiblePaneEditorDecorationProvider(navigationContext, navigationContext);
+  const decorations = vscode.window.registerFileDecorationProvider(decorationProvider);
+  const createSpace = new CreateSpaceFeature(
+    navigationContext,
+    navigationContext,
+    dependencies.creation,
+    dependencies.paneTerminalOpening,
+  );
+  const createPane = new CreatePaneFeature(navigationContext, dependencies.creation, dependencies.paneTerminalOpening);
+  const rename = new RenameFeature(navigationContext, dependencies.management);
+  const close = new CloseFeature(navigationContext, dependencies.management, dependencies.paneClosing);
+  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneTerminalOpening);
+
+  return {
+    dispose() {
+      revealPane.dispose();
+      close.dispose();
+      rename.dispose();
+      createPane.dispose();
+      createSpace.dispose();
+      decorations.dispose();
+      decorationProvider.dispose();
+      agents.dispose();
+      runNpmScript.dispose();
+      npmScripts.dispose();
+      spaces.dispose();
+      panes.dispose();
+      navigationContext.dispose();
+    },
+  };
 }
 
 function isModalOptions(item: unknown): item is vscode.MessageOptions {
@@ -567,7 +635,7 @@ function isSpaceTreeItemFor(item: vscode.TreeItem, spaceId: string): item is Spa
 
 suite("Management commands", () => {
   test("Select Space changes the selected row and the Panes being browsed", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       await vscode.commands.executeCommand(`${harness.prefix}herdr.selectSpace`, "space-other");
       const rows = await treeChildren(harness.spacesProvider);
       const selected = rows.find((item) => isSpaceTreeItemFor(item, "space-other"));
@@ -578,7 +646,7 @@ suite("Management commands", () => {
   });
 
   test("Rename Space sends the selected label to Herdr", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const rows = await treeChildren(harness.spacesProvider);
       const row = rows.find((item) => isSpaceTreeItemFor(item, "space-other"));
       assert.ok(row);
@@ -592,7 +660,7 @@ suite("Management commands", () => {
   });
 
   test("Canceling Rename Space sends no request", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const rows = await treeChildren(harness.spacesProvider);
       const row = rows.find((item) => isSpaceTreeItemFor(item, "space-other"));
       assert.ok(row);
@@ -604,7 +672,7 @@ suite("Management commands", () => {
   });
 
   test("A rejected Rename Space shows Herdr's error", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const rows = await treeChildren(harness.spacesProvider);
       const row = rows.find((item) => isSpaceTreeItemFor(item, "space-other"));
       assert.ok(row);
@@ -660,7 +728,7 @@ suite("Management commands", () => {
         },
       ],
     };
-    await withNavigationFeature(connectedProjection(withAgent), async (harness) => {
+    await withNavigation(connectedProjection(withAgent), async (harness) => {
       harness.registeredViews.forEach((viewId) =>
         assert.ok(contributedViews.includes(viewId), `Registered view ${viewId} is contributed`),
       );
@@ -720,7 +788,7 @@ suite("Management commands", () => {
   });
 
   test("Close Pane closes only the target Pane Editor in the Selected Space", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const paneRoots = await treeChildren(harness.panesProvider);
       const groupRow = paneRoots.find((item) => isGroupTreeItemFor(item, "tab-group"));
       assert.ok(groupRow);
@@ -737,7 +805,7 @@ suite("Management commands", () => {
   });
 
   test("Close Tab closes every Pane Editor in that Herdr Tab and no others", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const paneRoots = await treeChildren(harness.panesProvider);
       const groupRow = paneRoots.find((item) => isGroupTreeItemFor(item, "tab-group"));
       assert.ok(groupRow);
@@ -752,7 +820,7 @@ suite("Management commands", () => {
   });
 
   test("Canceling Close Space leaves its Panes and Pane Editors untouched", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const spaceRows = await treeChildren(harness.spacesProvider);
       const spaceRow = spaceRows.find((item) => isSpaceTreeItemFor(item, "space-other"));
       assert.ok(spaceRow);
@@ -769,7 +837,7 @@ suite("Management commands", () => {
   });
 
   test("Confirming Close Space closes only that Space's Pane Editors", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const spaceRows = await treeChildren(harness.spacesProvider);
       const spaceRow = spaceRows.find((item) => isSpaceTreeItemFor(item, "space-other"));
       assert.ok(spaceRow);
@@ -788,7 +856,7 @@ suite("Management commands", () => {
   });
 
   test("Confirming Close Group closes Pane Editors for every Worktree Group member only", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const spaceRows = await treeChildren(harness.spacesProvider);
       const primarySpaceRow = spaceRows.find((item) => isSpaceTreeItemFor(item, "space-primary"));
       assert.ok(primarySpaceRow);
@@ -808,7 +876,7 @@ suite("Management commands", () => {
   });
 
   test("A rejected close shows Herdr's error without closing Pane Editors", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const paneRoots = await treeChildren(harness.panesProvider);
       const groupRow = paneRoots.find((item) => isGroupTreeItemFor(item, "tab-group"));
       assert.ok(groupRow);
@@ -826,7 +894,7 @@ suite("Management commands", () => {
   });
 
   test("Renaming a Pane with an empty name clears its label", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const paneRoots = await treeChildren(harness.panesProvider);
       const groupRow = paneRoots.find((item) => isGroupTreeItemFor(item, "tab-group"));
       assert.ok(groupRow);
@@ -842,7 +910,7 @@ suite("Management commands", () => {
   });
 
   test("Canceling Rename Pane sends no request", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const paneRoots = await treeChildren(harness.panesProvider);
       const groupRow = paneRoots.find((item) => isGroupTreeItemFor(item, "tab-group"));
       assert.ok(groupRow);
@@ -859,7 +927,7 @@ suite("Management commands", () => {
   });
 
   test("Rename Tab on a singleton Pane row sends that row's Herdr Tab id", async () => {
-    await withNavigationFeature(connectedProjection(), async (harness) => {
+    await withNavigation(connectedProjection(), async (harness) => {
       const paneRoots = await treeChildren(harness.panesProvider);
       const paneRow = paneRoots.find((item) => isPaneTreeItemFor(item, "pane-single"));
       assert.ok(paneRow);
@@ -874,7 +942,7 @@ suite("Management commands", () => {
   });
 
   test("Dragging a Tab down places it after the target Tab", async () => {
-    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+    await withNavigation(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
       await dragTab(
         harness,
         await rowLabeled(harness, "Grouped Herdr Tab"),
@@ -887,7 +955,7 @@ suite("Management commands", () => {
   });
 
   test("Dragging a single-Pane Tab up places it before the target Tab", async () => {
-    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+    await withNavigation(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
       await dragTab(
         harness,
         await rowLabeled(harness, "Third Herdr Tab"),
@@ -900,7 +968,7 @@ suite("Management commands", () => {
   });
 
   test("Dropping a Tab on a Pane inside a group targets that group's Tab", async () => {
-    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+    await withNavigation(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
       const paneRow = await rowLabeled(harness, "Pane Two", await rowLabeled(harness, "Grouped Herdr Tab"));
 
       await dragTab(harness, await rowLabeled(harness, "Third Herdr Tab"), paneRow);
@@ -911,7 +979,7 @@ suite("Management commands", () => {
   });
 
   test("Dropping a Tab on empty space moves it to the end", async () => {
-    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+    await withNavigation(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
       await dragTab(harness, await rowLabeled(harness, "Singleton Herdr Tab"), undefined);
 
       assert.deepEqual(harness.management.moveTabRequests, [{ sessionId, tabId: "tab-single", insertIndex: 3 }]);
@@ -920,7 +988,7 @@ suite("Management commands", () => {
   });
 
   test("Dragging a Pane inside a group sends no move", async () => {
-    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+    await withNavigation(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
       const paneRow = await rowLabeled(harness, "Pane One", await rowLabeled(harness, "Grouped Herdr Tab"));
 
       await dragTab(harness, paneRow, await rowLabeled(harness, "Third Herdr Tab"));
@@ -936,7 +1004,7 @@ suite("Management commands", () => {
       reason: "reconnecting",
       snapshot: snapshotWithThreeTabs(),
     };
-    await withNavigationFeature(stale, async (harness) => {
+    await withNavigation(stale, async (harness) => {
       await dragTab(
         harness,
         await rowLabeled(harness, "Grouped Herdr Tab"),
@@ -948,7 +1016,7 @@ suite("Management commands", () => {
   });
 
   test("The Tab order changes only when Herdr publishes the move", async () => {
-    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+    await withNavigation(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
       const held = harness.management.holdNextMove();
 
       const drop = dragTab(
@@ -966,7 +1034,7 @@ suite("Management commands", () => {
   });
 
   test("A rejected move shows Herdr's error and keeps the Tab order", async () => {
-    await withNavigationFeature(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
+    await withNavigation(connectedProjection(snapshotWithThreeTabs()), async (harness) => {
       harness.management.rejectNextMove("server denied");
 
       await dragTab(
