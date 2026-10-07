@@ -218,6 +218,57 @@ async function waitFor<T>(read: () => T | undefined): Promise<T> {
 }
 
 describe("SessionsModel", () => {
+  it("persists and restores the selected Session under herdr.selectedSession", async () => {
+    const values = new Map<string, unknown>();
+    const storage: PersistentKeyValueStorage = {
+      get: (key) => values.get(key),
+      update: (key, value) => {
+        values.set(key, value);
+        return Promise.resolve();
+      },
+    };
+    const h = createHarness({
+      sessions: [{ id: "default", isDefault: true, availability: "stopped" }, stoppedSession],
+    });
+    const source = { read: () => configuration, onDidChange: () => ({ dispose: () => undefined }) };
+    const first = new SessionsModel(
+      h.directory,
+      {
+        create: () => {
+          throw new Error("stopped Session must not connect");
+        },
+      },
+      source,
+      storage,
+      h.logger,
+    );
+    try {
+      await first.initialize();
+      await first.selectSession("work");
+      expect(values.get("herdr.selectedSession")).toBe("work");
+    } finally {
+      first.dispose();
+    }
+    const restored = new SessionsModel(
+      h.directory,
+      {
+        create: () => {
+          throw new Error("saved stopped Session must not connect");
+        },
+      },
+      source,
+      storage,
+      h.logger,
+    );
+    try {
+      await restored.initialize();
+      expect(restored.getState().active).toEqual({ kind: "selected-stopped", session: stoppedSession });
+    } finally {
+      restored.dispose();
+      h.model.dispose();
+    }
+  });
+
   it.each([
     ["success", success(), "ready"],
     ["missing executable", { kind: "missing-executable" as const }, "missing-executable"],

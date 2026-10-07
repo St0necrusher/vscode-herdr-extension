@@ -5,6 +5,9 @@ import type {
   ActiveSessionProjectionSource,
   ActiveSessionProjectionState,
   HerdrPane,
+  HerdrPaneMovedEvent,
+  HerdrSessionEventMap,
+  HerdrSessionEventName,
   HerdrSessionEventSource,
   HerdrSessionSnapshot,
 } from "../../src/capabilities/sessions";
@@ -20,6 +23,7 @@ import {
 } from "../../src/infrastructure/pane-editors";
 
 interface ClientRecord {
+  request: Parameters<PaneClientFactory["createAttach"]>[0];
   kind: "observer" | "attach";
   stopped: boolean;
 }
@@ -27,13 +31,13 @@ interface ClientRecord {
 class FakePaneClientFactory implements PaneClientFactory {
   readonly clients: ClientRecord[] = [];
 
-  createObserver(): PaneObserver {
-    const client = this.createClient("observer");
+  createObserver(request: Parameters<PaneClientFactory["createObserver"]>[0]): PaneObserver {
+    const client = this.createClient("observer", request);
     return { completion: client.completion, stop: () => client.stop() };
   }
 
-  createAttach(): PaneAttach {
-    const client = this.createClient("attach");
+  createAttach(request: Parameters<PaneClientFactory["createAttach"]>[0]): PaneAttach {
+    const client = this.createClient("attach", request);
     return {
       completion: client.completion,
       sendInput: () => undefined,
@@ -42,8 +46,11 @@ class FakePaneClientFactory implements PaneClientFactory {
     };
   }
 
-  private createClient(kind: ClientRecord["kind"]): { completion: Promise<void>; stop(): Promise<void> } {
-    const record: ClientRecord = { kind, stopped: false };
+  private createClient(
+    kind: ClientRecord["kind"],
+    request: ClientRecord["request"],
+  ): { completion: Promise<void>; stop(): Promise<void> } {
+    const record: ClientRecord = { kind, request, stopped: false };
     this.clients.push(record);
 
     let resolveCompletion!: () => void;
@@ -65,12 +72,24 @@ class FakePaneClientFactory implements PaneClientFactory {
 }
 
 class FakeSessionEvents implements HerdrSessionEventSource {
-  subscribe(): { dispose(): void } {
-    return { dispose: () => undefined };
+  private readonly listeners = new Set<(event: HerdrPaneMovedEvent) => void>();
+
+  subscribe<T extends HerdrSessionEventName>(
+    _eventName: T,
+    listener: (event: HerdrSessionEventMap[T]) => void,
+  ): { dispose(): void } {
+    this.listeners.add(listener);
+    return { dispose: () => this.listeners.delete(listener) };
+  }
+
+  emit(event: HerdrPaneMovedEvent): void {
+    this.listeners.forEach((listener) => listener(event));
   }
 }
 
 interface PaneEditorHarness {
+  readonly events: FakeSessionEvents;
+  readonly pane: HerdrPane;
   readonly manager: PaneTerminalSurfaceManager;
   readonly clients: FakePaneClientFactory;
   readonly request: PaneTerminalOpenRequest;
@@ -86,6 +105,42 @@ suite("Pane editors in VS Code", () => {
     const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
     assert.ok(extension, "Extension is installed in the test host");
     await extension.activate();
+  });
+
+  test("pane.moved reroutes the open editor and updates its title without replacing its terminal", async () => {
+    await withPaneEditorHarness(async (harness) => {
+      harness.manager.openPane(harness.request);
+      await waitForPaneTab(harness.expectedTabLabel);
+      await waitForPaneClient(harness.clients, "before Pane move");
+      const terminal = onlyCreatedTerminal(harness);
+      const currentPane = {
+        ...harness.pane,
+        id: "moved-pane",
+        terminalId: "moved-terminal",
+        spaceId: "moved-space",
+        herdrTabId: "moved-tab",
+        terminalTitle: "Moved Pane",
+      };
+      harness.events.emit({
+        sessionId: harness.request.sessionId,
+        previousPaneId: harness.request.paneId,
+        currentPane,
+      });
+      await waitForPaneTab("Moved\u00a0Pane");
+      await waitFor(
+        () => runningClients(harness.clients).some((client) => client.request.terminalId === "moved-terminal"),
+        "the moved terminal routing",
+      );
+      assert.strictEqual(onlyCreatedTerminal(harness), terminal);
+      assert.deepEqual(harness.manager.getPaneEditorPresence().focused, {
+        sessionId: harness.request.sessionId,
+        paneId: "moved-pane",
+      });
+      harness.manager.openPane({ ...harness.request, paneId: currentPane.id, terminalId: currentPane.terminalId });
+      assert.equal(createdTerminals(harness).length, 1);
+      harness.manager.closePanes(harness.request.sessionId, [currentPane.id]);
+      await waitFor(() => runningClients(harness.clients).length === 0, "the rerouted client to close");
+    });
   });
 
   test("C7 opens, binds, hides, and reveals one Pane editor", async () => {
@@ -255,7 +310,8 @@ async function withPaneEditorHarness(run: (harness: PaneEditorHarness) => Promis
   const clients = new FakePaneClientFactory();
   const closedTerminals = new Set<vscode.Terminal>();
   const terminalCloseSubscription = vscode.window.onDidCloseTerminal((terminal) => closedTerminals.add(terminal));
-  const manager = new PaneTerminalSurfaceManager(selection, new FakeSessionEvents(), {
+  const events = new FakeSessionEvents();
+  const manager = new PaneTerminalSurfaceManager(selection, events, {
     create: (paneSelection, viewColumn, terminalName) =>
       new VsCodePaneTerminalSurface(
         paneSelection,
@@ -269,6 +325,8 @@ async function withPaneEditorHarness(run: (harness: PaneEditorHarness) => Promis
       ),
   });
   const harness: PaneEditorHarness = {
+    events,
+    pane,
     manager,
     clients,
     request: { sessionId, paneId: pane.id, terminalId: pane.terminalId, name: terminalTitle },

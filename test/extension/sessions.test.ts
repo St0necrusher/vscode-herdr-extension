@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import { SessionsFeature } from "../../src/features/sessions/SessionsFeature";
 import { VsCodeSessionsView } from "../../src/features/sessions/view/VsCodeSessionsView";
+import type { HerdrSessionConnection, ActiveSessionProjectionState } from "../../src/capabilities/sessions";
 import type { SessionsState, SessionsStateSource } from "../../src/features/sessions/capabilities";
 
 let sequence = 0;
@@ -141,6 +142,154 @@ function dependencies(options: { list?: () => Promise<never>; configurationFailu
 }
 
 suite("Sessions feature host bindings and lifecycle", () => {
+  test("the registered Sessions view is contributed in package.json", async () => {
+    await withNamespacedCommands(() => {
+      const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
+      assert.ok(extension);
+      const manifest = extension.packageJSON as { contributes: { views: Record<string, { id: string }[]> } };
+      const contributed = Object.values(manifest.contributes.views)
+        .flat()
+        .map(({ id }) => id);
+      const original = vscode.window.registerTreeDataProvider;
+      const registered: string[] = [];
+      vscode.window.registerTreeDataProvider = <T>(viewId: string, provider: vscode.TreeDataProvider<T>) => {
+        registered.push(viewId);
+        return original(viewId, provider);
+      };
+      let feature: SessionsFeature | undefined;
+      try {
+        feature = new SessionsFeature(dependencies().value);
+        assert.deepEqual(registered, ["herdr.sessions"]);
+        registered.forEach((id) => assert.ok(contributed.includes(id)));
+      } finally {
+        feature?.dispose();
+        vscode.window.registerTreeDataProvider = original;
+      }
+      return Promise.resolve();
+    });
+  });
+
+  test("status commands and every offered quick-pick action route to their dependency", async () => {
+    await withNamespacedCommands(async (prefix) => {
+      const d = dependencies();
+      let lists = 0;
+      d.value.directory.list = () => {
+        lists++;
+        return Promise.resolve({
+          kind: "success",
+          sessions: [{ id: "default", isDefault: true, availability: "stopped" }],
+        });
+      };
+      d.value.logger.show = () => {
+        d.calls.push("diagnostics");
+      };
+      const feature = new SessionsFeature(d.value);
+      const original = vscode.window.showQuickPick;
+      let choice = "";
+      const offered: string[][] = [];
+      vscode.window.showQuickPick = ((items: readonly (vscode.QuickPickItem & { id: string })[]) => {
+        offered.push(items.map((item) => item.id));
+        const item = items.find((item) => item.id === choice);
+        assert.ok(item, `Action ${choice} is offered`);
+        return Promise.resolve(item);
+      }) as unknown as typeof original;
+      try {
+        await feature.initialize();
+        const before = lists;
+        await vscode.commands.executeCommand(prefix + "herdr.retryDiscovery");
+        assert.equal(lists, before + 1);
+        await vscode.commands.executeCommand(prefix + "herdr.selectExecutable");
+        await vscode.commands.executeCommand(prefix + "herdr.openSettings");
+        assert.equal(d.calls.filter((call) => call === "select-executable").length, 1);
+        assert.equal(d.calls.filter((call) => call === "open-settings").length, 1);
+        for (const action of ["start", "retry", "open-settings", "show-diagnostics"]) {
+          choice = action;
+          await vscode.commands.executeCommand(prefix + "herdr.showStatusActions");
+        }
+        assert.equal(d.calls.filter((call) => call === "start").length, 1);
+        assert.equal(d.calls.filter((call) => call === "open-settings").length, 2);
+        assert.equal(d.calls.filter((call) => call === "diagnostics").length, 1);
+        assert.equal(lists, before + 3);
+        assert.equal(offered.length, 4);
+      } finally {
+        vscode.window.showQuickPick = original;
+        feature.dispose();
+      }
+      const missing = dependencies({ list: () => Promise.resolve({ kind: "missing-executable" }) as Promise<never> });
+      const missingFeature = new SessionsFeature(missing.value);
+      vscode.window.showQuickPick = ((items: readonly (vscode.QuickPickItem & { id: string })[]) => {
+        const item = items.find((item) => item.id === "select-executable");
+        assert.ok(item);
+        return Promise.resolve(item);
+      }) as unknown as typeof original;
+      try {
+        await missingFeature.initialize();
+        await vscode.commands.executeCommand(prefix + "herdr.showStatusActions");
+        assert.deepEqual(missing.calls, ["select-executable"]);
+      } finally {
+        vscode.window.showQuickPick = original;
+        missingFeature.dispose();
+      }
+    });
+  });
+
+  test("active Session projection publishes connected, retained Stale, and unavailable states", async () => {
+    await withNamespacedCommands(async (prefix) => {
+      const d = dependencies();
+      const snapshot = { version: "1", protocol: 1, spaces: [], herdrTabs: [], panes: [], layouts: [], agents: [] };
+      let consumer: Parameters<HerdrSessionConnection["bootstrap"]>[0] | undefined;
+
+      const value = {
+        ...d.value,
+        directory: {
+          ...d.value.directory,
+          list: () =>
+            Promise.resolve({
+              kind: "success" as const,
+              sessions: [{ id: "default", isDefault: true, availability: "running" as const }],
+            }),
+          resolve: () => Promise.resolve({ id: "default", endpoint: "/tmp/test.sock" }),
+        },
+        connectionFactory: {
+          create: () => ({
+            ...d.value.connectionFactory.create(),
+            bootstrap: (next: Parameters<HerdrSessionConnection["bootstrap"]>[0]) => {
+              consumer = next;
+              next.replaceSnapshot(snapshot);
+              return Promise.resolve({ version: "1", protocol: 1 });
+            },
+          }),
+        },
+      };
+      const feature = new SessionsFeature(value);
+      const changes: ActiveSessionProjectionState[] = [];
+      const subscription = feature.onDidChangeActiveSessionProjection((state) => changes.push(state));
+      try {
+        assert.deepEqual(feature.getActiveSessionProjection(), { kind: "unavailable" });
+        await feature.initialize();
+        assert.deepEqual(feature.getActiveSessionProjection(), { kind: "connected", sessionId: "default", snapshot });
+        assert.ok(consumer);
+        consumer.connectionClosed({ kind: "transport", diagnostic: "closed" });
+        const reconnecting = { kind: "stale", sessionId: "default", reason: "reconnecting", snapshot };
+        assert.deepEqual(feature.getActiveSessionProjection(), reconnecting);
+        assert.ok(changes.some((state) => state.kind === "stale" && state.reason === "reconnecting"));
+        await vscode.commands.executeCommand(prefix + "herdr.retryDiscovery");
+        assert.ok(consumer);
+        consumer.connectionClosed({ kind: "incompatible", diagnostic: "unsupported" });
+        const stale = { kind: "stale", sessionId: "default", reason: "incompatible", snapshot };
+        assert.deepEqual(feature.getActiveSessionProjection(), stale);
+        assert.deepEqual(changes.at(-1), stale);
+        value.directory.list = () => Promise.resolve({ kind: "success", sessions: [] });
+        await vscode.commands.executeCommand(prefix + "herdr.refreshSessions");
+        assert.equal(feature.getActiveSessionProjection().kind, "unavailable");
+        assert.equal(changes.at(-1)?.kind, "unavailable");
+      } finally {
+        subscription.dispose();
+        feature.dispose();
+      }
+    });
+  });
+
   suiteSetup(async () => {
     const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
     assert.ok(extension, "Extension is installed in the test host");
