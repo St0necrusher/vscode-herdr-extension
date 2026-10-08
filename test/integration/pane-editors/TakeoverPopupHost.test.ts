@@ -182,6 +182,10 @@ describe("TakeoverPopupHost adapter", () => {
         `HERDR_VSCODE_TAKEOVER_TOKEN=${token}`,
         "--env",
         "HERDR_VSCODE_TAKEOVER_PANE=pane-17",
+        "--env",
+        `HERDR_VSCODE_TAKEOVER_RUNTIME=${process.execPath}`,
+        "--env",
+        "ELECTRON_RUN_AS_NODE=1",
       ]);
 
       const popup = await fixture.connect(invocation);
@@ -222,6 +226,10 @@ describe("TakeoverPopupHost adapter", () => {
         `HERDR_VSCODE_TAKEOVER_TOKEN=${token}`,
         "--env",
         "HERDR_VSCODE_TAKEOVER_PANE=pane-default",
+        "--env",
+        `HERDR_VSCODE_TAKEOVER_RUNTIME=${process.execPath}`,
+        "--env",
+        "ELECTRON_RUN_AS_NODE=1",
       ]);
       offer.retract();
     } finally {
