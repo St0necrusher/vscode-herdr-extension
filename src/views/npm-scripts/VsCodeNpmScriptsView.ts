@@ -1,17 +1,23 @@
 import * as vscode from "vscode";
 import { getLocation, type Node } from "jsonc-parser";
+import type { RunNpmScriptFeature, NpmScriptTarget } from "@features/run-npm-script";
 import type { NavigationContextSource } from "@modules/workspace-context";
 
 const hoverCommand = "herdr.runNpmScriptFromHover";
 
 export class VsCodeNpmScriptsView implements vscode.HoverProvider, vscode.Disposable {
-  private readonly hover: vscode.Disposable;
+  private readonly registrations: vscode.Disposable;
   private disposed = false;
 
-  constructor(private readonly context: NavigationContextSource) {
-    this.hover = vscode.languages.registerHoverProvider(
-      { language: "json", scheme: "file", pattern: "**/package.json" },
-      this,
+  constructor(
+    private readonly context: NavigationContextSource,
+    private readonly feature: Pick<RunNpmScriptFeature, "runNpmScriptAtCursor">,
+  ) {
+    this.registrations = vscode.Disposable.from(
+      vscode.commands.registerCommand("herdr.runNpmScriptAtCursor", () =>
+        this.feature.runNpmScriptAtCursor(this.scriptAtCursor()),
+      ),
+      vscode.languages.registerHoverProvider({ language: "json", scheme: "file", pattern: "**/package.json" }, this),
     );
   }
 
@@ -35,7 +41,7 @@ export class VsCodeNpmScriptsView implements vscode.HoverProvider, vscode.Dispos
   }
 
   // Like VS Code's Run Script in the editor context menu: the cursor may be on the script name or its command.
-  scriptAtCursor(): Readonly<{ script: string; packageJsonUri: vscode.Uri }> | undefined {
+  private scriptAtCursor(): NpmScriptTarget | undefined {
     const editor = vscode.window.activeTextEditor;
     if (editor === undefined) return undefined;
     const location = scriptLocation(editor.document, editor.selection.active);
@@ -45,7 +51,7 @@ export class VsCodeNpmScriptsView implements vscode.HoverProvider, vscode.Dispos
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.hover.dispose();
+    this.registrations.dispose();
   }
 }
 

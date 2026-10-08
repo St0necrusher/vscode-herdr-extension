@@ -18,6 +18,7 @@ export function spaceRowUri(spaceId: string): vscode.Uri {
 
 export class VisiblePaneEditorDecorationProvider implements vscode.FileDecorationProvider, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<vscode.Uri[]>();
+  private readonly registration: vscode.Disposable;
   private readonly subscriptions: readonly { dispose(): void }[];
   private marked: ReadonlySet<string>;
   readonly onDidChangeFileDecorations = this.changes.event;
@@ -31,6 +32,7 @@ export class VisiblePaneEditorDecorationProvider implements vscode.FileDecoratio
       context.onDidChange(() => this.updateMarks()),
       visible.onDidChangeVisiblePaneIds(() => this.updateMarks()),
     ];
+    this.registration = vscode.window.registerFileDecorationProvider(this);
   }
 
   provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
@@ -43,6 +45,7 @@ export class VisiblePaneEditorDecorationProvider implements vscode.FileDecoratio
   }
 
   dispose(): void {
+    this.registration.dispose();
     this.subscriptions.forEach((subscription) => subscription.dispose());
     this.changes.dispose();
   }

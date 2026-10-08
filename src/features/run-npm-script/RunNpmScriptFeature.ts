@@ -4,8 +4,6 @@ import { paneTerminalOpenRequest, type PaneTerminalOpenRequest, type PaneTermina
 import type { NavigationContextSource } from "@modules/workspace-context";
 import { npmScriptCommand, packageFolder, type NpmScriptTarget } from "./npmScriptCommand";
 
-type NpmScriptCursorSource = Readonly<{ scriptAtCursor(): NpmScriptTarget | undefined }>;
-
 export class RunNpmScriptFeature {
   private readonly commands: vscode.Disposable;
   private disposed = false;
@@ -14,17 +12,11 @@ export class RunNpmScriptFeature {
     private readonly context: NavigationContextSource,
     private readonly creation: ActiveSessionCreation,
     private readonly paneOpening: PaneTerminalOpening,
-    private readonly cursorSource: NpmScriptCursorSource,
   ) {
     this.commands = vscode.Disposable.from(
       vscode.commands.registerCommand("herdr.runNpmScript", async (element: unknown) => {
         const target = npmViewScriptTarget(element);
         if (target === undefined) this.showUnexpectedScriptElementError();
-        else await this.runScript(target);
-      }),
-      vscode.commands.registerCommand("herdr.runNpmScriptAtCursor", async () => {
-        const target = this.cursorSource.scriptAtCursor();
-        if (target === undefined) this.showNoScriptAtCursorError();
         else await this.runScript(target);
       }),
       vscode.commands.registerCommand("herdr.runNpmScriptFromHover", async (args: unknown) => {
@@ -38,6 +30,11 @@ export class RunNpmScriptFeature {
     if (this.disposed) return;
     this.disposed = true;
     this.commands.dispose();
+  }
+
+  async runNpmScriptAtCursor(target: NpmScriptTarget | undefined): Promise<void> {
+    if (target === undefined) this.showNoScriptAtCursorError();
+    else await this.runScript(target);
   }
 
   private async runScript(target: NpmScriptTarget): Promise<void> {

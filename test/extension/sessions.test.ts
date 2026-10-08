@@ -3,7 +3,6 @@ import * as vscode from "vscode";
 import { SessionsModel } from "../../src/modules/sessions/SessionsModel";
 import { VsCodeSessionsView } from "../../src/views/sidebar/sessions/VsCodeSessionsView";
 import { ConnectionStatus } from "../../src/views/connection-status/ConnectionStatus";
-import { StartLocalSessionFeature } from "../../src/features/start-local-session/StartLocalSessionFeature";
 import { ConfigureExecutableFeature } from "../../src/features/configure-executable/ConfigureExecutableFeature";
 import { HerdrExtension } from "../../src/extension/HerdrExtension";
 import { HerdrSettings } from "../../src/extension/HerdrSettings";
@@ -15,9 +14,9 @@ let sequence = 0;
 const commandIds = [
   "herdr.selectSession",
   "herdr.refreshSessions",
-  "herdr.start",
   "herdr.selectExecutable",
   "herdr.showStatusActions",
+  "herdr.start",
   "herdr.retryDiscovery",
   "herdr.openSettings",
 ];
@@ -178,12 +177,10 @@ function sessionBindings(value: {
   try {
     const view = new VsCodeSessionsView(model, model);
     resources.push(view);
-    const start = new StartLocalSessionFeature(model);
-    resources.push(start);
     const configure = new ConfigureExecutableFeature();
     configure.selectExecutable = value.configurationActions.selectExecutable;
     resources.push(configure);
-    const status = new ConnectionStatus(model, model, start, configure, value.logger);
+    const status = new ConnectionStatus(model, model, configure, value.logger);
     resources.push(status);
     return {
       model,
@@ -552,7 +549,7 @@ suite("Sessions feature host bindings and lifecycle", () => {
     });
   });
 
-  test("connection status owns its three commands and disposes them", async () => {
+  test("connection status owns its four commands and disposes them", async () => {
     await withNamespacedCommands(async (prefix, registered) => {
       const d = dependencies();
       const model = new SessionsModel(
@@ -579,22 +576,30 @@ suite("Sessions feature host bindings and lifecycle", () => {
         {
           refresh: () => Promise.resolve(),
           selectSession: () => Promise.resolve(),
-          startSelectedSession: () => Promise.resolve(),
+          startSelectedSession: () => {
+            calls.push("start");
+            return Promise.resolve();
+          },
           retry: () => {
             calls.push("retry");
             return Promise.resolve();
           },
         },
-        { start: () => Promise.resolve() },
         { selectExecutable: () => Promise.resolve() },
         d.value.logger,
       );
       try {
-        assert.deepEqual(registered, ["herdr.showStatusActions", "herdr.retryDiscovery", "herdr.openSettings"]);
+        assert.deepEqual(registered, [
+          "herdr.showStatusActions",
+          "herdr.start",
+          "herdr.retryDiscovery",
+          "herdr.openSettings",
+        ]);
+        await vscode.commands.executeCommand(prefix + "herdr.start");
         await vscode.commands.executeCommand(prefix + "herdr.showStatusActions");
         await vscode.commands.executeCommand(prefix + "herdr.retryDiscovery");
         await vscode.commands.executeCommand(prefix + "herdr.openSettings");
-        assert.deepEqual(calls, ["retry", "open-settings"]);
+        assert.deepEqual(calls, ["start", "retry", "open-settings"]);
       } finally {
         status.dispose();
         model.dispose();
@@ -606,28 +611,20 @@ suite("Sessions feature host bindings and lifecycle", () => {
     });
   });
 
-  test("each scenario owns, routes, and disposes its single command", async () => {
+  test("Configure executable owns, routes, and disposes its command", async () => {
     await withNamespacedCommands(async (prefix, registered) => {
       const calls: string[] = [];
-      const start = new StartLocalSessionFeature({
-        startSelectedSession: () => {
-          calls.push("start");
-          return Promise.resolve();
-        },
-      });
       const configure = new ConfigureExecutableFeature();
       configure.selectExecutable = () => {
         calls.push("select-executable");
         return Promise.resolve();
       };
       try {
-        assert.deepEqual(registered, ["herdr.start", "herdr.selectExecutable"]);
-        await vscode.commands.executeCommand(prefix + "herdr.start");
+        assert.deepEqual(registered, ["herdr.selectExecutable"]);
         await vscode.commands.executeCommand(prefix + "herdr.selectExecutable");
-        assert.deepEqual(calls, ["start", "select-executable"]);
+        assert.deepEqual(calls, ["select-executable"]);
       } finally {
         configure.dispose();
-        start.dispose();
       }
       const remaining = await vscode.commands.getCommands(true);
       assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
@@ -684,13 +681,7 @@ suite("Sessions feature host bindings and lifecycle", () => {
               () =>
                 owner === "sessions"
                   ? new VsCodeSessionsView(source, model)
-                  : new ConnectionStatus(
-                      source,
-                      model,
-                      { start: () => Promise.resolve() },
-                      { selectExecutable: () => Promise.resolve() },
-                      d.value.logger,
-                    ),
+                  : new ConnectionStatus(source, model, { selectExecutable: () => Promise.resolve() }, d.value.logger),
               /registration failed/,
             );
             assert.equal(registered.length, owner === "sessions" ? 1 : 2);
@@ -709,12 +700,32 @@ suite("Sessions feature host bindings and lifecycle", () => {
     }
   });
 
-  test("single-command scenarios fail loudly when registration fails", async () => {
-    await withNamespacedCommands((_prefix, registered) => {
-      assert.throws(
-        () => new StartLocalSessionFeature({ startSelectedSession: () => Promise.resolve() }),
-        /registration failed/,
+  test("Connection status fails loudly when the start command cannot be registered", async () => {
+    await withNamespacedCommands(async (prefix, registered) => {
+      const d = dependencies();
+      const model = new SessionsModel(
+        d.value.directory,
+        d.value.connectionFactory,
+        d.value.configuration,
+        d.value.storage,
+        d.value.logger,
       );
+      try {
+        assert.throws(
+          () => new ConnectionStatus(model, model, { selectExecutable: () => Promise.resolve() }, d.value.logger),
+          /registration failed/,
+        );
+        assert.deepEqual(registered, ["herdr.showStatusActions"]);
+        const remaining = await vscode.commands.getCommands(true);
+        assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
+      } finally {
+        model.dispose();
+      }
+    }, 1);
+  });
+
+  test("Configure executable command fails loudly when registration fails", async () => {
+    await withNamespacedCommands((_prefix, registered) => {
       assert.throws(() => new ConfigureExecutableFeature(), /registration failed/);
       assert.equal(registered.length, 0);
       return Promise.resolve();
