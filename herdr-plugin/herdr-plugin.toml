@@ -11,4 +11,4 @@ title = "VS Code Pane takeover"
 placement = "popup"
 width = "100%"
 height = "100%"
-command = ["node", "takeover-popup.js"]
+command = ["/bin/sh", "-c", "exec \"${HERDR_VSCODE_TAKEOVER_RUNTIME:?is set by VS Code when it opens the popup}\" takeover-popup.js"]

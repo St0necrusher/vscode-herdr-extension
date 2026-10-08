@@ -46,7 +46,6 @@ export class TakeoverPluginRegistration {
   }
 
   async install(): Promise<void> {
-    await executeFile("node", ["--version"]);
     if (this.registered) {
       await this.runHerdr(["plugin", "unlink", TAKEOVER_PLUGIN_ID]);
       this.registered = false;

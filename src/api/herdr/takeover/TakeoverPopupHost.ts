@@ -133,6 +133,11 @@ export class TakeoverPopupHost implements TakeoverOffers {
         `HERDR_VSCODE_TAKEOVER_TOKEN=${state.offer.token}`,
         "--env",
         `HERDR_VSCODE_TAKEOVER_PANE=${state.offer.paneId}`,
+        // The popup runs on the extension host's own runtime, so the Herdr server needs no `node` on its PATH.
+        "--env",
+        `HERDR_VSCODE_TAKEOVER_RUNTIME=${process.execPath}`,
+        "--env",
+        "ELECTRON_RUN_AS_NODE=1",
       ];
       execFile(this.configuration.read().executable, args, (error, stdout, stderr) => {
         if (this.state !== state) return;
