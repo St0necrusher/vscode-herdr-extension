@@ -37,54 +37,23 @@ import { VsCodeLogger } from "@core/logger";
 import { NodeProcessRunner } from "@core/process";
 
 export class HerdrExtension implements vscode.Disposable {
-  private readonly logger: VsCodeLogger;
+  private readonly disposables: vscode.Disposable[];
   private readonly sessions: SessionsModel;
-  private readonly sessionsView: VsCodeSessionsView;
-  private readonly status: ConnectionStatus;
-  private readonly configureExecutable: ConfigureExecutableFeature;
-  private readonly paneEditorSelection: PaneEditorSelectionModel;
-  private readonly paneEditorFocusTracker: PaneEditorFocusTracker;
-  private readonly paneTerminalSurfaceManager: PaneTerminalSurfaceManager;
-  private readonly navigationContext: NavigationContextModel;
-  private readonly panes: VsCodePanesView;
-  private readonly spaces: VsCodeSpacesView;
-  private readonly npmScripts: VsCodeNpmScriptsView;
-  private readonly runNpmScript: RunNpmScriptFeature;
-  private readonly agents: VsCodeAgentsView;
-  private readonly decorationProvider: VisiblePaneEditorDecorationProvider;
-  private readonly createSpace: CreateSpaceFeature;
-  private readonly createPane: CreatePaneFeature;
-  private readonly rename: RenameFeature;
-  private readonly close: CloseFeature;
-  private readonly revealPane: RevealPaneFeature;
-  private readonly takeoverPopupHost: TakeoverPopupHost;
   private readonly takeoverPluginRegistration: TakeoverPluginRegistration;
-  private readonly manageTakeoverPlugin: ManageTakeoverPluginFeature;
   private disposed = false;
 
   constructor(context: vscode.ExtensionContext) {
-    const logger = new VsCodeLogger("Herdr");
-    let sessions: SessionsModel | undefined;
-    let sessionsView: VsCodeSessionsView | undefined;
-    let status: ConnectionStatus | undefined;
-    let configureExecutable: ConfigureExecutableFeature | undefined;
-    let paneEditorSelection: PaneEditorSelectionModel | undefined;
-    let paneEditorFocusTracker: PaneEditorFocusTracker | undefined;
-    let paneTerminalSurfaceManager: PaneTerminalSurfaceManager | undefined;
-    let navigationContext: NavigationContextModel | undefined;
-    let panes: VsCodePanesView | undefined;
-    let spaces: VsCodeSpacesView | undefined;
-    let npmScripts: VsCodeNpmScriptsView | undefined;
-    let runNpmScript: RunNpmScriptFeature | undefined;
-    let agents: VsCodeAgentsView | undefined;
-    let decorationProvider: VisiblePaneEditorDecorationProvider | undefined;
-    let createSpace: CreateSpaceFeature | undefined;
-    let createPane: CreatePaneFeature | undefined;
-    let rename: RenameFeature | undefined;
-    let close: CloseFeature | undefined;
-    let revealPane: RevealPaneFeature | undefined;
-    let takeoverPopupHost: TakeoverPopupHost | undefined;
-    let manageTakeoverPlugin: ManageTakeoverPluginFeature | undefined;
+    const disposables: vscode.Disposable[] = [];
+    this.disposables = disposables;
+    // Released front to back: reverse construction, except that objects passed as
+    // `disposeAfter: popupHost` are released after the popup host, which goes between
+    // the surface manager and the focus tracker.
+    const acquire = <T extends vscode.Disposable>(resource: T, disposeAfter?: vscode.Disposable): T => {
+      const insertionIndex = disposeAfter === undefined ? 0 : disposables.indexOf(disposeAfter) + 1;
+      disposables.splice(insertionIndex, 0, resource);
+      return resource;
+    };
+    const logger = acquire(new VsCodeLogger("Herdr"));
     try {
       const configuration = new HerdrSettings();
       const takeoverPluginRegistration = new TakeoverPluginRegistration(
@@ -93,101 +62,59 @@ export class HerdrExtension implements vscode.Disposable {
         context.asAbsolutePath("dist/herdr-plugin"),
         vscode.Uri.joinPath(context.globalStorageUri, "herdr-plugin").fsPath,
       );
-      manageTakeoverPlugin = new ManageTakeoverPluginFeature(takeoverPluginRegistration, logger);
-      const popupHost = new TakeoverPopupHost(configuration, takeoverPluginRegistration, logger);
-      takeoverPopupHost = popupHost;
-      sessions = new SessionsModel(
-        new HerdrCliSessionDirectory(new NodeProcessRunner()),
-        new JsonSocketHerdrSessionConnectionFactory(logger, new NodeHerdrSocketConnector()),
-        configuration,
-        context.workspaceState,
-        logger,
+      acquire(new ManageTakeoverPluginFeature(takeoverPluginRegistration, logger));
+      const popupHost = acquire(new TakeoverPopupHost(configuration, takeoverPluginRegistration, logger));
+      const sessions = acquire(
+        new SessionsModel(
+          new HerdrCliSessionDirectory(new NodeProcessRunner()),
+          new JsonSocketHerdrSessionConnectionFactory(logger, new NodeHerdrSocketConnector()),
+          configuration,
+          context.workspaceState,
+          logger,
+        ),
+        popupHost,
       );
-      const sessionOwner = sessions;
-      sessionsView = new VsCodeSessionsView(sessionOwner, sessionOwner);
-      configureExecutable = new ConfigureExecutableFeature();
-      status = new ConnectionStatus(sessionOwner, sessionOwner, configureExecutable, logger);
-      paneEditorSelection = new PaneEditorSelectionModel();
-      paneEditorFocusTracker = new PaneEditorFocusTracker(paneEditorSelection);
-      const selection = paneEditorSelection;
-      const focusTracker = paneEditorFocusTracker;
+      acquire(new VsCodeSessionsView(sessions, sessions), popupHost);
+      const configureExecutable = acquire(new ConfigureExecutableFeature(), popupHost);
+      acquire(new ConnectionStatus(sessions, sessions, configureExecutable, logger), popupHost);
+      const selection = acquire(new PaneEditorSelectionModel(), popupHost);
+      const focusTracker = acquire(new PaneEditorFocusTracker(selection), popupHost);
       const paneClients = new HerdrPaneClientFactory(
         configuration,
         context.asAbsolutePath("resources/herdr-direct-attach.toml"),
         logger,
       );
-      const surfaceManager = new PaneTerminalSurfaceManager(selection, sessionOwner, {
-        create: (paneSelection, viewColumn, terminalName) =>
-          new VsCodePaneTerminalSurface(
-            paneSelection,
-            viewColumn,
-            terminalName,
-            sessionOwner,
-            focusTracker,
-            paneClients,
-            popupHost,
-            logger,
-          ),
-      });
-      paneTerminalSurfaceManager = surfaceManager;
-      navigationContext = new NavigationContextModel(sessionOwner, surfaceManager);
-      panes = new VsCodePanesView(navigationContext, navigationContext, surfaceManager, sessionOwner);
-      spaces = new VsCodeSpacesView(navigationContext, navigationContext);
-      runNpmScript = new RunNpmScriptFeature(navigationContext, sessionOwner, surfaceManager);
-      npmScripts = new VsCodeNpmScriptsView(navigationContext, runNpmScript);
-      agents = new VsCodeAgentsView(navigationContext, navigationContext);
-      decorationProvider = new VisiblePaneEditorDecorationProvider(navigationContext, navigationContext);
-      createSpace = new CreateSpaceFeature(navigationContext, navigationContext, sessionOwner, surfaceManager);
-      createPane = new CreatePaneFeature(navigationContext, sessionOwner, surfaceManager);
-      rename = new RenameFeature(navigationContext, sessionOwner);
-      close = new CloseFeature(navigationContext, sessionOwner, surfaceManager);
-      revealPane = new RevealPaneFeature(navigationContext, navigationContext, surfaceManager);
-      this.logger = logger;
-      this.sessions = sessionOwner;
-      this.sessionsView = sessionsView;
-      this.status = status;
-      this.configureExecutable = configureExecutable;
-      this.paneEditorSelection = selection;
-      this.paneEditorFocusTracker = focusTracker;
-      this.paneTerminalSurfaceManager = surfaceManager;
-      this.navigationContext = navigationContext;
-      this.panes = panes;
-      this.spaces = spaces;
-      this.npmScripts = npmScripts;
-      this.runNpmScript = runNpmScript;
-      this.agents = agents;
-      this.decorationProvider = decorationProvider;
-      this.createSpace = createSpace;
-      this.createPane = createPane;
-      this.rename = rename;
-      this.close = close;
-      this.revealPane = revealPane;
-      this.takeoverPopupHost = popupHost;
+      const surfaceManager = acquire(
+        new PaneTerminalSurfaceManager(selection, sessions, {
+          create: (paneSelection, viewColumn, terminalName) =>
+            new VsCodePaneTerminalSurface(
+              paneSelection,
+              viewColumn,
+              terminalName,
+              sessions,
+              focusTracker,
+              paneClients,
+              popupHost,
+              logger,
+            ),
+        }),
+      );
+      const navigationContext = acquire(new NavigationContextModel(sessions, surfaceManager));
+      acquire(new VsCodePanesView(navigationContext, navigationContext, surfaceManager, sessions));
+      acquire(new VsCodeSpacesView(navigationContext, navigationContext));
+      const runNpmScript = acquire(new RunNpmScriptFeature(navigationContext, sessions, surfaceManager));
+      acquire(new VsCodeNpmScriptsView(navigationContext, runNpmScript));
+      acquire(new VsCodeAgentsView(navigationContext, navigationContext));
+      acquire(new VisiblePaneEditorDecorationProvider(navigationContext, navigationContext));
+      acquire(new CreateSpaceFeature(navigationContext, navigationContext, sessions, surfaceManager));
+      acquire(new CreatePaneFeature(navigationContext, sessions, surfaceManager));
+      acquire(new RenameFeature(navigationContext, sessions));
+      acquire(new CloseFeature(navigationContext, sessions, surfaceManager));
+      acquire(new RevealPaneFeature(navigationContext, navigationContext, surfaceManager));
+      this.sessions = sessions;
       this.takeoverPluginRegistration = takeoverPluginRegistration;
-      this.manageTakeoverPlugin = manageTakeoverPlugin;
     } catch (error) {
-      revealPane?.dispose();
-      close?.dispose();
-      rename?.dispose();
-      createPane?.dispose();
-      createSpace?.dispose();
-      decorationProvider?.dispose();
-      agents?.dispose();
-      npmScripts?.dispose();
-      runNpmScript?.dispose();
-      spaces?.dispose();
-      panes?.dispose();
-      navigationContext?.dispose();
-      paneTerminalSurfaceManager?.dispose();
-      takeoverPopupHost?.dispose();
-      paneEditorFocusTracker?.dispose();
-      paneEditorSelection?.dispose();
-      status?.dispose();
-      configureExecutable?.dispose();
-      sessionsView?.dispose();
-      sessions?.dispose();
-      manageTakeoverPlugin?.dispose();
-      logger.dispose();
+      for (const disposable of disposables) disposable.dispose();
       throw error;
     }
   }
@@ -206,27 +133,6 @@ export class HerdrExtension implements vscode.Disposable {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.revealPane.dispose();
-    this.close.dispose();
-    this.rename.dispose();
-    this.createPane.dispose();
-    this.createSpace.dispose();
-    this.decorationProvider.dispose();
-    this.agents.dispose();
-    this.npmScripts.dispose();
-    this.runNpmScript.dispose();
-    this.spaces.dispose();
-    this.panes.dispose();
-    this.navigationContext.dispose();
-    this.paneTerminalSurfaceManager.dispose();
-    this.takeoverPopupHost.dispose();
-    this.paneEditorFocusTracker.dispose();
-    this.paneEditorSelection.dispose();
-    this.status.dispose();
-    this.configureExecutable.dispose();
-    this.sessionsView.dispose();
-    this.sessions.dispose();
-    this.manageTakeoverPlugin.dispose();
-    this.logger.dispose();
+    for (const disposable of this.disposables) disposable.dispose();
   }
 }
