@@ -221,6 +221,7 @@ function startPopupProcess(
       PATH: LAUNCHD_PATH,
       TERM: "xterm-256color",
       ...(runtime === undefined ? {} : { HERDR_VSCODE_TAKEOVER_RUNTIME: runtime }),
+      ELECTRON_RUN_AS_NODE: "1",
       HERDR_VSCODE_TAKEOVER_SOCKET: ownerSocketPath,
       HERDR_VSCODE_TAKEOVER_TOKEN: TOKEN,
       HERDR_VSCODE_TAKEOVER_PANE: PANE_ID,
