@@ -130,7 +130,7 @@ A feature owns a scenario end to end: prompts, confirmation, execution through m
 
 ### `views/<surface>/` — presentation and input
 
-A view owns its VS Code surface: tree data providers, rows, icons, copy, tooltips, hovers, context keys, expanded state, decorations, drag and drop, and the commands of trivial clicks. It reads module state and calls module operations or feature entries. It keeps view state only (expanded rows, the item under a drag), never a second copy of domain state.
+A view owns its VS Code surface: tree data providers, rows, icons, copy, tooltips, hovers, context keys, expanded state, decorations, drag and drop, and the commands of trivial clicks. It reads module state and calls module operations or feature entries. It keeps view state only (expanded rows, the item under a drag), never a second copy of domain state. A view may register a command adapter that extracts surface data and passes it to a feature.
 
 **Litmus:** "Is this about how something looks or is clicked in one VS Code surface?" → yes.
 

@@ -116,6 +116,7 @@ async function withNavigation(
   const openRequests: PaneTerminalOpenRequest[] = [];
   const closeRequests: string[] = [];
   const errors: string[] = [];
+  const registeredCommands: string[] = [];
   let navigation: vscode.Disposable | undefined;
   const recordClose = (kind: string) => (request: unknown) => {
     closeRequests.push(`${kind} ${JSON.stringify(request)}`);
@@ -123,8 +124,10 @@ async function withNavigation(
   };
 
   try {
-    vscode.commands.registerCommand = (...args: Parameters<typeof originalRegisterCommand>) =>
-      originalRegisterCommand(prefix + args[0], args[1], args[2]);
+    vscode.commands.registerCommand = (...args: Parameters<typeof originalRegisterCommand>) => {
+      registeredCommands.push(args[0]);
+      return originalRegisterCommand(prefix + args[0], args[1], args[2]);
+    };
     vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
       if (command === "setContext") return Promise.resolve(undefined);
       const executeOriginal = originalExecuteCommand as unknown as (
@@ -171,6 +174,8 @@ async function withNavigation(
     vscode.window.showErrorMessage = originalShowErrorMessage;
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   }
+  const remaining = await vscode.commands.getCommands(true);
+  assert.ok(registeredCommands.every((command) => !remaining.includes(prefix + command)));
 }
 
 type NavigationDependencies = Readonly<{
@@ -191,16 +196,14 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
     dependencies.management,
   );
   const spaces = new VsCodeSpacesView(navigationContext, navigationContext);
-  const npmScripts = new VsCodeNpmScriptsView(navigationContext);
   const runNpmScript = new RunNpmScriptFeature(
     navigationContext,
     dependencies.creation,
     dependencies.paneTerminalOpening,
-    npmScripts,
   );
+  const npmScripts = new VsCodeNpmScriptsView(navigationContext, runNpmScript);
   const agents = new VsCodeAgentsView(navigationContext, navigationContext);
   const decorationProvider = new VisiblePaneEditorDecorationProvider(navigationContext, navigationContext);
-  const decorations = vscode.window.registerFileDecorationProvider(decorationProvider);
   const createSpace = new CreateSpaceFeature(
     navigationContext,
     navigationContext,
@@ -219,11 +222,10 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
       rename.dispose();
       createPane.dispose();
       createSpace.dispose();
-      decorations.dispose();
       decorationProvider.dispose();
       agents.dispose();
-      runNpmScript.dispose();
       npmScripts.dispose();
+      runNpmScript.dispose();
       spaces.dispose();
       panes.dispose();
       navigationContext.dispose();

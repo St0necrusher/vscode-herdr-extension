@@ -16,7 +16,6 @@ import {
   VsCodeSpacesView,
 } from "@views/sidebar";
 import { ConnectionStatus } from "@views/connection-status";
-import { StartLocalSessionFeature } from "@features/start-local-session";
 import { ConfigureExecutableFeature } from "@features/configure-executable";
 import { ManageTakeoverPluginFeature } from "@features/manage-takeover-plugin";
 import {
@@ -42,7 +41,6 @@ export class HerdrExtension implements vscode.Disposable {
   private readonly sessions: SessionsModel;
   private readonly sessionsView: VsCodeSessionsView;
   private readonly status: ConnectionStatus;
-  private readonly startLocalSession: StartLocalSessionFeature;
   private readonly configureExecutable: ConfigureExecutableFeature;
   private readonly paneEditorSelection: PaneEditorSelectionModel;
   private readonly paneEditorFocusTracker: PaneEditorFocusTracker;
@@ -54,7 +52,6 @@ export class HerdrExtension implements vscode.Disposable {
   private readonly runNpmScript: RunNpmScriptFeature;
   private readonly agents: VsCodeAgentsView;
   private readonly decorationProvider: VisiblePaneEditorDecorationProvider;
-  private readonly decorations: vscode.Disposable;
   private readonly createSpace: CreateSpaceFeature;
   private readonly createPane: CreatePaneFeature;
   private readonly rename: RenameFeature;
@@ -70,7 +67,6 @@ export class HerdrExtension implements vscode.Disposable {
     let sessions: SessionsModel | undefined;
     let sessionsView: VsCodeSessionsView | undefined;
     let status: ConnectionStatus | undefined;
-    let startLocalSession: StartLocalSessionFeature | undefined;
     let configureExecutable: ConfigureExecutableFeature | undefined;
     let paneEditorSelection: PaneEditorSelectionModel | undefined;
     let paneEditorFocusTracker: PaneEditorFocusTracker | undefined;
@@ -82,7 +78,6 @@ export class HerdrExtension implements vscode.Disposable {
     let runNpmScript: RunNpmScriptFeature | undefined;
     let agents: VsCodeAgentsView | undefined;
     let decorationProvider: VisiblePaneEditorDecorationProvider | undefined;
-    let decorations: vscode.Disposable | undefined;
     let createSpace: CreateSpaceFeature | undefined;
     let createPane: CreatePaneFeature | undefined;
     let rename: RenameFeature | undefined;
@@ -110,9 +105,8 @@ export class HerdrExtension implements vscode.Disposable {
       );
       const sessionOwner = sessions;
       sessionsView = new VsCodeSessionsView(sessionOwner, sessionOwner);
-      startLocalSession = new StartLocalSessionFeature(sessionOwner);
       configureExecutable = new ConfigureExecutableFeature();
-      status = new ConnectionStatus(sessionOwner, sessionOwner, startLocalSession, configureExecutable, logger);
+      status = new ConnectionStatus(sessionOwner, sessionOwner, configureExecutable, logger);
       paneEditorSelection = new PaneEditorSelectionModel();
       paneEditorFocusTracker = new PaneEditorFocusTracker(paneEditorSelection);
       const selection = paneEditorSelection;
@@ -139,11 +133,10 @@ export class HerdrExtension implements vscode.Disposable {
       navigationContext = new NavigationContextModel(sessionOwner, surfaceManager);
       panes = new VsCodePanesView(navigationContext, navigationContext, surfaceManager, sessionOwner);
       spaces = new VsCodeSpacesView(navigationContext, navigationContext);
-      npmScripts = new VsCodeNpmScriptsView(navigationContext);
-      runNpmScript = new RunNpmScriptFeature(navigationContext, sessionOwner, surfaceManager, npmScripts);
+      runNpmScript = new RunNpmScriptFeature(navigationContext, sessionOwner, surfaceManager);
+      npmScripts = new VsCodeNpmScriptsView(navigationContext, runNpmScript);
       agents = new VsCodeAgentsView(navigationContext, navigationContext);
       decorationProvider = new VisiblePaneEditorDecorationProvider(navigationContext, navigationContext);
-      decorations = vscode.window.registerFileDecorationProvider(decorationProvider);
       createSpace = new CreateSpaceFeature(navigationContext, navigationContext, sessionOwner, surfaceManager);
       createPane = new CreatePaneFeature(navigationContext, sessionOwner, surfaceManager);
       rename = new RenameFeature(navigationContext, sessionOwner);
@@ -153,7 +146,6 @@ export class HerdrExtension implements vscode.Disposable {
       this.sessions = sessionOwner;
       this.sessionsView = sessionsView;
       this.status = status;
-      this.startLocalSession = startLocalSession;
       this.configureExecutable = configureExecutable;
       this.paneEditorSelection = selection;
       this.paneEditorFocusTracker = focusTracker;
@@ -165,7 +157,6 @@ export class HerdrExtension implements vscode.Disposable {
       this.runNpmScript = runNpmScript;
       this.agents = agents;
       this.decorationProvider = decorationProvider;
-      this.decorations = decorations;
       this.createSpace = createSpace;
       this.createPane = createPane;
       this.rename = rename;
@@ -180,11 +171,10 @@ export class HerdrExtension implements vscode.Disposable {
       rename?.dispose();
       createPane?.dispose();
       createSpace?.dispose();
-      decorations?.dispose();
       decorationProvider?.dispose();
       agents?.dispose();
-      runNpmScript?.dispose();
       npmScripts?.dispose();
+      runNpmScript?.dispose();
       spaces?.dispose();
       panes?.dispose();
       navigationContext?.dispose();
@@ -194,7 +184,6 @@ export class HerdrExtension implements vscode.Disposable {
       paneEditorSelection?.dispose();
       status?.dispose();
       configureExecutable?.dispose();
-      startLocalSession?.dispose();
       sessionsView?.dispose();
       sessions?.dispose();
       manageTakeoverPlugin?.dispose();
@@ -222,11 +211,10 @@ export class HerdrExtension implements vscode.Disposable {
     this.rename.dispose();
     this.createPane.dispose();
     this.createSpace.dispose();
-    this.decorations.dispose();
     this.decorationProvider.dispose();
     this.agents.dispose();
-    this.runNpmScript.dispose();
     this.npmScripts.dispose();
+    this.runNpmScript.dispose();
     this.spaces.dispose();
     this.panes.dispose();
     this.navigationContext.dispose();
@@ -236,7 +224,6 @@ export class HerdrExtension implements vscode.Disposable {
     this.paneEditorSelection.dispose();
     this.status.dispose();
     this.configureExecutable.dispose();
-    this.startLocalSession.dispose();
     this.sessionsView.dispose();
     this.sessions.dispose();
     this.manageTakeoverPlugin.dispose();

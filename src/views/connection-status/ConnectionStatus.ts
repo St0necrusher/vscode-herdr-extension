@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import type { StartLocalSessionFeature } from "@features/start-local-session";
 import type { ConfigureExecutableFeature } from "@features/configure-executable";
 import type { Logger } from "@core/logger";
 import type { SessionsOperations, SessionsStateSource } from "@modules/sessions";
@@ -16,7 +15,6 @@ export class ConnectionStatus {
   constructor(
     private readonly source: SessionsStateSource,
     private readonly operations: SessionsOperations,
-    private readonly startLocalSession: Pick<StartLocalSessionFeature, "start">,
     private readonly configureExecutable: Pick<ConfigureExecutableFeature, "selectExecutable">,
     logger: Logger,
   ) {
@@ -36,6 +34,7 @@ export class ConnectionStatus {
       const registrations: vscode.Disposable[] = [];
       try {
         registrations.push(vscode.commands.registerCommand("herdr.showStatusActions", () => this.showActions()));
+        registrations.push(vscode.commands.registerCommand("herdr.start", () => operations.startSelectedSession()));
         registrations.push(vscode.commands.registerCommand("herdr.retryDiscovery", () => operations.retry()));
         registrations.push(vscode.commands.registerCommand("herdr.openSettings", () => this.openSettings()));
         commands = vscode.Disposable.from(...registrations);
@@ -69,7 +68,7 @@ export class ConnectionStatus {
     if (cannotRunAction) return;
     switch (action) {
       case "start":
-        await this.startLocalSession.start();
+        await this.operations.startSelectedSession();
         break;
       case "retry":
         await this.operations.retry();

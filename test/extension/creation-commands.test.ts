@@ -314,16 +314,14 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
     dependencies.management,
   );
   const spaces = new VsCodeSpacesView(navigationContext, navigationContext);
-  const npmScripts = new VsCodeNpmScriptsView(navigationContext);
   const runNpmScript = new RunNpmScriptFeature(
     navigationContext,
     dependencies.creation,
     dependencies.paneTerminalOpening,
-    npmScripts,
   );
+  const npmScripts = new VsCodeNpmScriptsView(navigationContext, runNpmScript);
   const agents = new VsCodeAgentsView(navigationContext, navigationContext);
   const decorationProvider = new VisiblePaneEditorDecorationProvider(navigationContext, navigationContext);
-  const decorations = vscode.window.registerFileDecorationProvider(decorationProvider);
   const createSpace = new CreateSpaceFeature(
     navigationContext,
     navigationContext,
@@ -342,11 +340,10 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
       rename.dispose();
       createPane.dispose();
       createSpace.dispose();
-      decorations.dispose();
       decorationProvider.dispose();
       agents.dispose();
-      runNpmScript.dispose();
       npmScripts.dispose();
+      runNpmScript.dispose();
       spaces.dispose();
       panes.dispose();
       navigationContext.dispose();

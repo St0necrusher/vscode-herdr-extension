@@ -77,3 +77,4 @@ Execution plan approved by the user on 2026-10-07.
 - 2026-10-08: final architecture review (Opus medium, consulting astra; `final-review/architecture.md`, `answers/final-architecture.md`): no blocking finding; 8 astra-confirmed findings (A, E, G important; B, C, D, F, K minor), 4 candidates judged not defects. The user directed all 8 to be fixed in PR #69 as slices 8a (A, E, F), 8b (G), 8c (B, C, D, K).
 - D20 (user, 2026-10-08): `ARCHITECTURE.md` §4 gains one sentence: a view may register a command adapter that extracts surface data and passes it to a feature (finding E).
 - D21 (user, 2026-10-08): `ARCHITECTURE.md` and `IMPLEMENTATION.md` status becomes "canonical" (finding K).
+- 2026-10-08: 8a accepted after one correction round (`reviews/8a.md`: removed try/catch cleanup the old code did not have, made `scriptAtCursor` private, moved two assertions out of `finally`), applied by a fresh worker (`luna-8a2`) because `luna-8a` was at ~150k.
