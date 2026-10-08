@@ -19,7 +19,7 @@ A compact status item reports discovery and connection state and provides recove
 - **Herdr: Select Herdr Executable**
 - **Herdr: Open Settings**
 
-Mobile Takeover requires `node` on the Herdr server's `PATH`. Run **Herdr: Remove Mobile Takeover Plugin** before uninstalling this extension.
+The Mobile Takeover popup runs on VS Code's own runtime, so the Herdr server needs no `node` on its `PATH`. Run **Herdr: Remove Mobile Takeover Plugin** before uninstalling this extension.
 
 Diagnostics are written to the **Herdr** Output channel.
 
