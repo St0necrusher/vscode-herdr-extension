@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import { worktreeGroup, type ActiveSessionManagement } from "@modules/sessions";
 import type { PaneTerminalClosing } from "@modules/pane-editors";
 import type { NavigationContextSource } from "@modules/workspace-context";
@@ -29,17 +30,9 @@ export async function closeGroup(
   try {
     await management.closeSpace({ sessionId: initialState.sessionId, spaceId: initialSpace.id, closeGroup: true });
   } catch (error) {
-    showError(`Could not close Group: ${errorMessage(error)}`);
+    void vscode.window.showErrorMessage(`Could not close Group: ${errorMessage(error)}`);
     return;
   }
 
   paneClosing.closePanes(initialState.sessionId, paneIds);
-}
-
-function showError(message: string): void {
-  void vscode.window.showErrorMessage(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -1,6 +1,6 @@
 # Implementation rules
 
-Status: proposed, together with [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+Status: canonical.
 
 How to write code inside a block. Where the code goes is decided by [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 

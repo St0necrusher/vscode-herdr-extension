@@ -22,11 +22,6 @@ export type StaleActiveSessionProjectionState = Readonly<{
 export type ActiveSessionProjectionState =
   UnavailableActiveSessionProjectionState | ConnectedActiveSessionProjectionState | StaleActiveSessionProjectionState;
 
-export interface ActiveSessionProjectionSource {
-  getActiveSessionProjection(): ActiveSessionProjectionState;
-  onDidChangeActiveSessionProjection(listener: (state: ActiveSessionProjectionState) => void): { dispose(): void };
-}
-
 export function activeSessionProjection(state: SessionsState): ActiveSessionProjectionState {
   const active = state.active;
   if (active.kind === "connected") {

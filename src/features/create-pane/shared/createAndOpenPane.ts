@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import type { CreatedPane } from "@api/herdr";
 import { paneName } from "@modules/sessions";
 import { paneTerminalOpenRequest, type PaneTerminalOpening } from "@modules/pane-editors";
@@ -27,14 +28,6 @@ export async function createAndOpenPane(
     if (pane === undefined) throw new Error(`Pane ${paneId} is not in the current Session snapshot`);
     paneTerminalOpening.openPane(paneTerminalOpenRequest(state.sessionId, pane, paneName(pane)));
   } catch (error) {
-    showError(`Pane was created but could not be opened: ${errorMessage(error)}`);
+    void vscode.window.showErrorMessage(`Pane was created but could not be opened: ${errorMessage(error)}`);
   }
-}
-
-function showError(message: string): void {
-  void vscode.window.showErrorMessage(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

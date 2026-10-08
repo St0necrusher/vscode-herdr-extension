@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import type { HerdrTab } from "@api/herdr";
 import type { ActiveSessionManagement } from "@modules/sessions";
 import type { NavigationContextSource, NavigationContextState } from "@modules/workspace-context";
@@ -23,7 +24,7 @@ export async function renameTab(
   try {
     await management.renameTab({ sessionId: initialState.sessionId, tabId: initialTab.id, label });
   } catch (error) {
-    showError(`Could not rename Tab: ${errorMessage(error)}`);
+    void vscode.window.showErrorMessage(`Could not rename Tab: ${errorMessage(error)}`);
   }
 }
 
@@ -43,12 +44,4 @@ function selectedTab(
   const hasPane = state.snapshot.panes.some((pane) => pane.herdrTabId === tab.id && pane.spaceId === space.id);
   if (!hasPane) return undefined;
   return tab;
-}
-
-function showError(message: string): void {
-  void vscode.window.showErrorMessage(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

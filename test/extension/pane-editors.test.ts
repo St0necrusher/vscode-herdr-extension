@@ -1,15 +1,11 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import type { Logger } from "@core/logger";
+import type { ActiveSessionProjectionState } from "../../src/modules/sessions/activeSessionProjection";
 import type {
   ActiveSessionProjectionSource,
-  ActiveSessionProjectionState,
-} from "../../src/modules/sessions/activeSessionProjection";
-import type {
-  HerdrSessionEventMap,
-  HerdrSessionEventName,
   HerdrSessionEventSource,
-} from "../../src/modules/sessions/sessionEvents";
+} from "../../src/modules/pane-editors/session-source";
 import type { HerdrPane, HerdrPaneMovedEvent, HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
 import type { PaneTerminalOpenRequest } from "../../src/modules/pane-editors";
 import type { PaneAttach } from "../../src/api/herdr/pane-clients/HerdrPaneAttach";
@@ -74,10 +70,7 @@ class FakePaneClientFactory implements PaneClientFactory {
 class FakeSessionEvents implements HerdrSessionEventSource {
   private readonly listeners = new Set<(event: HerdrPaneMovedEvent) => void>();
 
-  subscribe<T extends HerdrSessionEventName>(
-    _eventName: T,
-    listener: (event: HerdrSessionEventMap[T]) => void,
-  ): { dispose(): void } {
+  subscribe(_eventName: "pane.moved", listener: (event: HerdrPaneMovedEvent) => void): { dispose(): void } {
     this.listeners.add(listener);
     return { dispose: () => this.listeners.delete(listener) };
   }

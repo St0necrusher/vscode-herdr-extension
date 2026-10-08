@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import { paneName, type ActiveSessionCreation } from "@modules/sessions";
 import { paneTerminalOpenRequest, type PaneTerminalOpenRequest, type PaneTerminalOpening } from "@modules/pane-editors";
 import type { NavigationContextSource } from "@modules/workspace-context";
@@ -136,8 +137,4 @@ function hoverScriptTarget(args: unknown): NpmScriptTarget | undefined {
 function property(value: unknown, key: string): unknown {
   const isObject = typeof value === "object" && value !== null;
   return isObject ? (value as Record<string, unknown>)[key] : undefined;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

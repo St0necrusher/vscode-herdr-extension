@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import type { ActiveSessionManagement } from "@modules/sessions";
 import type { NavigationContextSource } from "@modules/workspace-context";
 
@@ -22,14 +23,6 @@ export async function renameSpace(
   try {
     await management.renameSpace({ sessionId: initialState.sessionId, spaceId: initialSpace.id, label });
   } catch (error) {
-    showError(`Could not rename Space: ${errorMessage(error)}`);
+    void vscode.window.showErrorMessage(`Could not rename Space: ${errorMessage(error)}`);
   }
-}
-
-function showError(message: string): void {
-  void vscode.window.showErrorMessage(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

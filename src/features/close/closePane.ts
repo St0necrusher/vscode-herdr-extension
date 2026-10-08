@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import { isPaneClosable, type ActiveSessionManagement } from "@modules/sessions";
 import type { PaneTerminalClosing } from "@modules/pane-editors";
 import type { NavigationContextSource } from "@modules/workspace-context";
@@ -25,17 +26,9 @@ export async function closePane(
   try {
     await management.closePane({ sessionId: state.sessionId, paneId: pane.id });
   } catch (error) {
-    showError(`Could not close Pane: ${errorMessage(error)}`);
+    void vscode.window.showErrorMessage(`Could not close Pane: ${errorMessage(error)}`);
     return;
   }
 
   paneClosing.closePanes(state.sessionId, [pane.id]);
-}
-
-function showError(message: string): void {
-  void vscode.window.showErrorMessage(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import { isTabClosable, type ActiveSessionManagement } from "@modules/sessions";
 import type { PaneTerminalClosing } from "@modules/pane-editors";
 import type { NavigationContextSource } from "@modules/workspace-context";
@@ -30,17 +31,9 @@ export async function closeTab(
   try {
     await management.closeTab({ sessionId: state.sessionId, tabId: tab.id });
   } catch (error) {
-    showError(`Could not close Tab: ${errorMessage(error)}`);
+    void vscode.window.showErrorMessage(`Could not close Tab: ${errorMessage(error)}`);
     return;
   }
 
   paneClosing.closePanes(state.sessionId, paneIds);
-}
-
-function showError(message: string): void {
-  void vscode.window.showErrorMessage(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-import { startFakeHerdr } from "./fakeHerdr";
+import { startFakeHerdr } from "./fakeHerdrServer";
 
 const extensionAtModuleLoad = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");
 assert.ok(extensionAtModuleLoad, "the real extension is installed");
@@ -44,7 +44,7 @@ suite("Real Herdr extension composition", () => {
     try {
       const executable = vscode.workspace.getConfiguration("herdr").get<string>("executable");
       assert.ok(
-        executable?.endsWith("/dist/test/extension-composition/fake-herdr.js"),
+        executable?.endsWith("/dist/test/extension-composition/fakeHerdrCli.js"),
         "the workspace uses only the fake CLI",
       );
       const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension");

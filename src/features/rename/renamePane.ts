@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import type { HerdrPane } from "@api/herdr";
 import type { ActiveSessionManagement } from "@modules/sessions";
 import type { NavigationContextSource, NavigationContextState } from "@modules/workspace-context";
@@ -20,7 +21,7 @@ export async function renamePane(
   try {
     await management.renamePane({ sessionId: initialState.sessionId, paneId: initialPane.id, label });
   } catch (error) {
-    showError(`Could not rename Pane: ${errorMessage(error)}`);
+    void vscode.window.showErrorMessage(`Could not rename Pane: ${errorMessage(error)}`);
   }
 }
 
@@ -36,12 +37,4 @@ function selectedPane(
     const isSelectedPane = candidate.id === paneId && candidate.spaceId === space.id;
     return isSelectedPane;
   });
-}
-
-function showError(message: string): void {
-  void vscode.window.showErrorMessage(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

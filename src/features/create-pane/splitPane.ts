@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import type { SplitDirection } from "@api/herdr";
 import type { ActiveSessionCreation } from "@modules/sessions";
 import type { PaneTerminalOpening } from "@modules/pane-editors";
@@ -24,14 +25,6 @@ export async function splitPane(
     context,
     paneTerminalOpening,
     creation.splitPane({ sessionId: state.sessionId, paneId, direction }),
-    (error) => showError(`Could not split Pane: ${errorMessage(error)}`),
+    (error) => void vscode.window.showErrorMessage(`Could not split Pane: ${errorMessage(error)}`),
   );
-}
-
-function showError(message: string): void {
-  void vscode.window.showErrorMessage(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

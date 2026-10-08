@@ -79,3 +79,4 @@ Execution plan approved by the user on 2026-10-07.
 - D21 (user, 2026-10-08): `ARCHITECTURE.md` and `IMPLEMENTATION.md` status becomes "canonical" (finding K).
 - 2026-10-08: 8a accepted after one correction round (`reviews/8a.md`: removed try/catch cleanup the old code did not have, made `scriptAtCursor` private, moved two assertions out of `finally`), applied by a fresh worker (`luna-8a2`) because `luna-8a` was at ~150k.
 - 2026-10-08: 8b accepted after one readability correction (`reviews/8b.md`: `disposeAfter` name and comment for the popup-host disposal exception; one-line loops). Construction, disposal and constructor-failure orders verified identical to the previous version; `HerdrExtension.ts` 232 → ~140 lines.
+- 2026-10-08: 8c accepted without corrections (`reviews/8c.md`).
