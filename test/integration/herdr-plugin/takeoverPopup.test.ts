@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,9 @@ const SOCKET_EVENT_TIMEOUT_MS = 3_000;
 const POPUP_EXIT_TIMEOUT_MS = 5_000;
 const TEST_DIRECTORY_PREFIX = "herdr-takeover-popup-";
 const POPUP_ENTRY_POINT = fileURLToPath(new URL("../../../herdr-plugin/takeoverPopup.ts", import.meta.url));
+const PLUGIN_MANIFEST = fileURLToPath(new URL("../../../herdr-plugin/herdr-plugin.toml", import.meta.url));
+// The PATH a launchd-started Herdr server has, for example under `brew services`: no `node` on it.
+const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 
 interface PopupProcess {
   readonly terminal: IPty;
@@ -56,6 +59,7 @@ interface PopupFixture {
 
 let bundleDirectory: string;
 let popupBundlePath: string;
+let manifestCommand: [string, ...string[]];
 
 beforeAll(async () => {
   bundleDirectory = await mkdtemp(join(tmpdir(), TEST_DIRECTORY_PREFIX));
@@ -68,7 +72,15 @@ beforeAll(async () => {
     platform: "node",
     target: "node20",
   });
+  manifestCommand = await readManifestCommand();
 }, 10_000);
+
+async function readManifestCommand(): Promise<[string, ...string[]]> {
+  const manifest = await readFile(PLUGIN_MANIFEST, "utf8");
+  const command = /^command\s*=\s*(\[.*\])$/m.exec(manifest)?.[1];
+  if (command === undefined) throw new Error("The plugin manifest has no command.");
+  return JSON.parse(command) as [string, ...string[]];
+}
 
 afterAll(async () => {
   await rm(bundleDirectory, { recursive: true, force: true });
@@ -193,15 +205,22 @@ async function startHerdrSocketServer(
   return { server, connections, requests };
 }
 
-function startPopupProcess(ownerSocketPath: string, herdrSocketPath: string): PopupProcess {
-  const terminal = spawn(process.execPath, [popupBundlePath], {
+// Herdr runs the manifest command in the plugin directory with the server's environment plus the `--env` values.
+function startPopupProcess(
+  ownerSocketPath: string,
+  herdrSocketPath: string,
+  runtime: string | undefined,
+): PopupProcess {
+  const [file, ...args] = manifestCommand;
+  const terminal = spawn(file, args, {
     name: "xterm-256color",
     cols: 80,
     rows: 24,
-    cwd: process.cwd(),
+    cwd: bundleDirectory,
     env: {
-      PATH: process.env.PATH,
+      PATH: LAUNCHD_PATH,
       TERM: "xterm-256color",
+      ...(runtime === undefined ? {} : { HERDR_VSCODE_TAKEOVER_RUNTIME: runtime }),
       HERDR_VSCODE_TAKEOVER_SOCKET: ownerSocketPath,
       HERDR_VSCODE_TAKEOVER_TOKEN: TOKEN,
       HERDR_VSCODE_TAKEOVER_PANE: PANE_ID,
@@ -272,7 +291,7 @@ async function createPopupFixture(): Promise<PopupFixture> {
       return herdr;
     },
     startPopup() {
-      popup = startPopupProcess(ownerSocketPath, herdrSocketPath);
+      popup = startPopupProcess(ownerSocketPath, herdrSocketPath, process.execPath);
       return popup;
     },
     async cleanup() {
@@ -501,6 +520,19 @@ describe("Herdr mobile takeover popup process", () => {
       expect(owner.messages).not.toContain("confirm");
     } finally {
       await fixture.cleanup();
+    }
+  });
+
+  it("C6 refuses to start when it was opened without the VS Code runtime", async () => {
+    const directory = await mkdtemp(join(tmpdir(), TEST_DIRECTORY_PREFIX));
+    try {
+      const popup = startPopupProcess(join(directory, "owner.sock"), join(directory, "herdr.sock"), undefined);
+
+      await waitForPopupExit(popup);
+      expect(popup.exitCode).not.toBe(0);
+      expect(popup.output).toContain("HERDR_VSCODE_TAKEOVER_RUNTIME");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
   });
 });
