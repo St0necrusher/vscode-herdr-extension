@@ -10,6 +10,7 @@ const PLUGIN_MANIFEST = "herdr-plugin.toml";
 
 export class TakeoverPluginRegistration {
   private registered = false;
+  private disposed = false;
 
   constructor(
     private readonly configuration: HerdrExecutableSource,
@@ -21,19 +22,23 @@ export class TakeoverPluginRegistration {
   async initialize(): Promise<void> {
     try {
       const output = await this.runHerdr(["plugin", "list", "--json"]);
+      if (this.disposed) return;
       this.registered = pluginListContains(output);
       if (this.registered) {
-        const packagedVersion = await readManifestVersion(this.packagedPluginDirectory);
-        const copiedVersion = await readManifestVersion(this.copiedPluginDirectory);
-        if (packagedVersion !== copiedVersion) await this.refreshRegisteredPlugin();
+        await this.refreshWhenPackagedVersionChanged();
       } else {
         this.logger.info(
           'Mobile Takeover plugin is not registered; run "Herdr: Install Mobile Takeover Plugin" to enable it.',
         );
       }
     } catch (error) {
+      if (this.disposed) return;
       this.logger.error("Could not initialize Mobile Takeover plugin registration", error);
     }
+  }
+
+  dispose(): void {
+    this.disposed = true;
   }
 
   isRegistered(): boolean {
@@ -57,6 +62,14 @@ export class TakeoverPluginRegistration {
       this.registered = false;
     }
     await rm(this.copiedPluginDirectory, { recursive: true, force: true });
+  }
+
+  private async refreshWhenPackagedVersionChanged(): Promise<void> {
+    const packagedVersion = await readManifestVersion(this.packagedPluginDirectory);
+    const copiedVersion = await readManifestVersion(this.copiedPluginDirectory);
+    // A started refresh runs to completion so the plugin is not left unlinked.
+    if (this.disposed || packagedVersion === copiedVersion) return;
+    await this.refreshRegisteredPlugin();
   }
 
   private async refreshRegisteredPlugin(): Promise<void> {

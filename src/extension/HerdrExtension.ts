@@ -56,11 +56,13 @@ export class HerdrExtension implements vscode.Disposable {
     const logger = acquire(new VsCodeLogger("Herdr"));
     try {
       const configuration = new HerdrSettings();
-      const takeoverPluginRegistration = new TakeoverPluginRegistration(
-        configuration,
-        logger,
-        context.asAbsolutePath("dist/herdr-plugin"),
-        vscode.Uri.joinPath(context.globalStorageUri, "herdr-plugin").fsPath,
+      const takeoverPluginRegistration = acquire(
+        new TakeoverPluginRegistration(
+          configuration,
+          logger,
+          context.asAbsolutePath("dist/herdr-plugin"),
+          vscode.Uri.joinPath(context.globalStorageUri, "herdr-plugin").fsPath,
+        ),
       );
       acquire(new ManageTakeoverPluginFeature(takeoverPluginRegistration, logger));
       const popupHost = acquire(new TakeoverPopupHost(configuration, takeoverPluginRegistration, logger));

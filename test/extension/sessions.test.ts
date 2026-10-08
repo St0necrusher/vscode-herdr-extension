@@ -1,4 +1,8 @@
 import * as assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import * as vscode from "vscode";
 import { SessionsModel } from "../../src/modules/sessions/SessionsModel";
 import { VsCodeSessionsView } from "../../src/views/sidebar/sessions/VsCodeSessionsView";
@@ -197,7 +201,55 @@ function sessionBindings(value: {
   }
 }
 
-function extensionForLifecycle(d: ReturnType<typeof dependencies>): { extension: HerdrExtension; dispose(): void } {
+// A herdr CLI that reports the takeover plugin as registered and holds `plugin list` until released.
+async function fakeTakeoverHerdr() {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-takeover-lifecycle-"));
+  const executable = join(directory, "herdr");
+  const invocationLogPath = join(directory, "invocations.jsonl");
+  const releasePath = join(directory, "release");
+  const pluginListExitedPath = join(directory, "plugin-list-exited");
+  const pluginList = JSON.stringify({ result: { plugins: [{ plugin_id: "st0necrusher.vscode-herdr-takeover" }] } });
+  await writeFile(invocationLogPath, "");
+  await writeFile(
+    executable,
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(invocationLogPath)}, JSON.stringify(args) + "\\n");
+if (args.join(" ") === "plugin list --json") {
+  const timer = setInterval(() => {
+    if (!fs.existsSync(${JSON.stringify(releasePath)})) return;
+    clearInterval(timer);
+    process.stdout.write(${JSON.stringify(pluginList)});
+    fs.writeFileSync(${JSON.stringify(pluginListExitedPath)}, "");
+  }, 10);
+}
+`,
+    "utf8",
+  );
+  await chmod(executable, 0o755);
+  return {
+    executable,
+    async answerPluginList(): Promise<void> {
+      await writeFile(releasePath, "");
+      while (!existsSync(pluginListExitedPath)) await new Promise((resolve) => setTimeout(resolve, 10));
+    },
+    async invocations(): Promise<string[][]> {
+      const contents = await readFile(invocationLogPath, "utf8");
+      return contents
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line) as string[]);
+    },
+    dispose: () => rm(directory, { recursive: true, force: true }),
+  };
+}
+
+function extensionForLifecycle(d: ReturnType<typeof dependencies>): {
+  extension: HerdrExtension;
+  globalStorageUri: vscode.Uri;
+  dispose(): void;
+} {
   const descriptors = Object.getOwnPropertyDescriptors(HerdrSettings.prototype);
   const createOutputChannel = vscode.window.createOutputChannel;
   vscode.window.createOutputChannel = () =>
@@ -215,6 +267,7 @@ function extensionForLifecycle(d: ReturnType<typeof dependencies>): { extension:
     const extension = new HerdrExtension(context);
     return {
       extension,
+      globalStorageUri: context.globalStorageUri,
       dispose: () => {
         extension.dispose();
         Object.defineProperties(HerdrSettings.prototype, descriptors);
@@ -745,6 +798,33 @@ suite("Sessions feature host bindings and lifecycle", () => {
           assert.ok(registered.every((id) => !remaining.includes(prefix + id)));
         } finally {
           owner.dispose();
+        }
+      },
+      undefined,
+      true,
+    );
+  });
+
+  test("initialization failure stops a pending takeover plugin refresh", async () => {
+    await withNamespacedCommands(
+      async () => {
+        const herdr = await fakeTakeoverHerdr();
+        const d = dependencies({ configurationFailure: true });
+        d.value.configuration.read = () => ({ executable: herdr.executable, session: "default" });
+        const owner = extensionForLifecycle(d);
+        const copiedPlugin = vscode.Uri.joinPath(owner.globalStorageUri, "herdr-plugin");
+        try {
+          await mkdir(copiedPlugin.fsPath, { recursive: true });
+          await writeFile(join(copiedPlugin.fsPath, "herdr-plugin.toml"), 'version = "0.0.0-outdated"\n', "utf8");
+          await assert.rejects(owner.extension.initialize(), /configuration subscription failed/);
+          await herdr.answerPluginList();
+          // Unstopped, the outdated plugin would be unlinked within milliseconds.
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          assert.deepEqual(await herdr.invocations(), [["plugin", "list", "--json"]]);
+        } finally {
+          owner.dispose();
+          await rm(copiedPlugin.fsPath, { recursive: true, force: true });
+          await herdr.dispose();
         }
       },
       undefined,
