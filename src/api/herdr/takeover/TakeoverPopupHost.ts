@@ -105,7 +105,8 @@ export class TakeoverPopupHost implements TakeoverOffers {
       offer,
       attempt,
       helloTimeout: setTimeout(() => {
-        if (this.state === state) this.retryOffer(state, "did not connect within 5 seconds");
+        if (this.state === state)
+          this.retryOffer(state, "did not connect within 5 seconds; it may have failed to start inside Herdr");
       }, HELLO_TIMEOUT_MS),
     };
     this.state = state;
