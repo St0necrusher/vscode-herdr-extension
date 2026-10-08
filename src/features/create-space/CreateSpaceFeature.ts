@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import type { CreatedSpace } from "@api/herdr";
 import { paneName, type ActiveSessionCreation } from "@modules/sessions";
 import { paneTerminalOpenRequest, type PaneTerminalOpening } from "@modules/pane-editors";
@@ -31,7 +32,7 @@ export class CreateSpaceFeature implements vscode.Disposable {
     try {
       created = await this.creation.createSpace({ sessionId: initialState.sessionId, cwd });
     } catch (error) {
-      showError(`Could not create Space: ${errorMessage(error)}`);
+      void vscode.window.showErrorMessage(`Could not create Space: ${errorMessage(error)}`);
       return;
     }
 
@@ -39,14 +40,14 @@ export class CreateSpaceFeature implements vscode.Disposable {
     try {
       this.openPane(created.paneId);
     } catch (error) {
-      showError(`Space was created but its Pane could not be opened: ${errorMessage(error)}`);
+      void vscode.window.showErrorMessage(`Space was created but its Pane could not be opened: ${errorMessage(error)}`);
     }
   }
 
   private async chooseSpaceFolder(): Promise<string | undefined> {
     const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
     if (workspaceFolders.length === 0) {
-      showError("Open a folder to create a Herdr Space.");
+      void vscode.window.showErrorMessage("Open a folder to create a Herdr Space.");
       return undefined;
     }
     if (workspaceFolders.length === 1) return workspaceFolders[0]?.uri.fsPath;
@@ -65,12 +66,4 @@ export class CreateSpaceFeature implements vscode.Disposable {
     if (pane === undefined) throw new Error(`Pane ${paneId} is not in the current Session snapshot`);
     this.paneTerminalOpening.openPane(paneTerminalOpenRequest(state.sessionId, pane, paneName(pane)));
   }
-}
-
-function showError(message: string): void {
-  void vscode.window.showErrorMessage(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

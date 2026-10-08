@@ -1,6 +1,6 @@
 # Architecture
 
-Status: proposed.
+Status: canonical.
 
 Layered architecture with one-directional dependencies. This document is the source of truth for **where new code goes**.
 

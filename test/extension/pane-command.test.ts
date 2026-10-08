@@ -101,7 +101,7 @@ function testTreeView<T>(): vscode.TreeView<T> {
   } as unknown as vscode.TreeView<T>;
 }
 
-async function withPanesFeature(
+async function withPanesView(
   initial: NavigationContextState,
   run: (
     prefix: string,
@@ -173,7 +173,7 @@ suite("Pane command", () => {
       pane("pane-two", "terminal-two", "tab-group", "Pane Two"),
       pane("pane-single", "terminal-single", "tab-single", "Solo Pane"),
     ];
-    await withPanesFeature(navigationState("session-current", grouped), async (prefix, provider, context, requests) => {
+    await withPanesView(navigationState("session-current", grouped), async (prefix, provider, context, requests) => {
       const roots = await provider.getChildren();
       assert.ok(roots);
       const heading = roots.find((item) => item.id === "tab-group");

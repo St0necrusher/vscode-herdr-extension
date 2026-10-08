@@ -12,7 +12,6 @@ import type {
 } from "./management";
 import type { CreatePaneRequest, CreateSpaceRequest, RunCommandRequest, SplitPaneRequest } from "./creation";
 import type { HerdrConfiguration, HerdrConfigurationSource } from "./configuration";
-import type { HerdrSessionEventMap } from "./sessionEvents";
 import type {
   CreatedPane,
   CreatedSpace,
@@ -51,7 +50,7 @@ interface RecoveryContext {
 
 export class SessionsModel implements SessionsStateSource, SessionsOperations, ActiveSessionManagement {
   private readonly listeners = new Set<(state: SessionsState) => void>();
-  private readonly paneMovedListeners = new Set<(event: HerdrSessionEventMap["pane.moved"]) => void>();
+  private readonly paneMovedListeners = new Set<(event: HerdrPaneMovedEvent) => void>();
   private readonly directory: HerdrSessionDirectory;
   private readonly connectionFactory: HerdrSessionConnectionFactory;
   private readonly configuration: HerdrConfigurationSource;
@@ -155,7 +154,7 @@ export class SessionsModel implements SessionsStateSource, SessionsOperations, A
     return { dispose: () => this.listeners.delete(listener) };
   }
 
-  subscribe(eventName: "pane.moved", listener: (event: HerdrSessionEventMap["pane.moved"]) => void): Disposable {
+  subscribe(eventName: "pane.moved", listener: (event: HerdrPaneMovedEvent) => void): Disposable {
     if (this.disposed) return { dispose: () => undefined };
     this.paneMovedListeners.add(listener);
     return { dispose: () => this.paneMovedListeners.delete(listener) };

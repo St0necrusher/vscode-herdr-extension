@@ -1,14 +1,14 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-import type {
-  ActiveSessionProjectionSource,
-  ActiveSessionProjectionState,
-} from "../../src/modules/sessions/activeSessionProjection";
+import type { ActiveSessionProjectionState } from "../../src/modules/sessions/activeSessionProjection";
 import type { ActiveSessionCreation, CreatePaneRequest, RunCommandRequest } from "../../src/modules/sessions/creation";
 import type { ActiveSessionManagement } from "../../src/modules/sessions/management";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
 import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "../../src/modules/pane-editors";
-import type { PaneEditorPresenceSource } from "../../src/modules/workspace-context";
+import type {
+  ActiveSessionProjectionSource,
+  PaneEditorPresenceSource,
+} from "../../src/modules/workspace-context/source";
 import { NavigationContextModel } from "../../src/modules/workspace-context/NavigationContextModel";
 import { CloseFeature } from "../../src/features/close/CloseFeature";
 import { CreatePaneFeature } from "../../src/features/create-pane/CreatePaneFeature";

@@ -61,18 +61,18 @@ await esbuild.build({
   outfile: resolve(root, "dist/test/extension-composition/composition.test.js"),
 });
 
-const fakeHerdrExecutable = resolve(root, "dist/test/extension-composition/fake-herdr.js");
+const fakeHerdrCliExecutable = resolve(root, "dist/test/extension-composition/fakeHerdrCli.js");
 await esbuild.build({
   ...commonOptions,
-  entryPoints: [resolve(root, "test/extension-composition/fake-herdr.ts")],
-  outfile: fakeHerdrExecutable,
+  entryPoints: [resolve(root, "test/extension-composition/fakeHerdrCli.ts")],
+  outfile: fakeHerdrCliExecutable,
 });
-await chmod(fakeHerdrExecutable, 0o755);
+await chmod(fakeHerdrCliExecutable, 0o755);
 const compositionSettingsDirectory = resolve(root, "test/fixtures/composition-workspace/.vscode");
 await mkdir(compositionSettingsDirectory, { recursive: true });
 await writeFile(
   resolve(compositionSettingsDirectory, "settings.json"),
-  JSON.stringify({ "herdr.executable": fakeHerdrExecutable, "herdr.session": "composition" }, null, 2) + "\n",
+  JSON.stringify({ "herdr.executable": fakeHerdrCliExecutable, "herdr.session": "composition" }, null, 2) + "\n",
 );
 
 await esbuild.build({

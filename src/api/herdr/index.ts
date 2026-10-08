@@ -11,12 +11,10 @@ export { HerdrCliSessionDirectory, type HerdrSessionDirectory, type HerdrSession
 export {
   JsonSocketHerdrSessionConnectionFactory,
   NodeHerdrSocketConnector,
-  type HerdrSessionProjectionConsumer,
   type HerdrSessionConnection,
   type HerdrSessionConnectionFactory,
 } from "./connection";
 export {
-  HerdrConnectionFailureError,
   type HerdrConnectionFailure,
   type HerdrSessionId,
   type HerdrSessionDescriptor,
