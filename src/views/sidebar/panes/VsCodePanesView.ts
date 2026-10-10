@@ -1,7 +1,12 @@
 import * as vscode from "vscode";
+import { errorMessage } from "@core/errors";
 import { paneName, type ActiveSessionManagement } from "@modules/sessions";
 import type { NavigationContextSource, VisiblePaneEditorsSource } from "@modules/workspace-context";
-import { paneTerminalOpenRequest, type PaneTerminalOpenRequest, type PaneTerminalOpening } from "@modules/pane-editors";
+import {
+  paneTerminalOpenRequest,
+  type PaneTerminalOpenRequest,
+  type PaneEditorNavigation,
+} from "@modules/pane-editors";
 import { paneRowUri } from "../shared";
 import {
   PanesModel,
@@ -38,7 +43,7 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
   constructor(
     private readonly context: NavigationContextSource,
     private readonly paneEditors: VisiblePaneEditorsSource,
-    private readonly paneTerminalOpening: PaneTerminalOpening,
+    private readonly paneEditorNavigation: PaneEditorNavigation,
     private readonly management: ActiveSessionManagement,
   ) {
     const model = new PanesModel(context);
@@ -47,10 +52,15 @@ export class VsCodePanesView implements vscode.TreeDataProvider<PanesTreeItem>, 
       treeDataProvider: this,
       dragAndDropController: new TabDragAndDropController((tabId, targetTabId) => this.moveTab(tabId, targetTabId)),
     });
-    this.command = vscode.commands.registerCommand("herdr.openPane", (paneId: unknown) => {
+    this.command = vscode.commands.registerCommand("herdr.openPane", async (paneId: unknown) => {
       if (typeof paneId !== "string") return;
       const request = this.paneTerminalRequest(paneId);
-      if (request !== undefined) this.paneTerminalOpening.openPane(request);
+      if (request === undefined) return;
+      try {
+        await this.paneEditorNavigation.navigateToPane(request);
+      } catch (error) {
+        void vscode.window.showErrorMessage(`Could not open Pane: ${errorMessage(error)}`);
+      }
     });
     this.subscription = model.onDidChange((state) => {
       setMessage(this.view, state);
@@ -241,10 +251,6 @@ function paneTreeItem(state: PanesState, paneId: string): PaneTreeItem | undefin
 
 function setPaneActionsEnabled(state: PanesState): void {
   void vscode.commands.executeCommand("setContext", "herdr.paneActionsEnabled", state.kind === "connected");
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function setMessage(view: vscode.TreeView<PanesTreeItem>, state: PanesState): void {

@@ -8,3 +8,8 @@ export type PaneTerminalOpenRequest = Readonly<{
 export interface PaneTerminalOpening {
   openPane(request: PaneTerminalOpenRequest): void;
 }
+
+export interface PaneEditorNavigation {
+  // A navigation click retires the Tab Projection, then opens the Pane (ADR 0018).
+  navigateToPane(request: PaneTerminalOpenRequest): Promise<void>;
+}

@@ -3,7 +3,7 @@ import { focusEditorGroup, waitForEditorGroups } from "@core/editor-groups";
 import type { PaneEditorPresence, PaneEditorPresenceSource, PaneEditorReference } from "./paneEditorPresence";
 import type { PaneTerminalClosing } from "./paneTerminalClosing";
 import type { PaneTerminalPlacement } from "./paneTerminalPlacement";
-import type { PaneTerminalOpenRequest, PaneTerminalOpening } from "./paneTerminalOpening";
+import type { PaneEditorNavigation, PaneTerminalOpenRequest, PaneTerminalOpening } from "./paneTerminalOpening";
 import type { HerdrSessionEventSource } from "./session-source";
 import type { HerdrPaneMovedEvent } from "@api/herdr";
 import type { PaneEditorSelection, SelectedPaneEditor } from "./PaneEditorSelectionModel";
@@ -17,9 +17,15 @@ interface ManagedPaneSurface {
 }
 
 export class PaneTerminalSurfaceManager
-  implements PaneTerminalOpening, PaneTerminalClosing, PaneTerminalPlacement, PaneEditorPresenceSource
+  implements
+    PaneTerminalOpening,
+    PaneEditorNavigation,
+    PaneTerminalClosing,
+    PaneTerminalPlacement,
+    PaneEditorPresenceSource
 {
   private readonly surfacesBySession = new Map<string, Map<string, ManagedPaneSurface>>();
+  private readonly tabProjection = new Set<ManagedPaneSurface>();
   private readonly presenceListeners = new Set<(presence: PaneEditorPresence) => void>();
   private presence: PaneEditorPresence = { visible: [] };
   private readonly subscriptions: readonly { dispose(): void }[];
@@ -43,6 +49,21 @@ export class PaneTerminalSurfaceManager
 
   openPane(request: PaneTerminalOpenRequest): void {
     this.openPaneSurface(request);
+  }
+
+  async navigateToPane(request: PaneTerminalOpenRequest): Promise<void> {
+    const members = [...this.tabProjection];
+    this.tabProjection.clear();
+    const target = this.getSurface(request);
+    await this.closePaneEditors(members.filter((managed) => managed !== target));
+
+    const wasMember = target !== undefined && members.includes(target);
+    if (wasMember) {
+      const tab = await this.waitForPaneTab(target);
+      const shouldRecreateTarget = tab.group.tabs.length === 1 && vscode.window.tabGroups.all.length > 1;
+      if (shouldRecreateTarget) await this.closePaneEditors([target]);
+    }
+    this.openPane(request);
   }
 
   private openPaneSurface(
@@ -82,21 +103,27 @@ export class PaneTerminalSurfaceManager
         const lastColumn: vscode.ViewColumn = requests.length;
         const isMisplaced = targetIndex !== -1 && managed.tab?.group.viewColumn !== targetColumn;
         const isInSurplusGroup = managed.tab !== undefined && managed.tab.group.viewColumn > lastColumn;
-        return isMisplaced || isInSurplusGroup;
+        const isRetiredMember = targetIndex === -1 && this.tabProjection.has(managed);
+        const shouldClose = isMisplaced || isInSurplusGroup || isRetiredMember;
+        return shouldClose;
       });
     let displaced = displacedPanes();
     // Closing a lone Pane Editor removes its group and shifts later groups; re-read displacement after each batch.
     while (displaced.length > 0) {
-      const tabs: vscode.Tab[] = [];
-      for (const managed of displaced) {
-        tabs.push(await this.waitForPaneTab(managed));
-      }
-      const closed = await vscode.window.tabGroups.close(tabs);
-      if (!closed) throw new Error("Could not close displaced Pane Editors");
-      for (const managed of displaced) {
-        await waitForEditorGroups(() => (this.getSurface(managed.selection) !== managed ? true : undefined));
-      }
+      await this.closePaneEditors(displaced);
       displaced = displacedPanes();
+    }
+  }
+
+  private async closePaneEditors(managedPanes: readonly ManagedPaneSurface[]): Promise<void> {
+    const tabs: vscode.Tab[] = [];
+    for (const managed of managedPanes) {
+      tabs.push(await this.waitForPaneTab(managed));
+    }
+    const closed = await vscode.window.tabGroups.close(tabs);
+    if (!closed) throw new Error("Could not close Pane Editors");
+    for (const managed of managedPanes) {
+      await waitForEditorGroups(() => (this.getSurface(managed.selection) !== managed ? true : undefined));
     }
   }
 
@@ -106,7 +133,11 @@ export class PaneTerminalSurfaceManager
       return { request, viewColumn };
     });
     for (const cell of cells) {
-      const managed = this.getSurface(cell.request) ?? this.openPaneSurface(cell.request, cell.viewColumn);
+      let managed = this.getSurface(cell.request);
+      if (managed === undefined) {
+        managed = this.openPaneSurface(cell.request, cell.viewColumn);
+        this.tabProjection.add(managed);
+      }
       await this.waitForPaneTab(managed, cell.viewColumn);
       // This path selects the cell's Pane without activating that editor group.
       managed.surface.terminal.show(true);
@@ -165,6 +196,7 @@ export class PaneTerminalSurfaceManager
       surfaces.forEach((managed) => managed.surface.dispose());
     });
     this.surfacesBySession.clear();
+    this.tabProjection.clear();
     this.presenceListeners.clear();
     // The context key outlives the extension host; without this, arrows in plain terminals would send markers.
     void vscode.commands.executeCommand("setContext", "herdr.activeTerminalIsPane", false);
@@ -186,6 +218,7 @@ export class PaneTerminalSurfaceManager
   }
 
   private handleSurfaceClosed(managed: ManagedPaneSurface): void {
+    this.tabProjection.delete(managed);
     this.removeSurface(managed.selection);
     this.selection.deselect(managed.selection);
     managed.surface.dispose();
