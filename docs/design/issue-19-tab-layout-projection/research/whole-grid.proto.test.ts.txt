@@ -1,0 +1,296 @@
+// PROTOTYPE (throwaway, opus-research-2): project a Herdr Tab as the WHOLE editor grid via vscode.setEditorLayout.
+import * as assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as vscode from "vscode";
+
+const FILE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "proto2-"));
+function file(name: string): vscode.Uri {
+  const p = path.join(FILE_DIR, name);
+  if (!fs.existsSync(p)) fs.writeFileSync(p, `${name}\n`);
+  return vscode.Uri.file(p);
+}
+
+async function until<T>(probe: () => T | undefined, what: string, timeoutMs = 5000): Promise<T> {
+  const start = Date.now();
+  for (;;) {
+    const value = probe();
+    if (value !== undefined) return value;
+    if (Date.now() - start > timeoutMs) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
+
+const groups = () => [...vscode.window.tabGroups.all].sort((a, b) => a.viewColumn - b.viewColumn);
+const labels = () => groups().map((g) => g.tabs.map((t) => t.label + (t.isDirty ? "*" : "") + (t.isPreview ? "~" : "")));
+const activeLabels = () => groups().map((g) => g.activeTab?.label);
+function tabOf(label: string): vscode.Tab | undefined {
+  return vscode.window.tabGroups.all.flatMap((g) => g.tabs).find((t) => t.label === label);
+}
+
+const terminals: vscode.Terminal[] = [];
+const closed: string[] = [];
+vscode.window.onDidCloseTerminal((t) => closed.push(t.name));
+function terminal(name: string, viewColumn: number, preserveFocus = true): vscode.Terminal {
+  const write = new vscode.EventEmitter<string>();
+  const pty: vscode.Pseudoterminal = { onDidWrite: write.event, open: () => write.fire(name), close: () => undefined };
+  const t = vscode.window.createTerminal({ name, pty, location: { viewColumn, preserveFocus } });
+  terminals.push(t);
+  return t;
+}
+async function terminalIn(name: string, viewColumn: number, preserveFocus = true): Promise<vscode.Terminal> {
+  const t = terminal(name, viewColumn, preserveFocus);
+  await until(() => (tabOf(name)?.group.viewColumn === viewColumn ? true : undefined), `terminal ${name} in ${viewColumn}`);
+  return t;
+}
+
+async function reset(): Promise<void> {
+  terminals.splice(0).forEach((t) => t.dispose());
+  await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor").then(undefined, () => undefined);
+  for (const doc of vscode.workspace.textDocuments) {
+    if (doc.isDirty && doc.isUntitled) {
+      await vscode.window.showTextDocument(doc);
+      await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
+    }
+  }
+  await vscode.commands.executeCommand("workbench.action.closeAllGroups");
+  await until(() => (vscode.window.tabGroups.all.length === 1 && vscode.window.tabGroups.all[0].tabs.length === 0 ? true : undefined), "reset");
+  closed.length = 0;
+}
+
+async function show(name: string, viewColumn: number, preview = false): Promise<void> {
+  await vscode.window.showTextDocument(file(name), { viewColumn, preview, preserveFocus: true });
+}
+async function dirtyUntitled(viewColumn: number): Promise<vscode.TextDocument> {
+  const doc = await vscode.workspace.openTextDocument({ content: "dirty untitled" });
+  await vscode.window.showTextDocument(doc, { viewColumn, preview: false, preserveFocus: true });
+  return doc;
+}
+
+type Layout = { orientation?: number; groups: LayoutGroup[] };
+type LayoutGroup = { size?: number; groups?: LayoutGroup[] };
+async function setLayout(layout: Layout): Promise<void> {
+  const leaves = (gs: LayoutGroup[]): number => gs.reduce((n, g) => n + (g.groups ? leaves(g.groups) : 1), 0);
+  await vscode.commands.executeCommand("vscode.setEditorLayout", layout);
+  await until(() => (vscode.window.tabGroups.all.length === leaves(layout.groups) ? true : undefined), "layout group count");
+  await settle();
+}
+const getLayout = () => vscode.commands.executeCommand<Layout>("vscode.getEditorLayout");
+
+// Focus the group at a 1-based GRID_APPEARANCE index (= viewColumn), for any index.
+const ORD = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"];
+async function focusGroupAt(viewColumn: number): Promise<string[]> {
+  const run: string[] = [];
+  const exec = async (c: string) => {
+    run.push(c);
+    await vscode.commands.executeCommand(c);
+  };
+  if (viewColumn <= 8) await exec(`workbench.action.focus${ORD[viewColumn - 1]}EditorGroup`);
+  else {
+    await exec("workbench.action.focusEighthEditorGroup");
+    for (let i = 8; i < viewColumn; i++) await exec("workbench.action.focusNextGroup");
+  }
+  await until(() => (vscode.window.tabGroups.activeTabGroup.viewColumn === viewColumn ? true : undefined), `focus ${viewColumn}`);
+  return run;
+}
+
+// Move an open Pane Editor to the cell at viewColumn `to`; works for any source index.
+async function movePaneEditor(t: vscode.Terminal, name: string, to: number): Promise<void> {
+  const from = tabOf(name)!.group.viewColumn;
+  await focusGroupAt(from);
+  t.show(true); // PRESERVE: does not change the active group, makes the editor the group's active editor
+  await until(() => (vscode.window.tabGroups.activeTabGroup.activeTab?.label === name ? true : undefined), `${name} active`);
+  await vscode.commands.executeCommand("moveActiveEditor", { to: "position", by: "group", value: to });
+  await until(() => (tabOf(name)?.group.viewColumn === to ? true : undefined), `${name} moved to ${to}`);
+}
+
+const ROW = (n: number): Layout => ({ orientation: 0, groups: Array.from({ length: n }, () => ({})) });
+
+suite("PROTO whole-grid projection", () => {
+  setup(async () => {
+    await reset();
+    console.log(`[proto2] window.state.focused=${vscode.window.state.focused}`);
+  });
+
+  test("1. reuse in order + surplus merged into last; files (dirty/pinned/preview) and terminals survive", async () => {
+    await setLayout(ROW(5));
+    const doc = await dirtyUntitled(1);
+    await show("pinned1.txt", 1);
+    await show("preview2.txt", 2, true);
+    const t3 = await terminalIn("T3", 3);
+    await show("file4a.txt", 4);
+    await show("file4b.txt", 4, true);
+    const t5 = await terminalIn("T5", 5);
+    await show("file5.txt", 5);
+    await show("preview5.txt", 5, true);
+    await focusGroupAt(5); // active group will be merged away
+    console.log(`[proto2] before: ${JSON.stringify(labels())}`);
+    // 2x2: columns of two rows each -> 4 leaves
+    await setLayout({ orientation: 0, groups: [{ groups: [{}, {}] }, { groups: [{}, {}] }] });
+    console.log(`[proto2] after 2x2: ${JSON.stringify(labels())} active=${vscode.window.tabGroups.activeTabGroup.viewColumn}`);
+    const after = labels();
+    assert.deepEqual(after[0], ["dirty untitled*", "pinned1.txt"]);
+    assert.deepEqual(after[1], ["preview2.txt~"]);
+    assert.deepEqual(after[2], ["T3"]);
+    // merged editors are appended after the target's, in source order; a moved preview becomes pinned
+    assert.deepEqual(after[3], ["file4a.txt", "file4b.txt~", "T5", "file5.txt", "preview5.txt"]);
+    assert.ok(doc.isDirty, "dirty untitled kept");
+    assert.deepEqual(closed, [], "no terminal closed");
+    assert.equal(vscode.window.terminals.includes(t3) && vscode.window.terminals.includes(t5), true);
+    assert.equal((tabOf("T5")!.input as vscode.TabInputTerminal) instanceof vscode.TabInputTerminal, true);
+    t5.sendText("still alive");
+  });
+
+  test("2. owner example: left|right with files -> top/bottom", async () => {
+    await setLayout(ROW(2));
+    await show("L1.txt", 1);
+    await show("L2.txt", 1);
+    await show("R1.txt", 2);
+    await show("R2.txt", 2);
+    await setLayout({ orientation: 1, groups: [{}, {}] });
+    const layout = await getLayout();
+    console.log(`[proto2] owner: ${JSON.stringify(layout)} ${JSON.stringify(labels())}`);
+    assert.equal(layout.orientation, 1);
+    assert.deepEqual(labels(), [["L1.txt", "L2.txt"], ["R1.txt", "R2.txt"]]);
+    await terminalIn("Top", 1);
+    await terminalIn("Bottom", 2);
+    console.log(`[proto2] owner+terminals: ${JSON.stringify(labels())} active=${JSON.stringify(activeLabels())}`);
+    assert.deepEqual(activeLabels(), ["Top", "Bottom"]);
+  });
+
+  test("3. fewer groups than leaves: new empty groups go to the trailing leaves", async () => {
+    await setLayout(ROW(2));
+    await show("G1.txt", 1);
+    await show("G2.txt", 2);
+    // deep tree: down( right(A, down(B,C)), right(down(D,E), F) ) -> 6 leaves
+    await setLayout({
+      orientation: 1,
+      groups: [{ groups: [{}, { groups: [{}, {}] }] }, { groups: [{ groups: [{}, {}] }, {}] }],
+    });
+    console.log(`[proto2] fewer: ${JSON.stringify(labels())}`);
+    assert.deepEqual(labels(), [["G1.txt"], ["G2.txt"], [], [], [], []]);
+  });
+
+  test("4. sizes reproduce proportions (2:1 columns, nested 1:3 rows, live 2x2 fixture)", async () => {
+    await setLayout({ orientation: 0, groups: [{ size: 2 }, { size: 1 }] });
+    const a = await getLayout();
+    console.log(`[proto2] 2:1 -> ${JSON.stringify(a)}`);
+    const r = a.groups[0].size! / a.groups[1].size!;
+    assert.ok(Math.abs(r - 2) < 0.05, `2:1 ratio ${r}`);
+    await setLayout({
+      orientation: 0,
+      groups: [
+        { size: 2, groups: [{ size: 1 }, { size: 3 }] },
+        { size: 1, groups: [{ size: 3 }, { size: 1 }] },
+      ],
+    });
+    const b = await getLayout();
+    console.log(`[proto2] nested -> ${JSON.stringify(b)}`);
+    const [c1, c2] = b.groups;
+    assert.ok(Math.abs(c1.size! / c2.size! - 2) < 0.05);
+    assert.ok(Math.abs(c1.groups![1].size! / c1.groups![0].size! - 3) < 0.1);
+    assert.ok(Math.abs(c2.groups![0].size! / c2.groups![1].size! - 3) < 0.1);
+    // Live 2x2 probe fixture: columns 22|21 (of 43), rows 16/15 (of 31). Absolute cell counts as sizes.
+    await setLayout({
+      orientation: 0,
+      groups: [
+        { size: 22, groups: [{ size: 16 }, { size: 15 }] },
+        { size: 21, groups: [{ size: 16 }, { size: 15 }] },
+      ],
+    });
+    const c = await getLayout();
+    console.log(`[proto2] live 2x2 -> ${JSON.stringify(c)}`);
+    assert.ok(Math.abs(c.groups[0].size! / c.groups[1].size! - 22 / 21) < 0.02);
+  });
+
+  test("5. same-direction nesting must be flattened (alternating orientation per depth)", async () => {
+    // right(right(A,B),C) given naively as nested branch is read as a COLUMN inside a row.
+    await setLayout({ orientation: 0, groups: [{ groups: [{}, {}] }, {}] });
+    const naive = await getLayout();
+    console.log(`[proto2] naive nested right -> ${JSON.stringify(naive)}`);
+    assert.ok(naive.groups[0].groups, "naive nesting yields an orthogonal (vertical) branch");
+  });
+
+  test("6. move a Pane Editor from group 10 into cell 2 (no focusNth beyond 8), same Terminal", async () => {
+    await setLayout(ROW(10));
+    for (let i = 1; i <= 10; i++) await show(`f${i}.txt`, i);
+    const p = await terminalIn("P", 10);
+    await show("f10b.txt", 10); // P is now behind another tab in group 10
+    await focusGroupAt(1);
+    const before = vscode.window.terminals.length;
+    await movePaneEditor(p, "P", 2);
+    console.log(`[proto2] moved: ${JSON.stringify(labels())} active=${vscode.window.tabGroups.activeTabGroup.viewColumn}`);
+    assert.equal(vscode.window.tabGroups.all.length, 10);
+    assert.deepEqual(labels()[1], ["f2.txt", "P"]);
+    assert.deepEqual(labels()[9], ["f10.txt", "f10b.txt"]);
+    assert.deepEqual(closed, []);
+    assert.equal(vscode.window.terminals.length, before);
+    assert.ok(vscode.window.terminals.includes(p));
+  });
+
+  test("7. final focus on group 11 of a 12-group nested grid, unfocused window", async () => {
+    // 3 rows x 4 columns
+    const row4 = { groups: [{}, {}, {}, {}] };
+    await setLayout({ orientation: 1, groups: [row4, row4, row4] });
+    for (let i = 1; i <= 12; i++) await terminalIn(`Q${i}`, i);
+    await focusGroupAt(1);
+    const cmds = await focusGroupAt(11);
+    console.log(`[proto2] focus 11 via ${JSON.stringify(cmds)} active=${vscode.window.tabGroups.activeTabGroup.activeTab?.label}`);
+    assert.equal(vscode.window.tabGroups.activeTabGroup.activeTab?.label, "Q11");
+    await vscode.commands.executeCommand("workbench.action.focusLastEditorGroup");
+    await until(() => (vscode.window.tabGroups.activeTabGroup.viewColumn === 12 ? true : undefined), "last");
+  });
+
+  test("8. createTerminal into a viewColumn activates that group even with preserveFocus", async () => {
+    await setLayout(ROW(3));
+    await focusGroupAt(1);
+    await terminalIn("N3", 3, true);
+    const keep = vscode.window.tabGroups.activeTabGroup.viewColumn;
+    await terminalIn("N2", 2, false);
+    const after = vscode.window.tabGroups.activeTabGroup.viewColumn;
+    console.log(`[proto2] preserveFocus=true -> active ${keep}; preserveFocus=false -> active ${after}`);
+    assert.equal(keep, 3, "observed: createTerminal into a viewColumn activates that group even with preserveFocus");
+    assert.equal(after, 2);
+  });
+
+  test("9. closeEmptyGroups: moving the only editor out of a cell removes the cell", async () => {
+    await setLayout(ROW(3));
+    await show("x1.txt", 1);
+    const a = await terminalIn("A", 2);
+    await show("x3.txt", 3);
+    await movePaneEditor(a, "A", 1);
+    await settle();
+    console.log(`[proto2] after moving sole editor: ${JSON.stringify(labels())}`);
+    assert.equal(vscode.window.tabGroups.all.length, 2, "cell 2 disappeared");
+  });
+
+  test("11. swap cycle of single-editor cells, broken with a throwaway placeholder", async () => {
+    await setLayout(ROW(2));
+    const b = await terminalIn("B", 1); // B belongs in cell 2
+    const a = await terminalIn("A", 2); // A belongs in cell 1
+    // fill-before-drain is impossible in a cycle: park a non-dirty placeholder in cell 1 first
+    const placeholder = await vscode.workspace.openTextDocument({ content: "" });
+    await vscode.window.showTextDocument(placeholder, { viewColumn: 1, preserveFocus: true, preview: true });
+    await movePaneEditor(b, "B", 2);
+    await movePaneEditor(a, "A", 1);
+    const ph = vscode.window.tabGroups.all[0].tabs.find((t) => t.input instanceof vscode.TabInputText);
+    await vscode.window.tabGroups.close(ph!);
+    await settle();
+    console.log(`[proto2] cycle: ${JSON.stringify(labels())}`);
+    assert.deepEqual(labels(), [["A"], ["B"]]);
+    assert.deepEqual(closed, []);
+  });
+
+  test("10. re-applying the layout over an already projected Tab is a no-op for editors", async () => {
+    const layout = { orientation: 0, groups: [{ size: 2, groups: [{}, {}] }, { size: 1 }] };
+    await setLayout(layout);
+    await terminalIn("A", 1);
+    await terminalIn("B", 2);
+    await terminalIn("C", 3);
+    await setLayout(layout);
+    assert.deepEqual(labels(), [["A"], ["B"], ["C"]]);
+    assert.deepEqual(closed, []);
+  });
+});
