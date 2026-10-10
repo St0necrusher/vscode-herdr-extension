@@ -52,6 +52,10 @@ _Avoid_: open Pane, active Pane Editor
 The one Visible Pane Editor that is the active tab of the active editor group, if any. Distinct from the Focused Pane, which is Herdr's server-wide focus.
 _Avoid_: active Pane Editor, Focused Pane
 
+**Tab Projection**:
+The Pane Editors that the latest click on a multi-Pane Herdr Tab put into their editor groups; a Pane Editor the click found already in place keeps whatever membership it had. It lasts until the next navigation click (a Herdr Tab, Pane or Agent), which retires it; file editors are never closed. Pane Editors opened any other way are never part of it.
+_Avoid_: projected tab, tab layout, opened tab
+
 **Attach**:
 A Pane Editor's exclusive interactive connection to a Pane; it owns input and the Pane's geometry until it disconnects. Once lost to another client, it is regained only by fresh local input or focus.
 _Avoid_: control, take control, connect

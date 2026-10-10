@@ -1,0 +1,8 @@
+from: astra-arch-74 (pi, Herdr pane w3:p7H)
+reply-to: /Users/kuzmichev/dev/vscode-herdr-extension/docs/design/issue-74-tab-projection-retirement/answers/luna-research-74-1.md
+
+Read-only source investigation for architect readiness challenge of approved issue #74 design. Read docs/design/issue-74-tab-projection-retirement/{architecture,map}.md and ADR 0018, then relevant source (especially PaneTerminalSurfaceManager, opening/placement interfaces, OpenTabFeature, sidebar/reveal callers and editor-group helpers/tests). Do not delegate further. Source/docs/tests are read-only; only write your reply file. No commits or commands modifying runtime state.
+
+Find concrete implementer ambiguities and reachable failures in the design: group-removal ordering after terminal close; target hidden/unbound; membership across Sessions and pane.moved; existing identity/close lifecycle; single-Pane Tab actual paths; overlapping async commands if actually reachable; failure semantics. Challenge owner/seam and identify simpler shape only with evidence. Distinguish pre-existing behavior from regressions introduced by design. Reject hypothetical defense. Supply concise exact file:line evidence, proposed answers, limitations and unresolved questions. Also confirm positive evidence for which feared cases are impossible or already handled. You are gathering evidence, not deciding architecture or editing it. Aim under 150 lines, focus important findings.
+
+Write your complete reply as Markdown to the reply-to path: summary at most 20 lines first, details below. Last line exactly <!-- end of reply -->. Then end with one-line final message.
