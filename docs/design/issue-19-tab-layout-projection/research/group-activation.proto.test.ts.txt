@@ -1,0 +1,131 @@
+// PROTOTYPE (throwaway): can an extension re-activate a known editor group without cycling and without OS focus?
+import * as assert from "node:assert/strict";
+import * as vscode from "vscode";
+
+type Dir = "right" | "down";
+type Node = string | { dir: Dir; first: Node; second: Node };
+type Strategy = "nth" | "directional";
+
+const ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"];
+const split = (dir: Dir, first: Node, second: Node): Node => ({ dir, first, second });
+const firstLeaf = (node: Node): string => (typeof node === "string" ? node : firstLeaf(node.first));
+const commandsRun: string[] = [];
+
+async function until<T>(probe: () => T | undefined, what: string, timeoutMs = 5000): Promise<T> {
+  const start = Date.now();
+  for (;;) {
+    const value = probe();
+    if (value !== undefined) return value;
+    if (Date.now() - start > timeoutMs) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+async function run(command: string): Promise<void> {
+  commandsRun.push(command);
+  await vscode.commands.executeCommand(command);
+}
+
+const terminals: vscode.Terminal[] = [];
+function findTab(label: string): vscode.Tab | undefined {
+  return vscode.window.tabGroups.all.flatMap((g) => g.tabs).find((t) => t.label === label);
+}
+
+async function openTerminalInActiveGroup(name: string): Promise<void> {
+  const write = new vscode.EventEmitter<string>();
+  const pty: vscode.Pseudoterminal = { onDidWrite: write.event, open: () => write.fire(name), close: () => undefined };
+  const viewColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
+  terminals.push(vscode.window.createTerminal({ name, pty, location: { viewColumn } }));
+  await until(() => (vscode.window.tabGroups.activeTabGroup.activeTab?.label === name ? true : undefined), `open ${name}`);
+}
+
+async function returnToAnchor(anchor: string, dir: Dir, strategy: Strategy): Promise<void> {
+  if (strategy === "nth") {
+    const viewColumn = findTab(anchor)!.group.viewColumn;
+    await run(`workbench.action.focus${ORDINALS[viewColumn - 1]}EditorGroup`);
+  } else {
+    await run(dir === "right" ? "workbench.action.focusLeftGroupWithoutWrap" : "workbench.action.focusAboveGroupWithoutWrap");
+  }
+  await until(
+    () => (vscode.window.tabGroups.activeTabGroup.activeTab?.label === anchor ? true : undefined),
+    `anchor ${anchor} active after ${strategy}`,
+  );
+}
+
+async function project(node: Node, strategy: Strategy): Promise<void> {
+  if (typeof node === "string") return;
+  const before = vscode.window.tabGroups.activeTabGroup;
+  await run(node.dir === "right" ? "workbench.action.newGroupRight" : "workbench.action.newGroupBelow");
+  await until(() => (vscode.window.tabGroups.activeTabGroup !== before ? true : undefined), "new group");
+  await openTerminalInActiveGroup(firstLeaf(node.second));
+  await project(node.second, strategy);
+  await returnToAnchor(firstLeaf(node.first), node.dir, strategy);
+  await project(node.first, strategy);
+}
+
+// Canonical n-ary shape: same-direction splits are flattened, as the VS Code grid does.
+type Shape = string | { dir: Dir; children: Shape[] };
+function canonical(node: Node): Shape {
+  if (typeof node === "string") return node;
+  const children = [node.first, node.second].map(canonical).flatMap((c) => (typeof c !== "string" && c.dir === node.dir ? c.children : [c]));
+  return { dir: node.dir, children };
+}
+
+interface GroupLayout { groups?: GroupLayout[] }
+function shapeFromLayout(layout: { orientation: number; groups: GroupLayout[] }): Shape {
+  let leafIndex = 0;
+  const labelOf = (viewColumn: number) =>
+    vscode.window.tabGroups.all.find((g) => g.viewColumn === viewColumn)?.activeTab?.label ?? "?";
+  const walk = (groups: GroupLayout[], dir: Dir): Shape => ({
+    dir,
+    children: groups.map((g) => (g.groups ? walk(g.groups, dir === "right" ? "down" : "right") : labelOf(++leafIndex))),
+  });
+  // orientation 0 = horizontal: children laid out left to right.
+  return walk(layout.groups, layout.orientation === 0 ? "right" : "down");
+}
+
+async function resetToSurroundedRegion(): Promise<void> {
+  terminals.splice(0).forEach((t) => t.dispose());
+  await vscode.commands.executeCommand("workbench.action.closeAllGroups");
+  await until(() => (vscode.window.tabGroups.all.length === 1 && vscode.window.tabGroups.all[0].tabs.length === 0 ? true : undefined), "reset");
+  const file = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, "pnpm-lock.yaml");
+  // file-1 | <region> | file-2, so the region is neither first nor last and has non-terminal neighbours.
+  await vscode.window.showTextDocument(file, { viewColumn: vscode.ViewColumn.One, preview: false });
+  await vscode.window.showTextDocument(file, { viewColumn: vscode.ViewColumn.Two, preview: false });
+  await vscode.commands.executeCommand("workbench.action.focusFirstEditorGroup");
+  await vscode.commands.executeCommand("workbench.action.newGroupRight");
+  await until(() => (vscode.window.tabGroups.activeTabGroup.viewColumn === 2 && vscode.window.tabGroups.all.length === 3 ? true : undefined), "region group");
+}
+
+const TREES: Record<string, Node> = {
+  "A/B | C": split("right", split("down", "A", "B"), "C"),
+  "2x2": split("right", split("down", "A", "B"), split("down", "C", "D")),
+  "rows of 2x2": split("down", split("right", "A", "B"), split("right", "C", "D")),
+  deep: split("down", split("right", "A", split("down", "B", "C")), split("right", split("down", "D", "E"), "F")),
+  "right chain": split("right", "A", split("right", "B", split("down", "C", "D"))),
+};
+
+suite("PROTO group activation", () => {
+  for (const strategy of ["directional", "nth"] as const) {
+    for (const [name, tree] of Object.entries(TREES)) {
+      test(`${strategy}: ${name}`, async () => {
+        await resetToSurroundedRegion();
+        console.log(`[proto] window.state.focused=${vscode.window.state.focused}`);
+        commandsRun.length = 0;
+        await openTerminalInActiveGroup(firstLeaf(tree));
+        await project(tree, strategy);
+        const layout = await vscode.commands.executeCommand<{ orientation: number; groups: GroupLayout[] }>("vscode.getEditorLayout");
+        const actual = shapeFromLayout(layout);
+        const expected: Shape = { dir: "right", children: ["pnpm-lock.yaml", ...flattenRight(canonical(tree)), "pnpm-lock.yaml"] };
+        console.log(`[proto] ${strategy} ${name}: commands=${JSON.stringify(commandsRun.filter((c) => c.includes("focus")))}`);
+        console.log(`[proto] ${strategy} ${name}: layout=${JSON.stringify(actual)}`);
+        assert.deepEqual(actual, expected);
+        assert.equal(vscode.window.tabGroups.activeTabGroup.activeTab?.label, firstLeaf(tree));
+      });
+    }
+  }
+});
+
+function flattenRight(shape: Shape): Shape[] {
+  return typeof shape !== "string" && shape.dir === "right" ? shape.children : [shape];
+}

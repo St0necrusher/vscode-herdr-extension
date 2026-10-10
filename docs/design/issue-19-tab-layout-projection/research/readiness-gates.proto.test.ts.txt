@@ -1,0 +1,468 @@
+// PROTOTYPE (throwaway): readiness gates for issue #19 whole-grid Tab projection.
+// Gate 1: does revealing a Pane Editor isolate the group's editor selection before moveActiveEditor?
+// Gate 2: does the real PaneTerminalSurfaceManager keep one surface/Terminal/client and its binding through
+//         a surplus merge (vscode.setEditorLayout) and a moveActiveEditor, with two identically named Panes?
+import * as assert from "node:assert/strict";
+import * as vscode from "vscode";
+import type { Logger } from "@core/logger";
+import type { ActiveSessionProjectionState } from "../../src/modules/sessions/activeSessionProjection";
+import type {
+  ActiveSessionProjectionSource,
+  HerdrSessionEventSource,
+} from "../../src/modules/pane-editors/session-source";
+import type { HerdrPane, HerdrPaneMovedEvent, HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
+import type { PaneClientFactory } from "../../src/api/herdr/pane-clients/HerdrPaneClientFactory";
+import type { PaneAttach } from "../../src/api/herdr/pane-clients/HerdrPaneAttach";
+import type { PaneObserver } from "../../src/api/herdr/pane-clients/HerdrPaneObserver";
+import {
+  PaneEditorFocusTracker,
+  PaneEditorSelectionModel,
+  PaneTerminalSurfaceManager,
+  VsCodePaneTerminalSurface,
+} from "../../src/modules/pane-editors";
+
+const log = (...parts: unknown[]) => console.log("[gates]", ...parts.map((p) => (typeof p === "string" ? p : JSON.stringify(p))));
+
+// ---------- generic helpers ----------
+async function until<T>(probe: () => T | undefined | false, what: string, timeoutMs = 5000): Promise<T> {
+  const start = Date.now();
+  for (;;) {
+    const value = probe();
+    if (value) return value;
+    if (Date.now() - start > timeoutMs) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+const settle = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
+const groups = () => [...vscode.window.tabGroups.all].sort((a, b) => a.viewColumn - b.viewColumn);
+const labels = () => groups().map((g) => g.tabs.map((t) => t.label));
+const ORD = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"];
+async function focusGroupAt(viewColumn: number): Promise<void> {
+  await vscode.commands.executeCommand(`workbench.action.focus${ORD[viewColumn - 1]}EditorGroup`);
+  await until(() => vscode.window.tabGroups.activeTabGroup.viewColumn === viewColumn, `focus ${viewColumn}`);
+}
+async function setLayout(n: number): Promise<void> {
+  await vscode.commands.executeCommand("vscode.setEditorLayout", { orientation: 0, groups: Array.from({ length: n }, () => ({})) });
+  await until(() => vscode.window.tabGroups.all.length === n, `${n} groups`);
+  await settle(150);
+}
+async function untitled(name: string, viewColumn: number): Promise<void> {
+  const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(`untitled:${name}`));
+  await vscode.window.showTextDocument(doc, { viewColumn, preview: false, preserveFocus: false });
+  await until(() => groups()[viewColumn - 1]?.activeTab?.label === name, `${name} active in ${viewColumn}`);
+}
+async function reset(): Promise<void> {
+  await vscode.commands.executeCommand("workbench.action.closeAllGroups");
+  for (const doc of vscode.workspace.textDocuments) {
+    if (doc.isUntitled && doc.isDirty) {
+      await vscode.window.showTextDocument(doc);
+      await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
+    }
+  }
+  await vscode.commands.executeCommand("workbench.action.closeAllGroups");
+  await until(() => vscode.window.tabGroups.all.length === 1 && vscode.window.tabGroups.all[0]!.tabs.length === 0, "reset");
+}
+
+// ---------- CDP into the workbench renderer (only to create a real multi-selection by cmd/ctrl-click) ----------
+type Evaluate = (expression: string) => Promise<unknown>;
+let evaluateInRenderer: Evaluate | undefined;
+async function renderer(): Promise<Evaluate> {
+  if (evaluateInRenderer) return evaluateInRenderer;
+  const port = process.env.PROTO_CDP_PORT ?? "9339";
+  const targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()) as { type: string; url: string; webSocketDebuggerUrl: string }[];
+  const page = targets.find((t) => t.type === "page" && t.url.includes("workbench"));
+  assert.ok(page, `workbench page among ${JSON.stringify(targets.map((t) => t.url))}`);
+  const ws = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise<void>((resolve, reject) => {
+    ws.onopen = () => resolve();
+    ws.onerror = (e) => reject(new Error(String(e)));
+  });
+  let id = 0;
+  const pending = new Map<number, (value: unknown) => void>();
+  ws.onmessage = (event) => {
+    const message = JSON.parse(String(event.data)) as { id?: number; result?: unknown };
+    if (message.id !== undefined) pending.get(message.id)?.(message);
+  };
+  evaluateInRenderer = async (expression) => {
+    const messageId = ++id;
+    const reply = (await new Promise((resolve) => {
+      pending.set(messageId, resolve);
+      ws.send(JSON.stringify({ id: messageId, method: "Runtime.evaluate", params: { expression, awaitPromise: true, returnByValue: true } }));
+    })) as { result: { result: { value?: unknown }; exceptionDetails?: unknown } };
+    if (reply.result.exceptionDetails) throw new Error(`renderer: ${JSON.stringify(reply.result.exceptionDetails)}`);
+    return reply.result.result.value;
+  };
+  return evaluateInRenderer;
+}
+// DOM state of the editor tabs: per group (in DOM order) the tab labels, which are multi-selected, and the active one.
+async function domTabs(): Promise<{ label: string; selected: boolean; active: boolean }[][]> {
+  const evaluate = await renderer();
+  return (await evaluate(`[...document.querySelectorAll('.part.editor .editor-group-container')].map(g =>
+      [...g.querySelectorAll('.tabs-container .tab')].map(t => ({
+        label: (t.querySelector('.label-name')?.textContent ?? t.getAttribute('aria-label') ?? '').trim(),
+        selected: t.classList.contains('selected') || t.classList.contains('multi-selected'),
+        multi: t.classList.contains('multi-selected'),
+        active: t.classList.contains('active') })))`)) as { label: string; selected: boolean; active: boolean }[][];
+}
+async function cmdClickTab(label: string): Promise<void> {
+  const evaluate = await renderer();
+  const ok = await evaluate(`(() => {
+    const tab = [...document.querySelectorAll('.part.editor .tabs-container .tab')].find(t => (t.querySelector('.label-name')?.textContent ?? '').trim().replace(/[^A-Za-z0-9.]+/g, ' ') === ${JSON.stringify(label)});
+    if (!tab) return false;
+    const mac = navigator.platform.toLowerCase().includes('mac');
+    tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, metaKey: mac, ctrlKey: !mac }));
+    tab.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, metaKey: mac, ctrlKey: !mac }));
+    return true; })()`);
+  assert.equal(ok, true, `tab ${label} found`);
+  await settle(150);
+}
+async function multiSelected(): Promise<string[]> {
+  const evaluate = await renderer();
+  return ((await evaluate(
+    `[...document.querySelectorAll('.part.editor .tabs-container .tab.multi-selected')].map(t => (t.querySelector('.label-name')?.textContent ?? '').trim())`,
+  )) as string[]).map((l) => l.replace(/[^A-Za-z0-9.]+/g, " "));
+}
+
+// ---------- real manager + real surfaces, fake Herdr clients (as test/extension/pane-editors.test.ts) ----------
+interface ClientRecord {
+  kind: "observer" | "attach";
+  terminalId: string;
+  stopped: boolean;
+  at: number;
+}
+class FakePaneClientFactory implements PaneClientFactory {
+  readonly clients: ClientRecord[] = [];
+  maxConcurrentPerTerminal = new Map<string, number>();
+  createObserver(request: Parameters<PaneClientFactory["createObserver"]>[0]): PaneObserver {
+    const c = this.create("observer", request.terminalId);
+    return { completion: c.completion, stop: () => c.stop() };
+  }
+  createAttach(request: Parameters<PaneClientFactory["createAttach"]>[0]): PaneAttach {
+    const c = this.create("attach", request.terminalId);
+    return { completion: c.completion, sendInput: () => undefined, resize: () => undefined, stop: () => c.stop() };
+  }
+  running(terminalId?: string): ClientRecord[] {
+    return this.clients.filter((c) => !c.stopped && (terminalId === undefined || c.terminalId === terminalId));
+  }
+  private create(kind: ClientRecord["kind"], terminalId: string) {
+    const record: ClientRecord = { kind, terminalId, stopped: false, at: Date.now() };
+    this.clients.push(record);
+    const concurrent = this.running(terminalId).length;
+    this.maxConcurrentPerTerminal.set(terminalId, Math.max(concurrent, this.maxConcurrentPerTerminal.get(terminalId) ?? 0));
+    let resolve!: () => void;
+    const completion = new Promise<void>((r) => (resolve = r));
+    return {
+      completion,
+      stop: () => {
+        record.stopped = true;
+        resolve();
+        return Promise.resolve();
+      },
+    };
+  }
+}
+const noEvents: HerdrSessionEventSource = { subscribe: () => ({ dispose: () => undefined }) } as unknown as HerdrSessionEventSource;
+const logger: Logger = { info: () => undefined, error: () => undefined, show: () => undefined };
+
+let sequence = 0;
+interface Harness {
+  sessionId: string;
+  panes: HerdrPane[];
+  manager: PaneTerminalSurfaceManager;
+  clients: FakePaneClientFactory;
+  surfaces: VsCodePaneTerminalSurface[];
+  ptyClosed: string[];
+  closedTerminals: vscode.Terminal[];
+  presenceLog: unknown[];
+  open(paneId: string): void;
+  managedTab(paneId: string): vscode.Tab | undefined;
+  terminalOf(paneId: string): vscode.Terminal;
+}
+async function withHarness(titles: string[], run: (h: Harness) => Promise<void>): Promise<void> {
+  const seq = ++sequence;
+  const sessionId = `gates-${seq}`;
+  const panes: HerdrPane[] = titles.map((terminalTitle, i) => ({
+    id: `p${i + 1}`,
+    terminalId: `t${seq}-${i + 1}`,
+    spaceId: "s",
+    herdrTabId: "tab",
+    focused: false,
+    agentStatus: "idle",
+    revision: 1,
+    terminalTitle,
+    stateLabels: {},
+    tokens: {},
+  }));
+  const snapshot: HerdrSessionSnapshot = { version: "1", protocol: 1, spaces: [], herdrTabs: [], panes, layouts: [], agents: [] };
+  const projection: ActiveSessionProjectionState = { kind: "connected", sessionId, snapshot };
+  const projectionSource: ActiveSessionProjectionSource = {
+    getActiveSessionProjection: () => projection,
+    onDidChangeActiveSessionProjection: () => ({ dispose: () => undefined }),
+  };
+  const selection = new PaneEditorSelectionModel();
+  const focusTracker = new PaneEditorFocusTracker(selection, { state: { focused: true }, onDidChangeWindowState: () => ({ dispose: () => undefined }) });
+  const clients = new FakePaneClientFactory();
+  const surfaces: VsCodePaneTerminalSurface[] = [];
+  const ptyClosed: string[] = [];
+  const closedTerminals: vscode.Terminal[] = [];
+  const closeSub = vscode.window.onDidCloseTerminal((t) => closedTerminals.push(t));
+  const manager = new PaneTerminalSurfaceManager(selection, noEvents, {
+    create: (paneSelection, viewColumn, terminalName) => {
+      const surface = new VsCodePaneTerminalSurface(paneSelection, viewColumn, terminalName, projectionSource, focusTracker, clients, { offer: () => ({ retract: () => undefined }) }, logger);
+      surface.onDidClose(() => ptyClosed.push(paneSelection.paneId));
+      surfaces.push(surface);
+      return surface;
+    },
+  });
+  const presenceLog: unknown[] = [];
+  const presenceSub = manager.onDidChangePaneEditorPresence((p) => presenceLog.push(p));
+  // Prototype-only peek at the manager's private binding.
+  const managedOf = (paneId: string) =>
+    (manager as unknown as { surfacesBySession: Map<string, Map<string, { tab: vscode.Tab | undefined; surface: VsCodePaneTerminalSurface }>> }).surfacesBySession
+      .get(sessionId)
+      ?.get(paneId);
+  const h: Harness = {
+    sessionId,
+    panes,
+    manager,
+    clients,
+    surfaces,
+    ptyClosed,
+    closedTerminals,
+    presenceLog,
+    open: (paneId) => {
+      const pane = panes.find((p) => p.id === paneId)!;
+      manager.openPane({ sessionId, paneId, terminalId: pane.terminalId, name: pane.terminalTitle ?? paneId });
+    },
+    managedTab: (paneId) => managedOf(paneId)?.tab,
+    terminalOf: (paneId) => managedOf(paneId)!.surface.terminal,
+  };
+  try {
+    await run(h);
+  } finally {
+    presenceSub.dispose();
+    manager.dispose();
+    focusTracker.dispose();
+    selection.dispose();
+    closeSub.dispose();
+    await reset();
+  }
+}
+function tabsNamed(label: string): { tab: vscode.Tab; group: vscode.TabGroup }[] {
+  return groups().flatMap((group) => group.tabs.filter((t) => t.label === label && t.input instanceof vscode.TabInputTerminal).map((tab) => ({ tab, group })));
+}
+
+// ================= Gate 1 =================
+type Reveal = "none" | "manager.focusPane (focusNth + surface.reveal = Terminal.show())" | "Terminal.show(true)" | "Terminal.show(false)";
+const REVEALS: Reveal[] = ["none", "manager.focusPane (focusNth + surface.reveal = Terminal.show())", "Terminal.show(true)", "Terminal.show(false)"];
+
+suite("PROTO gate 1: selection isolation before moveActiveEditor", () => {
+  suiteSetup(async () => {
+    await vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension")?.activate();
+    log(`window.state.focused=${vscode.window.state.focused}`);
+  });
+  setup(reset);
+
+  for (const scenario of ["a: file active, Pane inactive-selected", "b: Pane active, file inactive-selected", "c: multi-selection, then another group active, then focusNth back"] as const) {
+    for (const reveal of REVEALS) {
+      if (scenario.startsWith("c") && reveal !== "none") continue;
+      test(`${scenario} | reveal=${reveal}`, async () => {
+        await withHarness(["Pane P"], async (h) => {
+          await setLayout(2);
+          await untitled("F1.txt", 1);
+          await focusGroupAt(1);
+          h.open("p1");
+          await until(() => tabsNamed("Pane P").length === 1 && h.managedTab("p1"), "P bound and renamed");
+          await untitled("G2.txt", 2);
+          await focusGroupAt(1);
+          // create the multi-selection with a real cmd/ctrl-click on the tab
+          if (scenario.startsWith("a")) {
+            await h.manager.focusPane(h.sessionId, "p1"); // P active
+            await cmdClickTab("F1"); // F1 becomes active, P stays selected
+          } else {
+            await untitled("F1.txt", 1); // F1 active
+            await cmdClickTab("Pane P"); // P becomes active, F1 stays selected
+          }
+          const before = { multi: await multiSelected(), active: vscode.window.tabGroups.activeTabGroup.activeTab?.label, dom: await domTabs() };
+          log(`${scenario} reveal=${reveal} BEFORE`, before);
+          assert.deepEqual([...before.multi].sort(), ["F1", "Pane P"].sort(), "a real 2-editor multi-selection exists");
+          if (scenario.startsWith("c")) {
+            await focusGroupAt(2);
+            log("c after focusing group 2", await multiSelected());
+            await focusGroupAt(1);
+            await h.manager.focusPane(h.sessionId, "p1");
+          } else if (reveal === "manager.focusPane (focusNth + surface.reveal = Terminal.show())") {
+            await h.manager.focusPane(h.sessionId, "p1");
+          } else if (reveal === "Terminal.show(true)") {
+            h.terminalOf("p1").show(true);
+          } else if (reveal === "Terminal.show(false)") {
+            h.terminalOf("p1").show(false);
+          }
+          await settle(300);
+          const afterReveal = { multi: await multiSelected(), active: vscode.window.tabGroups.activeTabGroup.activeTab?.label, group: vscode.window.tabGroups.activeTabGroup.viewColumn };
+          log(`${scenario} reveal=${reveal} AFTER REVEAL`, afterReveal);
+          await vscode.commands.executeCommand("moveActiveEditor", { to: "position", by: "group", value: 2 });
+          await settle(400);
+          const result = labels();
+          log(`${scenario} reveal=${reveal} AFTER MOVE`, result);
+          (globalThis as { gateResults?: unknown[] }).gateResults ??= [];
+          (globalThis as { gateResults?: unknown[] }).gateResults!.push({ scenario, reveal, before: { multi: before.multi, active: before.active }, afterReveal, after: result });
+          if (reveal === "none" && !scenario.startsWith("c")) {
+            // control: proves the selection is real and moveActiveEditor would carry the file along
+            // the whole selection moved, emptying group 1, which closeEmptyGroups then removed
+            assert.equal(result.length, 1, "control: group 1 emptied and removed");
+            assert.ok(result[0]!.includes("F1.txt"), "control: without reveal the file moves too");
+          } else {
+            assert.deepEqual(afterReveal.multi, [], "reveal leaves no multi-selection");
+            assert.deepEqual(result[0], ["F1.txt"], "file stays");
+            assert.deepEqual(result[1], ["G2.txt", "Pane P"], "only the Pane moved");
+          }
+        });
+      });
+    }
+  }
+});
+
+suite("PROTO gate 1b: no wait between reveal and moveActiveEditor (ordering)", () => {
+  setup(reset);
+  for (const variant of ["show(true)", "show()", "surface.reveal()"] as const) {
+    for (const scenario of ["a", "b"] as const) {
+      test(`${scenario} ${variant} then immediately moveActiveEditor, x5`, async () => {
+        const outcomes: string[] = [];
+        for (let i = 0; i < 5; i++) {
+          await reset();
+          await withHarness(["Pane P"], async (h) => {
+            await setLayout(2);
+            await untitled("F1.txt", 1);
+            await focusGroupAt(1);
+            h.open("p1");
+            await until(() => h.managedTab("p1")?.label === "Pane\u00a0P", "P bound");
+            await untitled("G2.txt", 2);
+            await focusGroupAt(1);
+            if (scenario === "a") {
+              await h.manager.focusPane(h.sessionId, "p1");
+              await cmdClickTab("F1");
+            } else {
+              await untitled("F1.txt", 1);
+              await cmdClickTab("Pane P");
+            }
+            assert.equal((await multiSelected()).length, 2);
+            const surface = h.surfaces[0]!;
+            if (variant === "show(true)") h.terminalOf("p1").show(true);
+            else if (variant === "show()") h.terminalOf("p1").show();
+            else surface.reveal();
+            await vscode.commands.executeCommand("moveActiveEditor", { to: "position", by: "group", value: 2 });
+            await settle(300);
+            outcomes.push(JSON.stringify(labels()));
+          });
+        }
+        log(`1b ${scenario} ${variant}`, outcomes);
+        for (const o of outcomes) assert.equal(o, JSON.stringify([["F1.txt"], ["G2.txt", "Pane\u00a0P"]]));
+      });
+    }
+  }
+});
+
+// ================= Gate 2 =================
+suite("PROTO gate 2: manager identity through surplus merge and move", () => {
+  setup(reset);
+
+  for (const titles of [["Twin name", "Twin name"], ["Alpha one", "Beta two"]]) {
+    test(`two Panes ${JSON.stringify(titles)}: merge via setEditorLayout, then moveActiveEditor`, async () => {
+      await withHarness(titles, async (h) => {
+        const tabLog: string[] = [];
+        const tabSub = vscode.window.tabGroups.onDidChangeTabs(() => tabLog.push(JSON.stringify(labels())));
+        try {
+          await setLayout(3);
+          await untitled("F1.txt", 1);
+          await untitled("F2.txt", 2);
+          await focusGroupAt(1);
+          h.open("p1");
+          await focusGroupAt(3);
+          h.open("p2");
+          const name = (i: number) => titles[i]!.replaceAll(" ", " ");
+          await until(() => h.managedTab("p1")?.label === name(0) && h.managedTab("p2")?.label === name(1), "both bound and renamed");
+          await settle(300);
+          const t1 = h.terminalOf("p1");
+          const t2 = h.terminalOf("p2");
+          const startCount = h.clients.clients.length;
+          log(`[${titles}] initial`, labels(), "clients", h.clients.clients.map((c) => `${c.kind}:${c.terminalId}:${c.stopped ? "stopped" : "running"}`));
+          const terminalsBefore = vscode.window.terminals.length;
+
+          // --- surplus merge: group 3 (P2, active group) merged into group 2 ---
+          tabLog.length = 0;
+          const presenceMark = h.presenceLog.length;
+          await setLayout(2);
+          await settle(500);
+          const p2AfterMerge = tabsNamed(name(1)).filter(({ tab }) => tab === h.managedTab("p2"));
+          log(`[${titles}] after merge`, labels(), "tab events", tabLog, "presence", h.presenceLog.slice(presenceMark));
+          const mergeClients = h.clients.clients.slice(startCount).map((c) => `${c.kind}:${c.terminalId}:${c.stopped ? "stopped" : "running"}`);
+          log(`[${titles}] clients started during merge`, mergeClients);
+          const merge = {
+            labels: labels(),
+            p2BoundToLiveTab: p2AfterMerge.length === 1,
+            p2Group: p2AfterMerge[0]?.group.viewColumn,
+            p1BoundToLiveTab: groups().some((g) => g.tabs.includes(h.managedTab("p1")!)),
+            clientsStarted: mergeClients,
+            labelTimeline: [...tabLog],
+            presence: h.manager.getPaneEditorPresence(),
+          };
+
+          // --- move: P2 (group 2) to group 1 by focusNth + surface reveal + moveActiveEditor ---
+          tabLog.length = 0;
+          const moveStart = h.clients.clients.length;
+          await h.manager.focusPane(h.sessionId, "p2");
+          await vscode.commands.executeCommand("moveActiveEditor", { to: "position", by: "group", value: 1 });
+          await settle(500);
+          const p2AfterMove = tabsNamed(name(1)).filter(({ tab }) => tab === h.managedTab("p2"));
+          const moveClients = h.clients.clients.slice(moveStart).map((c) => `${c.kind}:${c.terminalId}:${c.stopped ? "stopped" : "running"}`);
+          log(`[${titles}] after move`, labels(), "tab events", tabLog, "clients started", moveClients);
+          const move = {
+            labels: labels(),
+            p2BoundToLiveTab: p2AfterMove.length === 1,
+            p2Group: p2AfterMove[0]?.group.viewColumn,
+            clientsStarted: moveClients,
+            labelTimeline: [...tabLog],
+            presence: h.manager.getPaneEditorPresence(),
+          };
+
+          // --- extension-level reuse: focusing/opening the Pane goes to the moved editor, no new terminal ---
+          await focusGroupAt(2);
+          await h.manager.focusPane(h.sessionId, "p2");
+          const focusedAfter = { group: vscode.window.tabGroups.activeTabGroup.viewColumn, active: vscode.window.tabGroups.activeTabGroup.activeTab === h.managedTab("p2"), presence: h.manager.getPaneEditorPresence() };
+          h.open("p2");
+          h.open("p1");
+          await settle(300);
+          const summary = {
+            titles,
+            merge,
+            move,
+            focusedAfter,
+            terminalsCreated: vscode.window.terminals.length - terminalsBefore,
+            sameTerminals: vscode.window.terminals.includes(t1) && vscode.window.terminals.includes(t2) && h.terminalOf("p1") === t1 && h.terminalOf("p2") === t2,
+            surfaces: h.surfaces.length,
+            ptyClosed: h.ptyClosed,
+            onDidCloseTerminal: h.closedTerminals.filter((t) => t === t1 || t === t2).length,
+            maxConcurrentClientsPerTerminal: Object.fromEntries(h.clients.maxConcurrentPerTerminal),
+            clientsTotal: h.clients.clients.map((c) => `${c.kind}:${c.terminalId}:${c.stopped ? "stopped" : "running"}`),
+          };
+          log(`[${titles}] SUMMARY`, summary);
+          (globalThis as { gate2?: unknown[] }).gate2 ??= [];
+          (globalThis as { gate2?: unknown[] }).gate2!.push(summary);
+          assert.equal(summary.surfaces, 2);
+          assert.equal(summary.terminalsCreated, 0);
+          assert.equal(summary.sameTerminals, true);
+          assert.deepEqual(summary.ptyClosed, []);
+          assert.equal(summary.onDidCloseTerminal, 0);
+          assert.equal(merge.p2BoundToLiveTab, true, "binding follows merge");
+          assert.equal(move.p2BoundToLiveTab && move.p2Group === 1, true, "binding follows move");
+          assert.equal(focusedAfter.active, true);
+          assert.deepEqual(focusedAfter.presence.focused, { sessionId: h.sessionId, paneId: "p2" });
+          for (const v of h.clients.maxConcurrentPerTerminal.values()) assert.ok(v <= 1, "never two clients for one Pane at once");
+        } finally {
+          tabSub.dispose();
+        }
+      });
+    });
+  }
+});

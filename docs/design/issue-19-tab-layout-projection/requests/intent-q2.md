@@ -1,0 +1,35 @@
+from: intent-reviewer (Claude subagent of claude-main, Herdr pane w3:p5X)
+reply-to: /Users/kuzmichev/dev/vscode-herdr-extension/docs/design/issue-19-tab-layout-projection/final-review/answers-2.md
+skills: architect
+input: /Users/kuzmichev/dev/vscode-herdr-extension/docs/design/issue-19-tab-layout-projection/final-review/snapshot.diff, /Users/kuzmichev/dev/vscode-herdr-extension/src/modules/pane-editors/PaneTerminalSurfaceManager.ts, /Users/kuzmichev/dev/vscode-herdr-extension/src/core/editor-groups/index.ts, /Users/kuzmichev/dev/vscode-herdr-extension/src/modules/pane-editors/PaneTerminalSurface.ts, /Users/kuzmichev/dev/vscode-herdr-extension/docs/adr/0013-pane-editor-reveals-again-when-its-terminal-opens.md
+
+# Final review, intent pass: verdicts on uncertain findings
+
+Thanks for answers-1. I reviewed the whole change. Ownership, public entries, composition, flattening/sizes, scheduler order, beyond-eight focus and the removal of the additive policy all match the record; I have no finding there. Below are the findings I am unsure of, each with evidence and my proposed verdict. For each, say agree / disagree / amend (classification and severity), as explanation or proposed amendment. Use a research subagent for any code evidence you need. Record a decision in progress.md only if you make a new one.
+
+## Q1. Placeholder cleanup: catch + in-loop close instead of `finally` (my verdict: false positive)
+`PaneTerminalSurfaceManager.ts:126-136,149-157`. On success the placeholder is closed inside the loop when its source column holds its assigned Pane; on failure the catch closes it. I traced the success exit: the loop ends only when no cell is misplaced, and in that same iteration `sourceIsFilled` is evaluated on the same `current`, so it is true (placeholderColumn is one of the n cells). A second placeholder overwriting the first (line 107) needs `safe === undefined` while a placeholder is open; when every misplaced Pane is alone in its group the Panes form a permutation of the n groups, so after the first move the target group holds two tabs and the next cycle member is safe until the cycle closes into the source. So at most one placeholder, closed on every reachable exit. Equivalent to `finally`.
+
+## Q2. Placeholder acquisition gap (my verdict: false positive, or risk/minor)
+`:102-115`. If `showTextDocument` succeeds but the 5 s wait for its tab times out, `placeholder` is still undefined and the catch cannot close the untitled editor. This needs the tab-model update to lag a resolved `showTextDocument` by over 5 s. Your answers-1 asked to judge acquisition explicitly. I propose: not reachable in practice, no change. Do you agree, or does the design require the owned resource to be tracked from `openTextDocument` (e.g. by URI) so cleanup also covers acquisition?
+
+## Q3. Swallowed cleanup error (Standards question; my verdict: false positive)
+`:151-155`. Decision 4 requires preserving the primary error. `tabGroups.close` on an empty, non-dirty untitled tab shows no save prompt; I believe it only rejects when the tab is no longer in the extension host's model, i.e. nothing remains visible. Agree that the marker has a legitimate reason and needs no change?
+
+## Q4. Late ADR 0013 reveal could steal final focus in a fresh window (my verdict: risk, minor, investigate only)
+`placePanes` creates missing Pane Editors through `openPaneSurface` (`:63-70`), which calls the focus-taking `surface.reveal()`. When the pseudoterminal has not opened yet, the surface sets `revealOnOpen` and calls `terminal.show()` again from `open()` (`PaneTerminalSurface.ts:145-150,175-179`). ADR 0013 says this lag happens for the first terminal of a window. If that `open()` arrives after `focusPane` (OpenTabFeature.ts:44), the active group would move to that Pane's cell instead of `layout.focusedPaneId`. `placePanes` waits for tabs, not for pty open. Unreproduced; the extension tests pass but none runs in a fresh window. I propose: risk/minor, recommend a check in `test/extension-fresh-window` (Tab click as the window's first terminal), no defensive patch now. Agree?
+
+## Q5. `openPaneSurface` merges two paths behind a default parameter (my verdict: optional improvement, minor)
+`:44-71`. `openPane` was split into `openPaneSurface(request, viewColumn = activeTabGroup.viewColumn)` returning the managed surface. `placePanes` calls it only when no surface exists (`:81-82`), so the existing-surface branch serves `openPane` alone, and the default column is computed but unused on that branch. The original comment explaining why (an inactive Visible Pane Editor is revealed to take focus) was replaced by "Reveal ... without changing its group", which loses the reason. Smaller alternative: keep `openPane`'s original body and extract only creation, `createSurface(request, viewColumn): ManagedPaneSurface`, called by `openPane` with the active column and by `placePanes` with the cell column. Optional, behaviour-neutral.
+
+## Q6. Final reveal reaches through the surface: `managed.surface.terminal.show(true)` (my verdict: false positive)
+`:140-147`. Design allowed a minimal preserve-focus reveal edit in PaneTerminalSurface.ts; the implementation instead calls `terminal.show(true)` on the surface's public `terminal`. It deliberately skips the ADR 0013 `revealOnOpen` re-show (which would take focus). I consider it acceptable: `terminal` is already part of the surface contract, and a `reveal(preserveFocus)` flag would be a mode parameter. Agree?
+
+## Q7. Narrowing throws for impossible states (my verdict: optional improvement, minor)
+`core/editor-groups/index.ts:16` throws "Missing editor group focus command" (unreachable for viewColumn >= 1); `PaneTerminalSurfaceManager.ts:100-101` throws "Missing misplaced Pane Editor" inside `while (misplaced.length > 0)`. Both exist only to satisfy `noUncheckedIndexedAccess`. The owner's standing rule is no guards for impossible states. The second can disappear by driving the loop on the element (`for (let [first] = misplaced; first !== undefined; [first] = misplaced)` or similar); the first is a harmless narrowing. Optional, or not worth a change?
+
+## Q8. Superseded design still in PR #72 and the branch commits (my verdict: confirmed leftover, important)
+PR #72's title/body describe the additive policy ("built from the active editor group outward. File editors are never closed or moved", `openPaneInGroup`, `newGroupRight/Below`, the old ADR file name). Commits 52af907 ("…file editors are left alone…") and 4c70c74 ("docs: record the additive editor-group projection") would land on main as-is under rebase-merge, followed by a rename. Recommend: rewrite the PR title/body for the whole-grid policy and reshape the branch history (squash or reword) so no commit records the superseded design, when the coordinator commits. Agree on classification and severity?
+
+## Reply
+Write your complete reply as Markdown to the reply-to path: a summary of at most 20 lines first, details below. Its last line must be exactly `<!-- end of reply -->`. Then end your turn with a one-line final message.

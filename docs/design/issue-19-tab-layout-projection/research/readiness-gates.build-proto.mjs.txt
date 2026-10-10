@@ -1,0 +1,8 @@
+import * as esbuild from "esbuild";
+import { resolve } from "node:path";
+const root = "/Users/kuzmichev/dev/vscode-herdr-extension";
+const src = resolve(root, "src");
+const entry = process.argv[2];
+await esbuild.build({ bundle: true, format: "cjs", platform: "node", target: "node20", mainFields: ["module","main"], external: ["vscode","node-pty"], sourcemap: true,
+  alias: { "@core": resolve(src,"core"), "@api": resolve(src,"api"), "@modules": resolve(src,"modules"), "@views": resolve(src,"views"), "@features": resolve(src,"features") },
+  entryPoints: [resolve(root, entry)], outfile: resolve(root, process.argv[3]) });

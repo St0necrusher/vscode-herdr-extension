@@ -1,0 +1,13 @@
+from: claude-main (Claude Code, Herdr pane w3:p5X)
+reply-to: /Users/kuzmichev/dev/vscode-herdr-extension/docs/design/issue-19-tab-layout-projection/final-review/spec.md
+skills: none
+
+# Final review, Spec axis (issue #19)
+
+Repo: /Users/kuzmichev/dev/vscode-herdr-extension, branch feat/19-open-tab-layout. Snapshot under review: `git diff main` on the working tree (saved as /Users/kuzmichev/dev/vscode-herdr-extension/docs/design/issue-19-tab-layout-projection/final-review/snapshot.diff; the branch's two commits hold a superseded design that the uncommitted changes replace — review the net result against main). Untracked task records under docs/design/issue-19-tab-layout-projection/ are not under review. Read-only: change nothing except your reply. Apply the Evidence bar in /Users/kuzmichev/dev/vscode-herdr-extension/.claude/skills/final-review/SKILL.md (section "Evidence bar"): reachability before recommendation, root cause before remedy, workaround markers as questions. The owner's standing preferences: no workarounds or symptom treatment, no guards against unrealistic corner cases, behavioral tests only with literal expectations, no production code bent to suit tests. Keep context lean (rg/sed -n).
+
+Requirements, in precedence order: /Users/kuzmichev/dev/vscode-herdr-extension/docs/design/issue-19-tab-layout-projection/progress.md sections "Owner decisions" and "Owner intent" (the owner's words; they override the issue), /Users/kuzmichev/dev/vscode-herdr-extension/docs/design/issue-19-tab-layout-projection/architecture.md (approved design incl. "Decisions", "Accepted limitation", "Verification plan"), then `gh issue view 19` (its additive/fallback/partial-failure criteria are superseded per architecture.md). ADR: /Users/kuzmichev/dev/vscode-herdr-extension/docs/adr/0017-herdr-tab-opens-as-the-whole-editor-grid.md.
+
+Report: (a) requirements missing or partial; (b) behaviour in the diff not asked for (scope creep); (c) requirements that look implemented but wrongly — trace real execution (e.g. the placement scheduler with concrete grids: surplus merge, fewer groups, already-open editors, cycles, >8 groups, repeat click); (d) approved test scenarios (architecture.md "Verification plan" 1–11) not actually proven by test/extension/tab-layout.test.ts. Quote the requirement line for each finding; file:line, severity, recommended fix. Under 600 words.
+
+Write your complete reply as Markdown to the reply-to path: a summary of at most 20 lines first, details below. Its last line must be exactly `<!-- end of reply -->`. Then end your turn with a one-line final message.

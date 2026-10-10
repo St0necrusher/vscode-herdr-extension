@@ -1,0 +1,366 @@
+// PROTOTYPE (throwaway): hidden-merge rebinding research for #19 / #73. Raw VS Code API only, no extension code.
+import * as assert from "node:assert/strict";
+import * as vscode from "vscode";
+
+const log = (...parts: unknown[]) =>
+  console.log("[hm]", ...parts.map((p) => (typeof p === "string" ? p : JSON.stringify(p))));
+async function until<T>(probe: () => T | undefined | false, what: string, timeoutMs = 4000): Promise<T> {
+  const start = Date.now();
+  for (;;) {
+    const value = probe();
+    if (value) return value;
+    if (Date.now() - start > timeoutMs) throw new Error(`timed out waiting for ${what} ${JSON.stringify(labels())} ${JSON.stringify(vscode.window.terminals.map((t) => t.name))}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+const settle = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
+const groups = () => [...vscode.window.tabGroups.all].sort((a, b) => a.viewColumn - b.viewColumn);
+const labels = () => groups().map((g) => g.tabs.map((t) => (t.isActive ? `*${t.label}` : t.label)));
+const ORD = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"];
+async function focusGroupAt(viewColumn: number): Promise<void> {
+  await vscode.commands.executeCommand(`workbench.action.focus${ORD[viewColumn - 1]}EditorGroup`);
+  await until(() => vscode.window.tabGroups.activeTabGroup.viewColumn === viewColumn, `focus ${viewColumn}`);
+}
+async function setLayout(n: number): Promise<void> {
+  await vscode.commands.executeCommand("vscode.setEditorLayout", {
+    orientation: 0,
+    groups: Array.from({ length: n }, () => ({})),
+  });
+  await until(() => vscode.window.tabGroups.all.length === n, `${n} groups`);
+  await settle(200);
+}
+async function reset(): Promise<void> {
+  vscode.window.terminals.forEach((t) => t.dispose());
+  await vscode.commands.executeCommand("workbench.action.closeAllGroups");
+  await settle(200);
+  // Orphaned terminal editors ignore Terminal.dispose(); close whatever is left by Tab.
+  for (const g of vscode.window.tabGroups.all) await vscode.window.tabGroups.close(g.tabs);
+  await until(() => vscode.window.tabGroups.all.flatMap((g) => g.tabs).length === 0, "reset");
+}
+
+// ---------- pseudoterminals that publish names like VsCodePaneTerminalSurface ----------
+interface Pty {
+  terminal: vscode.Terminal;
+  setName(name: string): void;
+  closed: boolean;
+  id: string;
+}
+const ptys: Pty[] = [];
+async function createPty(id: string, viewColumn: number, initialName: string): Promise<Pty> {
+  const nameEmitter = new vscode.EventEmitter<string>();
+  const writeEmitter = new vscode.EventEmitter<string>();
+  let open = false;
+  let pending: string | undefined = initialName;
+  const record: Pty = {
+    id,
+    closed: false,
+    terminal: undefined as unknown as vscode.Terminal,
+    setName(name) {
+      if (!open) {
+        pending = name;
+        return;
+      }
+      nameEmitter.fire(name);
+    },
+  };
+  const pty: vscode.Pseudoterminal = {
+    onDidWrite: writeEmitter.event,
+    onDidChangeName: nameEmitter.event,
+    open: () => {
+      open = true;
+      if (pending !== undefined) { const n = pending; setTimeout(() => nameEmitter.fire(n), 50); }
+      writeEmitter.fire(`pty ${id}\r\n`);
+    },
+    close: () => {
+      record.closed = true;
+    },
+    handleInput: () => undefined,
+  };
+  record.terminal = vscode.window.createTerminal({ pty, location: { viewColumn }, isTransient: true } as vscode.ExtensionTerminalOptions);
+  ptys.push(record);
+  record.terminal.show();
+  await until(() => open, `open ${id}`);
+  await until(
+    () => groups().some((g) => g.tabs.some((t) => t.input instanceof vscode.TabInputTerminal && t.label === initialName)),
+    `tab ${initialName}`,
+  );
+  return record;
+}
+const terminalTabs = () =>
+  vscode.window.tabGroups.all.flatMap((g) => g.tabs).filter((t) => t.input instanceof vscode.TabInputTerminal);
+
+// Activate a Tab through public commands: focus its group, then open the editor at the Tab's index.
+async function activateTab(tab: vscode.Tab): Promise<void> {
+  await focusGroupAt(tab.group.viewColumn);
+  const index = tab.group.tabs.indexOf(tab);
+  await vscode.commands.executeCommand("workbench.action.openEditorAtIndex", index);
+  await until(() => tab.group.activeTab === tab || vscode.window.tabGroups.activeTabGroup.activeTab?.label === tab.label, "tab active");
+  await settle(100);
+}
+
+// ---------- event recorder ----------
+const tabIds = new WeakMap<vscode.Tab, number>();
+let nextTabId = 1;
+const tid = (t: vscode.Tab) => {
+  let id = tabIds.get(t);
+  if (id === undefined) {
+    id = nextTabId++;
+    tabIds.set(t, id);
+  }
+  return `${t.label}#${id}@${t.group.viewColumn}`;
+};
+function recordEvents(): { events: string[]; dispose(): void } {
+  const events: string[] = [];
+  terminalTabs().forEach(tid);
+  const d1 = vscode.window.tabGroups.onDidChangeTabs((e) => {
+    const parts = [
+      ...e.opened.map((t) => `open ${tid(t)}`),
+      ...e.closed.map((t) => `close ${tid(t)}`),
+      ...e.changed.map((t) => `chg ${tid(t)}${t.isActive ? "*" : ""}`),
+    ];
+    events.push(`tabs: ${parts.join(", ")}`);
+  });
+  const d2 = vscode.window.tabGroups.onDidChangeTabGroups((e) => {
+    events.push(`groups: +${e.opened.length} -${e.closed.length} ~${e.changed.length}`);
+  });
+  const d3 = vscode.window.onDidChangeActiveTerminal((t) => {
+    events.push(`activeTerminal: ${ptys.find((p) => p.terminal === t)?.id ?? String(t?.name)}`);
+  });
+  return {
+    events,
+    dispose: () => {
+      d1.dispose();
+      d2.dispose();
+      d3.dispose();
+    },
+  };
+}
+
+// ---------- the candidate binder: pair a bound Tab's disappearance with the terminal Tab that appeared for the same move ----------
+class PairingBinder {
+  readonly bound = new Map<Pty, vscode.Tab | undefined>();
+  private known = new Set<vscode.Tab>();
+  private fresh: vscode.Tab[] = [];
+  readonly decisions: string[] = [];
+  private readonly subs: vscode.Disposable[];
+  constructor() {
+    this.known = new Set(vscode.window.tabGroups.all.flatMap((g) => g.tabs));
+    this.subs = [
+      vscode.window.tabGroups.onDidChangeTabs(() => this.step()),
+      vscode.window.tabGroups.onDidChangeTabGroups(() => this.step()),
+    ];
+  }
+  // Initial binding of a new terminal: by unique synthetic name, as the manager does today.
+  bindByName(pty: Pty, name: string): void {
+    this.bound.set(pty, terminalTabs().find((t) => t.label === name));
+  }
+  private isBound(tab: vscode.Tab) {
+    return [...this.bound.values()].includes(tab);
+  }
+  private step(): void {
+    const current = vscode.window.tabGroups.all.flatMap((g) => g.tabs);
+    const currentSet = new Set(current);
+    const appeared = current.filter((t) => !this.known.has(t) && t.input instanceof vscode.TabInputTerminal);
+    let anyDisappeared = false;
+    for (const [pty, tab] of this.bound) {
+      if (tab === undefined || currentSet.has(tab)) continue;
+      anyDisappeared = true;
+      const match = (t: vscode.Tab) => currentSet.has(t) && !this.isBound(t) && t.label === tab.label;
+      const sameStep = appeared.filter(match);
+      const prior = this.fresh.filter(match);
+      const pick = sameStep.length === 1 ? sameStep[0] : sameStep.length === 0 && prior.length === 1 ? prior[0] : undefined;
+      this.bound.set(pty, pick);
+      this.decisions.push(`${pty.id}: ${tid(tab)} -> ${pick ? tid(pick) : "UNBOUND"} (same=${sameStep.length} prior=${prior.length})`);
+    }
+    if (appeared.length > 0) this.fresh = appeared;
+    else if (anyDisappeared || current.length < this.known.size) this.fresh = [];
+    this.known = currentSet;
+  }
+  dispose() {
+    this.subs.forEach((s) => s.dispose());
+  }
+}
+
+// Ground truth: heal every terminal tab by activating it, then give each pty a unique name and read labels back.
+async function groundTruth(): Promise<Map<Pty, vscode.Tab | undefined>> {
+  for (const tab of terminalTabs()) await activateTab(tab);
+  await settle(200);
+  ptys.filter((p) => !p.closed).forEach((p) => p.setName(`truth-${p.id}`));
+  await settle(400);
+  const result = new Map<Pty, vscode.Tab | undefined>();
+  ptys.filter((p) => !p.closed).forEach((p) => result.set(p, terminalTabs().find((t) => t.label === `truth-${p.id}`)));
+  return result;
+}
+
+suite("hidden merge rebinding prototype", () => {
+  setup(async () => {
+    ptys.length = 0;
+    await reset();
+  });
+
+  test("Q1: a terminal editor merged while hidden ignores name changes, show() and dispose() until it is activated", async () => {
+    await setLayout(4);
+    const a = await createPty("A", 1, "s:A");
+    const b = await createPty("B", 2, "s:B");
+    const c = await createPty("C", 3, "s:C");
+    const d = await createPty("D", 4, "s:D");
+    [a, b, c, d].forEach((p) => p.setName(`Disp ${p.id}`));
+    await settle(300);
+    await focusGroupAt(1);
+    log("before merge", labels());
+    const rec = recordEvents();
+    await setLayout(2);
+    await settle(300);
+    rec.dispose();
+    log("merge events", rec.events);
+    log("after merge", labels(), "names", [a, b, c, d].map((p) => p.terminal.name));
+
+    // Rename all four.
+    [a, b, c, d].forEach((p) => p.setName(`s:${p.id}`));
+    await settle(400);
+    const afterRename = labels();
+    const names = [a, b, c, d].map((p) => p.terminal.name);
+    log("after rename", afterRename, "names", names);
+
+    // show(true) on the hidden merged terminal.
+    const g2Active = groups()[1]!.activeTab?.label;
+    d.terminal.show(true);
+    await settle(400);
+    log("after D.show(true): group2 active", groups()[1]!.activeTab?.label, "was", g2Active);
+    const showWorked = groups()[1]!.activeTab?.label !== g2Active;
+
+    // Heal C by activating its tab, then rename again.
+    const cTab = terminalTabs().find((t) => t.label === "Disp C")!;
+    const rec2 = recordEvents();
+    await activateTab(cTab);
+    rec2.dispose();
+    log("activate C events", rec2.events);
+    c.setName("healed C");
+    await settle(400);
+    log("after heal C rename", labels(), "C name", c.terminal.name);
+
+    // dispose() on still-orphaned D
+    d.terminal.dispose();
+    await settle(500);
+    log("after D.dispose()", labels(), "D pty closed", d.closed);
+
+    assert.deepEqual(names.slice(0, 2), ["s:A", "s:B"], "unmoved terminals rename");
+    assert.deepEqual(names.slice(2), ["Disp C", "Disp D"], "hidden merged terminals keep their old name");
+    assert.equal(showWorked, false, "show() of an orphan does nothing");
+    assert.equal(c.terminal.name, "healed C", "activation heals the registration");
+    assert.equal(d.closed, false, "dispose() of an orphan does nothing");
+    assert.ok(terminalTabs().some((t) => t.label === "Disp D"), "orphan tab stays after dispose()");
+  });
+
+  test("Q1 control: the merged editor that stays active, and a moveActiveEditor, keep working", async () => {
+    await setLayout(3);
+    const a = await createPty("A", 1, "s:A");
+    const b = await createPty("B", 2, "s:B");
+    const c = await createPty("C", 3, "s:C");
+    [a, b, c].forEach((p) => p.setName(`Disp ${p.id}`));
+    await settle(300);
+    await focusGroupAt(3); // C's group is active: C stays active after the merge
+    await setLayout(2);
+    c.setName("s:C");
+    await settle(400);
+    log("merge-active: C name", c.terminal.name, labels());
+    assert.equal(c.terminal.name, "s:C");
+    await focusGroupAt(1);
+    a.terminal.show();
+    await settle(200);
+    await vscode.commands.executeCommand("moveActiveEditor", { to: "position", by: "group", value: 2 });
+    await settle(300);
+    a.setName("s:A");
+    await settle(400);
+    log("moveActiveEditor: A name", a.terminal.name, labels());
+    assert.equal(a.terminal.name, "s:A");
+  });
+
+  test("Q2: pairing binder follows hidden merge, moves, join and twins; ground truth by healing", async () => {
+    await setLayout(5);
+    const binder = new PairingBinder();
+    let opened = 0;
+    let closedTerminals = 0;
+    const openSub = vscode.window.onDidOpenTerminal(() => opened++);
+    const closeSub = vscode.window.onDidCloseTerminal(() => closedTerminals++);
+    const specs: [string, number][] = [["A", 1], ["T1", 2], ["T2", 3], ["T3", 3], ["E", 4], ["T4", 5]];
+    const made: Pty[] = [];
+    for (const [id, col] of specs) {
+      const p = await createPty(id, col, `s:${id}`);
+      binder.bindByName(p, `s:${id}`);
+      made.push(p);
+    }
+    // Twins: T1..T4 share one display name.
+    made.forEach((p) => p.setName(p.id.startsWith("T") ? "Twin" : `Disp ${p.id}`));
+    await settle(400);
+    await focusGroupAt(1);
+    log("Q2 start", labels());
+    const rec = recordEvents();
+
+    // 1) surplus merge: groups 3,4,5 into 2, all hidden (group 1 active)
+    await setLayout(2);
+    await settle(300);
+    log("Q2 after merge", labels());
+    // 2) moveActiveEditor of a hidden twin: activate it by index first (heals it), then move to group 1
+    const twinInG2 = groups()[1]!.tabs.filter((t) => t.label === "Twin");
+    await activateTab(twinInG2[1]!);
+    await vscode.commands.executeCommand("moveActiveEditor", { to: "position", by: "group", value: 1 });
+    await settle(300);
+    log("Q2 after move", labels());
+    // 3) new group via moveEditorToNextGroup isn't guaranteed; use split layout and join
+    log("Q2 step: setLayout(3)");
+    await setLayout(3);
+    await focusGroupAt(1);
+    log("Q2 step: activate twin in g1");
+    const twinInG1 = groups()[0]!.tabs.find((t) => t.label === "Twin")!;
+    await activateTab(twinInG1);
+    await vscode.commands.executeCommand("moveActiveEditor", { to: "position", by: "group", value: 3 });
+    await settle(300);
+    log("Q2 step: join", labels());
+    await focusGroupAt(2);
+    await vscode.commands.executeCommand("workbench.action.joinTwoGroups");
+    await settle(300);
+    log("Q2 after join", labels());
+    rec.dispose();
+    log("Q2 events", rec.events);
+    log("Q2 decisions", binder.decisions);
+
+    const truth = await groundTruth();
+    log("Q2 truth labels", labels());
+    const mismatches = made.filter((p) => binder.bound.get(p) !== truth.get(p)).map((p) => p.id);
+    log("Q2 mismatches", mismatches, "unbound", made.filter((p) => binder.bound.get(p) === undefined).map((p) => p.id));
+    binder.dispose();
+    assert.deepEqual(mismatches, []);
+    openSub.dispose();
+    closeSub.dispose();
+    log("Q2 terminals opened during ops", opened - made.length, "closed", closedTerminals);
+    assert.equal(opened, made.length, "no terminal recreated");
+    assert.equal(closedTerminals, 0);
+    assert.ok(made.every((p) => vscode.window.terminals.includes(p.terminal)));
+    assert.ok(made.every((p) => !p.closed));
+  });
+
+  test("Q2: activeTerminal on activating an orphan", async () => {
+    await setLayout(3);
+    await createPty("A", 1, "s:A");
+    const b = await createPty("B", 2, "s:B");
+    const c = await createPty("C", 3, "s:C");
+    await focusGroupAt(1);
+    await setLayout(2);
+    await settle(200);
+    log("orphan-active start", labels());
+    const rec = recordEvents();
+    const cTab = groups()[1]!.tabs.find((t) => t.label === "s:C")!;
+    await activateTab(cTab);
+    await settle(300);
+    const firstActive = vscode.window.activeTerminal;
+    rec.dispose();
+    log("activate orphan C: activeTerminal", ptys.find((p) => p.terminal === firstActive)?.id, rec.events);
+    const bTab = groups()[1]!.tabs.find((t) => t.label === "s:B")!;
+    await activateTab(bTab);
+    await activateTab(groups()[1]!.tabs.find((t) => t.label === "s:C")!);
+    log("re-activate C: activeTerminal", ptys.find((p) => p.terminal === vscode.window.activeTerminal)?.id);
+    void b;
+    void c;
+  });
+});

@@ -1,0 +1,2 @@
+import { defineConfig } from "@vscode/test-cli";
+export default defineConfig([{ label: "proto-hm", files: "dist/test/proto-hidden-merge/**/*.test.js", workspaceFolder: "./test/fixtures/workspace", version: "1.141.0", launchArgs: ["--disable-gpu", "--user-data-dir=/tmp/hm-ud"], mocha: { timeout: 60_000 } }]);

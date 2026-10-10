@@ -1,0 +1,19 @@
+import { defineConfig } from "@vscode/test-cli";
+export default defineConfig([
+  {
+    label: "proto-gates",
+    files: "dist/test/proto-gates/**/*.test.js",
+    workspaceFolder: "./test/fixtures/workspace",
+    version: "stable",
+    launchArgs: ["--disable-gpu", "--remote-debugging-port=9339", "--user-data-dir=/tmp/hg-ud"],
+    mocha: { timeout: 60_000 },
+  },
+  {
+    label: "proto-gates-real",
+    files: "dist/test/proto-gates-composition/**/*.test.js",
+    workspaceFolder: "./test/fixtures/composition-workspace",
+    version: "stable",
+    launchArgs: ["--disable-gpu", "--user-data-dir=/tmp/hg-ud2"],
+    mocha: { timeout: 60_000 },
+  },
+]);

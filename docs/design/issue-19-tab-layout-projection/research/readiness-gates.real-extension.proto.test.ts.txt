@@ -1,0 +1,252 @@
+// PROTOTYPE (throwaway): gate 2 through the REAL extension (activate.ts composition) against a fake Herdr socket
+// + the fake Herdr CLI used by test/extension-composition. Two Panes with IDENTICAL display names.
+import * as assert from "node:assert/strict";
+import { createServer, type Socket } from "node:net";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as vscode from "vscode";
+
+const log = (...parts: unknown[]) => console.log("[gates-real]", ...parts.map((p) => (typeof p === "string" ? p : JSON.stringify(p))));
+
+// Capture the extension's decoration provider (Panes View "Visible in an editor" marks) before activation.
+const decorationProviders: vscode.FileDecorationProvider[] = [];
+const registerFileDecorationProvider = vscode.window.registerFileDecorationProvider;
+vscode.window.registerFileDecorationProvider = (provider) => {
+  decorationProviders.push(provider);
+  return registerFileDecorationProvider(provider);
+};
+const providers = new Map<string, vscode.TreeDataProvider<vscode.TreeItem>>();
+const createTreeView = vscode.window.createTreeView;
+vscode.window.createTreeView = <T>(id: string, options: vscode.TreeViewOptions<T>) => {
+  providers.set(id, options.treeDataProvider as vscode.TreeDataProvider<vscode.TreeItem>);
+  return createTreeView(id, options);
+};
+const registerTreeDataProvider = vscode.window.registerTreeDataProvider;
+vscode.window.registerTreeDataProvider = <T>(id: string, provider: vscode.TreeDataProvider<T>) => {
+  providers.set(id, provider as vscode.TreeDataProvider<vscode.TreeItem>);
+  return registerTreeDataProvider(id, provider);
+};
+
+const TWIN = "Twin Pane";
+interface ClientConn {
+  mode: string;
+  terminalId: string;
+  open: boolean;
+  t: number;
+}
+async function startFakeHerdr() {
+  const directory = await mkdtemp(join(tmpdir(), "hg-"));
+  const endpoint = join(directory, "s.sock");
+  const sockets = new Set<Socket>();
+  const clients: ClientConn[] = [];
+  const pane = (id: string, terminal: string) => ({
+    pane_id: id,
+    terminal_id: terminal,
+    workspace_id: "space-x",
+    tab_id: "tab-x",
+    focused: id === "pane-a",
+    agent_status: "idle",
+    revision: 1,
+    label: TWIN,
+    terminal_title: TWIN,
+  });
+  const snapshot = () => ({
+    type: "session_snapshot",
+    snapshot: {
+      version: "0.9.1",
+      protocol: 22,
+      workspaces: [{ workspace_id: "space-x", number: 1, label: "Space X", focused: true, pane_count: 2, tab_count: 1, active_tab_id: "tab-x", agent_status: "idle" }],
+      tabs: [{ tab_id: "tab-x", workspace_id: "space-x", number: 1, label: "Tab X", focused: true, pane_count: 2, agent_status: "idle" }],
+      panes: [pane("pane-a", "term-a"), pane("pane-b", "term-b")],
+      layouts: [],
+      agents: [],
+    },
+  });
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    let conn: ClientConn | undefined;
+    socket.on("close", () => {
+      sockets.delete(socket);
+      if (conn) conn.open = false;
+    });
+    let remainder = "";
+    socket.on("data", (chunk: Buffer) => {
+      const lines = `${remainder}${chunk.toString("utf8")}`.split("\n");
+      remainder = lines.pop() ?? "";
+      lines.filter(Boolean).forEach((line) => {
+        const request = JSON.parse(line) as { id: string; method: string; params?: { mode: string; terminalId: string } };
+        let result: unknown;
+        switch (request.method) {
+          case "ping":
+            result = { type: "pong", version: "0.9.1", protocol: 22, capabilities: { endpoint_protocol_generation: 1 } };
+            break;
+          case "events.subscribe":
+            result = { type: "subscription_started" };
+            break;
+          case "session.snapshot":
+            result = snapshot();
+            break;
+          case "fixture.client":
+            conn = { mode: request.params!.mode, terminalId: request.params!.terminalId, open: true, t: Date.now() };
+            clients.push(conn);
+            result = { type: "ok" };
+            break;
+          default:
+            result = { type: "ok" };
+        }
+        socket.write(`${JSON.stringify({ id: request.id, result })}\n`);
+      });
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(endpoint, resolve);
+  });
+  return {
+    endpoint,
+    clients,
+    async dispose() {
+      sockets.forEach((s) => s.destroy());
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(directory, { recursive: true, force: true });
+    },
+  };
+}
+
+async function waitFor<T>(probe: () => T | undefined | false | Promise<T | undefined | false>, what: string, timeoutMs = 8000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const v = await probe();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+const settle = (ms = 600) => new Promise((r) => setTimeout(r, ms));
+const groups = () => [...vscode.window.tabGroups.all].sort((a, b) => a.viewColumn - b.viewColumn);
+const labels = () => groups().map((g) => g.tabs.map((t) => t.label));
+const ORD = ["First", "Second", "Third", "Fourth"];
+async function focusGroupAt(n: number) {
+  await vscode.commands.executeCommand(`workbench.action.focus${ORD[n - 1]}EditorGroup`);
+  await waitFor(() => vscode.window.tabGroups.activeTabGroup.viewColumn === n, `focus ${n}`);
+}
+async function setLayout(n: number) {
+  await vscode.commands.executeCommand("vscode.setEditorLayout", { orientation: 0, groups: Array.from({ length: n }, () => ({})) });
+  await waitFor(() => vscode.window.tabGroups.all.length === n, `${n} groups`);
+}
+async function untitled(name: string, viewColumn: number) {
+  const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(`untitled:${name}`));
+  await vscode.window.showTextDocument(doc, { viewColumn, preview: false });
+}
+async function children(id: string): Promise<vscode.TreeItem[]> {
+  const provider = providers.get(id);
+  assert.ok(provider, `registered ${id}`);
+  const elements = (await provider.getChildren()) ?? [];
+  return Promise.all(elements.map((e) => provider.getTreeItem(e)));
+}
+function visibleMark(paneId: string): boolean {
+  const uri = vscode.Uri.from({ scheme: "herdr-navigation", path: `/pane/${paneId}` });
+  return decorationProviders.some((p) => p.provideFileDecoration(uri, new vscode.CancellationTokenSource().token) !== undefined);
+}
+const twinLabel = TWIN.replaceAll(" ", " ");
+const twinTabs = () => groups().flatMap((g) => g.tabs.filter((t) => t.input instanceof vscode.TabInputTerminal).map((t) => ({ g: g.viewColumn, label: t.label, active: g.activeTab === t })));
+
+suite("PROTO gate 2 through the real extension", () => {
+  test("two identically named Pane Editors survive a surplus merge and a move", async () => {
+    const fake = await startFakeHerdr();
+    process.env.HERDR_COMPOSITION_ENDPOINT = fake.endpoint;
+    const closed: vscode.Terminal[] = [];
+    const closeSub = vscode.window.onDidCloseTerminal((t) => closed.push(t));
+    const tabLog: string[] = [];
+    const tabSub = vscode.window.tabGroups.onDidChangeTabs(() => tabLog.push(JSON.stringify(labels())));
+    try {
+      const extension = vscode.extensions.getExtension("St0necrusher.vscode-herdr-extension")!;
+      await extension.activate();
+      await vscode.commands.executeCommand("herdr.refreshSessions");
+      await waitFor(async () => (await children("herdr.sessions")).find((r) => String(r.description).includes("connected")), "connected session");
+      await vscode.commands.executeCommand("herdr.selectSpace", "space-x");
+      const paneRows = await waitFor(async () => {
+        const rows = await children("herdr.panes");
+        return rows.length > 0 ? rows : undefined;
+      }, "pane rows");
+      log("pane rows", paneRows.map((r) => [r.id, r.label, r.description, r.command?.arguments]));
+      log("window focused", vscode.window.state.focused);
+
+      await setLayout(3);
+      await untitled("F1.txt", 1);
+      await untitled("F2.txt", 2);
+      await focusGroupAt(1);
+      await vscode.commands.executeCommand("herdr.openPane", "pane-a");
+      await waitFor(() => twinTabs().some((t) => t.g === 1 && t.label === twinLabel), "pane-a renamed in group 1");
+      await focusGroupAt(3);
+      await vscode.commands.executeCommand("herdr.openPane", "pane-b");
+      await waitFor(() => twinTabs().some((t) => t.g === 3 && t.label === twinLabel), "pane-b renamed in group 3");
+      await settle();
+      const terminals = [...vscode.window.terminals];
+      const [termA, termB] = terminals;
+      assert.equal(terminals.length, 2);
+      const snap = (stage: string) => {
+        const state = {
+          stage,
+          labels: labels(),
+          twinTabs: twinTabs(),
+          visible: { a: visibleMark("pane-a"), b: visibleMark("pane-b") },
+          terminals: vscode.window.terminals.length,
+          sameTerminals: vscode.window.terminals.includes(termA!) && vscode.window.terminals.includes(termB!),
+          onDidCloseTerminal: closed.length,
+          clients: fake.clients.map((c) => `${c.mode}:${c.terminalId}:${c.open ? "open" : "closed"}`),
+          openClientsPerTerminal: Object.fromEntries(["term-a", "term-b"].map((id) => [id, fake.clients.filter((c) => c.terminalId === id && c.open).length])),
+        };
+        log(stage, state);
+        return state;
+      };
+      const initial = snap("initial");
+      // sample concurrent open clients continuously
+      let maxOpen = 0;
+      const sampler = setInterval(() => {
+        for (const id of ["term-a", "term-b"]) maxOpen = Math.max(maxOpen, fake.clients.filter((c) => c.terminalId === id && c.open).length);
+      }, 10);
+
+      tabLog.length = 0;
+      await setLayout(2); // group 3 (active, holds pane-b) merged into group 2
+      await settle();
+      const merged = snap("after merge");
+      log("merge tab events", tabLog);
+
+      tabLog.length = 0;
+      await focusGroupAt(2);
+      termB!.show(); // the surface reveal (Terminal.show)
+      await vscode.commands.executeCommand("moveActiveEditor", { to: "position", by: "group", value: 1 });
+      await settle();
+      const moved = snap("after move");
+      log("move tab events", tabLog);
+
+      // Reveal through the extension: herdr.openPane must reuse the moved editor, not create a terminal.
+      await focusGroupAt(2);
+      await vscode.commands.executeCommand("herdr.openPane", "pane-b");
+      await settle();
+      const reopened = snap("after herdr.openPane pane-b");
+      const activeIsB = vscode.window.activeTerminal === termB;
+      clearInterval(sampler);
+      log("summary", { maxOpenClientsPerTerminalAtAnyTime: maxOpen, activeIsB, activeGroup: vscode.window.tabGroups.activeTabGroup.viewColumn });
+      (globalThis as { real?: unknown }).real = { initial, merged, moved, reopened, maxOpen };
+
+      assert.equal(reopened.terminals, 2);
+      assert.equal(reopened.sameTerminals, true);
+      assert.equal(reopened.onDidCloseTerminal, 0);
+      assert.ok(maxOpen <= 1, "never two clients per Pane at once");
+      assert.equal(activeIsB, true);
+      // Terminal.show() reveals with EditorActivation.PRESERVE: the editor becomes active in ITS group (1); the active group is unchanged.
+      assert.deepEqual(reopened.twinTabs, [{ g: 1, label: twinLabel, active: false }, { g: 1, label: twinLabel, active: true }]);
+      assert.deepEqual(reopened.visible, { a: false, b: true });
+    } finally {
+      tabSub.dispose();
+      closeSub.dispose();
+      vscode.window.terminals.forEach((t) => t.dispose());
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await fake.dispose();
+      delete process.env.HERDR_COMPOSITION_ENDPOINT;
+    }
+  });
+});
