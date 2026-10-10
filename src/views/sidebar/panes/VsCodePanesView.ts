@@ -157,6 +157,7 @@ export class PanesGroupTreeItem extends vscode.TreeItem {
     super(group.tab.label, vscode.TreeItemCollapsibleState.Expanded);
     this.id = group.tab.id;
     this.tabId = group.tab.id;
+    this.command = { command: "herdr.openTab", title: "Open Tab", arguments: [group.tab.id] };
     this.description = `${group.panes.length} ${group.panes.length === 1 ? "Pane" : "Panes"}`;
     this.contextValue = `herdr.panes.group${group.closable ? ".closable" : ""}`;
     this.iconPath = new vscode.ThemeIcon("folder");

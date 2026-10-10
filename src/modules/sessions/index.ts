@@ -1,4 +1,5 @@
 export { paneName } from "./paneName";
+export { tabLayoutTree, type TabLayoutTree } from "./tabLayoutTree";
 export { worktreeGroup } from "./worktreeGroup";
 export { isPaneClosable, isTabClosable } from "./closability";
 export { SessionsModel } from "./SessionsModel";
