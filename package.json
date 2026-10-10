@@ -67,6 +67,10 @@
         "title": "Herdr: Open Pane"
       },
       {
+        "command": "herdr.openTab",
+        "title": "Herdr: Open Tab"
+      },
+      {
         "command": "herdr.openAgentPane",
         "title": "Herdr: Open Agent Pane"
       },
@@ -284,6 +288,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "herdr.openTab",
+          "when": "false"
+        },
         {
           "command": "herdr.openAgentPane",
           "when": "false"

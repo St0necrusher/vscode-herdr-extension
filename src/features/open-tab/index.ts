@@ -1,0 +1,1 @@
+export { OpenTabFeature } from "./OpenTabFeature";

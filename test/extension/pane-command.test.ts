@@ -178,7 +178,8 @@ suite("Pane command", () => {
       assert.ok(roots);
       const heading = roots.find((item) => item.id === "tab-group");
       assert.ok(heading);
-      assert.equal(heading.command, undefined);
+      assert.equal(heading.command?.command, "herdr.openTab");
+      assert.deepEqual(heading.command.arguments, ["tab-group"]);
       const children = await provider.getChildren(heading);
       assert.ok(children);
       const paneRow = children.find((item) => item.id === "herdr.pane.pane-one");

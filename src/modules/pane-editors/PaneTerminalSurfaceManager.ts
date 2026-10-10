@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
+import { focusEditorGroup, waitForEditorGroups } from "@core/editor-groups";
 import type { PaneEditorPresence, PaneEditorPresenceSource, PaneEditorReference } from "./paneEditorPresence";
 import type { PaneTerminalClosing } from "./paneTerminalClosing";
+import type { PaneTerminalPlacement } from "./paneTerminalPlacement";
 import type { PaneTerminalOpenRequest, PaneTerminalOpening } from "./paneTerminalOpening";
 import type { HerdrSessionEventSource } from "./session-source";
 import type { HerdrPaneMovedEvent } from "@api/herdr";
@@ -14,7 +16,9 @@ interface ManagedPaneSurface {
   tab: vscode.Tab | undefined;
 }
 
-export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerminalClosing, PaneEditorPresenceSource {
+export class PaneTerminalSurfaceManager
+  implements PaneTerminalOpening, PaneTerminalClosing, PaneTerminalPlacement, PaneEditorPresenceSource
+{
   private readonly surfacesBySession = new Map<string, Map<string, ManagedPaneSurface>>();
   private readonly presenceListeners = new Set<(presence: PaneEditorPresence) => void>();
   private presence: PaneEditorPresence = { visible: [] };
@@ -38,19 +42,24 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
   }
 
   openPane(request: PaneTerminalOpenRequest): void {
+    this.openPaneSurface(request);
+  }
+
+  private openPaneSurface(
+    request: PaneTerminalOpenRequest,
+    viewColumn = vscode.window.tabGroups.activeTabGroup.viewColumn,
+  ): ManagedPaneSurface {
     const selection = { sessionId: request.sessionId, paneId: request.paneId };
     const existing = this.getSurface(selection);
     if (existing !== undefined) {
       // A Visible Pane Editor in an inactive group is revealed so that it takes focus.
-      const surfaceIsAlreadyFocused =
-        existing.tab !== undefined && vscode.window.tabGroups.activeTabGroup.activeTab === existing.tab;
-      if (surfaceIsAlreadyFocused) return;
-      existing.surface.reveal();
-      this.reconcileTabBindings();
-      return;
+      if (!this.isSurfaceFocused(existing)) {
+        existing.surface.reveal();
+        this.reconcileTabBindings();
+      }
+      return existing;
     }
 
-    const viewColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
     const terminalName = this.terminalName(selection);
     const surface = this.surfaceFactory.create(selection, viewColumn, terminalName);
     const managed: ManagedPaneSurface = { selection, terminalName, surface, tab: undefined };
@@ -58,6 +67,77 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
     surface.onDidClose(() => this.handleSurfaceClosed(managed));
     surface.reveal();
     this.reconcileTabBindings();
+    return managed;
+  }
+
+  async closeDisplacedPanes(requests: readonly PaneTerminalOpenRequest[]): Promise<void> {
+    const displacedPanes = () =>
+      this.allSurfaces().filter((managed) => {
+        const targetIndex = requests.findIndex((request) => {
+          const isRequestedPane =
+            request.sessionId === managed.selection.sessionId && request.paneId === managed.selection.paneId;
+          return isRequestedPane;
+        });
+        const targetColumn: vscode.ViewColumn = targetIndex + 1;
+        const lastColumn: vscode.ViewColumn = requests.length;
+        const isMisplaced = targetIndex !== -1 && managed.tab?.group.viewColumn !== targetColumn;
+        const isInSurplusGroup = managed.tab !== undefined && managed.tab.group.viewColumn > lastColumn;
+        return isMisplaced || isInSurplusGroup;
+      });
+    let displaced = displacedPanes();
+    // Closing a lone Pane Editor removes its group and shifts later groups; re-read displacement after each batch.
+    while (displaced.length > 0) {
+      const tabs: vscode.Tab[] = [];
+      for (const managed of displaced) {
+        tabs.push(await this.waitForPaneTab(managed));
+      }
+      const closed = await vscode.window.tabGroups.close(tabs);
+      if (!closed) throw new Error("Could not close displaced Pane Editors");
+      for (const managed of displaced) {
+        await waitForEditorGroups(() => (this.getSurface(managed.selection) !== managed ? true : undefined));
+      }
+      displaced = displacedPanes();
+    }
+  }
+
+  async placePanes(requests: readonly PaneTerminalOpenRequest[]): Promise<void> {
+    const cells = requests.map((request, index) => {
+      const viewColumn: vscode.ViewColumn = index + 1;
+      return { request, viewColumn };
+    });
+    for (const cell of cells) {
+      const managed = this.getSurface(cell.request) ?? this.openPaneSurface(cell.request, cell.viewColumn);
+      await this.waitForPaneTab(managed, cell.viewColumn);
+      // This path selects the cell's Pane without activating that editor group.
+      managed.surface.terminal.show(true);
+      await waitForEditorGroups(() => {
+        const isActiveInCell = managed.tab?.isActive === true && managed.tab.group.viewColumn === cell.viewColumn;
+        return isActiveInCell ? true : undefined;
+      });
+    }
+  }
+
+  async focusPane(sessionId: string, paneId: string): Promise<void> {
+    const request = { sessionId, paneId };
+    const managed = this.requireSurface(request);
+    const tab = await this.waitForPaneTab(managed);
+    await focusEditorGroup(tab.group.viewColumn);
+    managed.surface.reveal();
+    await waitForEditorGroups(() => (this.isSurfaceFocused(managed) ? true : undefined));
+  }
+
+  private requireSurface(selection: SelectedPaneEditor): ManagedPaneSurface {
+    const managed = this.getSurface(selection);
+    if (managed === undefined) throw new Error("Pane Editor is no longer open");
+    return managed;
+  }
+
+  private async waitForPaneTab(managed: ManagedPaneSurface, viewColumn?: vscode.ViewColumn): Promise<vscode.Tab> {
+    return await waitForEditorGroups(() => {
+      const tab = managed.tab;
+      const matchesColumn = tab !== undefined && (viewColumn === undefined || tab.group.viewColumn === viewColumn);
+      return matchesColumn ? tab : undefined;
+    });
   }
 
   getPaneEditorPresence(): PaneEditorPresence {
@@ -162,11 +242,15 @@ export class PaneTerminalSurfaceManager implements PaneTerminalOpening, PaneTerm
     const visible = bound
       .filter((managed) => tabGroups.all.some((group) => group.activeTab === managed.tab))
       .map((managed) => managed.selection);
-    const focused = bound.find((managed) => tabGroups.activeTabGroup.activeTab === managed.tab)?.selection;
+    const focused = bound.find((managed) => this.isSurfaceFocused(managed))?.selection;
     const next: PaneEditorPresence = focused === undefined ? { visible } : { visible, focused };
     if (samePresence(this.presence, next)) return;
     this.presence = next;
     for (const listener of [...this.presenceListeners]) listener(next);
+  }
+
+  private isSurfaceFocused(managed: ManagedPaneSurface): boolean {
+    return managed.tab !== undefined && vscode.window.tabGroups.activeTabGroup.activeTab === managed.tab;
   }
 
   private allSurfaces(): ManagedPaneSurface[] {

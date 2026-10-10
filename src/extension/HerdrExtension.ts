@@ -4,6 +4,7 @@ import { CreatePaneFeature } from "@features/create-pane";
 import { CreateSpaceFeature } from "@features/create-space";
 import { RenameFeature } from "@features/rename";
 import { RevealPaneFeature } from "@features/reveal-pane";
+import { OpenTabFeature } from "@features/open-tab";
 import { RunNpmScriptFeature } from "@features/run-npm-script";
 import { SessionsModel } from "@modules/sessions";
 import { NavigationContextModel } from "@modules/workspace-context";
@@ -113,6 +114,7 @@ export class HerdrExtension implements vscode.Disposable {
       acquire(new RenameFeature(navigationContext, sessions));
       acquire(new CloseFeature(navigationContext, sessions, surfaceManager));
       acquire(new RevealPaneFeature(navigationContext, navigationContext, surfaceManager));
+      acquire(new OpenTabFeature(navigationContext, surfaceManager));
       this.sessions = sessions;
       this.takeoverPluginRegistration = takeoverPluginRegistration;
     } catch (error) {
