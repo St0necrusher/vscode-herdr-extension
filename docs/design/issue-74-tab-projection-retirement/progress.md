@@ -69,3 +69,26 @@ Request: `requests/sol-impl-74-q1.md`; decision: `answers/sol-impl-74-q1.md`.
 - Round 2 requested: `requests/sol-impl-74-2.md`.
 - Round 2 `reports/production-2.md`: both corrections applied exactly; checks unchanged (same fixture diagnostics, unit 158/158, host 84/3 + 0/1 + 1/1). Coordinator verified the two hunks directly; no re-review needed for a mechanical correction the reviewer specified. **Slice accepted.**
 - Committed per the approved plan: `docs:` (CONTEXT.md, ADR 0018, TD) and `feat:` (code).
+
+## Architect orientation — arch-fit-74-1
+
+- Request `final-review/requests-1.md`; reply `final-review/answers-1.md`. Orientation only: no independent diff review and no new design amendment.
+- Priorities: created-only object membership and Session-qualified identity; S1/S3 retention versus S2/S4 recreation after live group re-evaluation; evidence at the close/group-settlement boundary; no broad editor cleanup; distinct Pane/Tab failure transitions; awaited adapter errors.
+- Accepted limits remain intact (direct singleton command, overlapping clicks, #73 orphans, settings baseline). Supplemental runtime checks do not waive outstanding fixture migration/typecheck/standard validation gates.
+
+## Architect finding adjudication — arch-fit-74-2
+
+- Request `final-review/requests-2.md`; answer `final-review/answers-2.md`.
+- **Explanation:** reviewer-supplied source trace establishes a concrete #74 regression: a settled Panel-moved unbound member blocks unrelated Tab navigation repeatedly; first Pane/Agent navigation also fails before opening. Classified medium/P2, source-level confirmed, not independently host-reproduced here. Supersedes the earlier blanket “Deferred risk to #73” classification for this expanded blast radius; orphan healing remains excluded.
+- **Proposed amendment, not approved:** keep unrelated navigation usable, but obtain owner/user intent before changing retirement of unbound members. The proposed bound-only filters are not a neutral fix: unbound does not uniquely identify Panel state, retained membership can close a rebound terminal later, and clicking the unbound target remains unresolved.
+- Reopened B2/B3 with map intent I7 and inconvenient before → after. Owner must settle Panel survival/membership/re-entry and target behavior, record any amendment in architecture.md, or explicitly accept the limitation. A bounded host reproduction should confirm the settled Panel path. No source change authorized and no independent diff review performed.
+
+
+
+## Final review — coordinator triage
+
+- Standards (luna-std-74, tab closed): 0 findings. Architecture fit: F1 confirmed defect, important, user-visible → I7 on B2/B3 (opened by the architect). Recorded in `final-review/round.md`.
+- Phase state: **blocked/incomplete** pending the owner's I7 decision; everything else accepted. Worker `sol-impl-74` kept open (ongoing) for the I7 correction.
+- **I7 decided by the owner (2026-10-11): a Pane Editor moved into the Panel stays open there and does not block retirement.** Accepted the bound-only candidate from `final-review/architecture-fit.md` with its caveats: Tab path keeps an unbound member in the set (closed later if it rebinds); Pane path clears it (I3); clicking the unbound member itself still times out (#73). `architecture.md`/`map.md` amendment is parent-only → proposed in the final report.
+- Round 3 requested: `requests/sol-impl-74-3.md`.
+- Round 3 `reports/production-3.md`: bound-only filter in `isRetiredMember` and the `navigateToPane` close list, exactly as specified. Real host: before (c989928) both Panel-path failures reproduced 2/2; after, 2/2 pass, Panel terminal stays alive. Checks unchanged. Coordinator reviewed the two hunks directly (mechanical, specified by the architect's candidate); no slice-reviewer pass. **Accepted**; committed. F1/I7 resolved in code; architecture.md/map.md/ADR 0018 wording is a proposed amendment in the final report.

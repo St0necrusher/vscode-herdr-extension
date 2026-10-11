@@ -5,8 +5,8 @@
 ```mermaid
 flowchart TD
     B1["B1: Tab Projection membership"]:::closed
-    B2["B2: Tab click retires and starts"]:::closed
-    B3["B3: Pane and Agent click retires"]:::closed
+    B2["B2: Tab click retires and starts"]:::open
+    B3["B3: Pane and Agent click retires"]:::open
     B4["B4: Clicked Pane inside the Tab Projection"]:::closed
     B5["B5: What does not retire it"]:::closed
     B1 --> B2
@@ -63,7 +63,7 @@ The Pane Editors that the latest multi-Pane Tab click created or recreated in th
 ### B2: Tab click retires and starts
 
 - parent: B1
-- status: closed
+- status: open (final-review intent I7; prior decisions unchanged)
 - serves: S1, S2, S6, S8
 - touches: `features/open-tab`, `modules/pane-editors`
 
@@ -81,7 +81,7 @@ A Tab click closes the previous members that are not Panes of the clicked Tab, t
 ### B3: Pane and Agent click retires
 
 - parent: B1
-- status: closed
+- status: open (final-review intent I7; prior decisions unchanged)
 - serves: S1, S2, S6
 - touches: `views/sidebar/panes` (`herdr.openPane`), `features/reveal-pane`, `modules/pane-editors`
 
@@ -98,6 +98,10 @@ A Pane row or Agent row click closes every member, then opens the Pane as today 
 - **I3 — decided by the design owner: recommended answer.** Confirm that a failed Pane/Agent retirement relinquishes membership even for surviving editors. Recommended: retain the draft's clear-first/no-rollback rule, report failure, and do not silently retry survivors on the next click. Inconvenient case: cleanup closes B but fails on D → D remains, now ordinary; next navigation no longer cleans D up.
 - **I4 — decided by the design owner: recommended answer.** Confirm that empty-group disappearance relies on `workbench.editor.closeEmptyGroups` being enabled. Recommended: respect VS Code's setting, do not force-close groups or change settings. Inconvenient case with it disabled: `[file B][D]` → click C closes B/D but can leave empty cells and opens C in the then-active group, rather than promising `[file C]`. Verify normal enabled-setting ordering before delegation; no unconditional group-absence wait.
 - **I5 — decided by the design owner: recommended answer.** Confirm inheritance of #19's exclusion of overlapping user clicks. Recommended: no queue/latest-wins mechanism in #74. Inconvenient case: start Tab navigation, click a Pane before it completes → the earlier Tab operation may resume and lay out/add members after the newer click; only settled sequential navigation is promised.
+
+#### Final-review intent question (arch-fit-74-2; not approved)
+
+- **I7 — open, intent; B2 and B3:** A projection member moved into the Panel remains managed but unbound. Before #74 it obstructed only a Tab projection containing that Pane; after #74 every unrelated Tab click waits for its binding and fails repeatedly. A Pane/Agent click clears membership but itself fails before opening the target; a later click can proceed. Recommended: do not let an out-of-grid terminal poison unrelated navigation. Owner/user must settle whether it remains open, membership after retirement/re-entry, and the unbound target case. Bound-only retirement is a candidate amendment, not approved: unbound does not uniquely mean Panel, and retaining unbound membership on the Tab path can cause later cleanup after rebinding. See `final-review/answers-2.md`. #73's orphan-repair exclusion alone does not approve this expanded failure.
 
 ### B4: Clicked Pane inside the Tab Projection
 
