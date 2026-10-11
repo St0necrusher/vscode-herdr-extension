@@ -55,7 +55,13 @@ export class PaneTerminalSurfaceManager
     const members = [...this.tabProjection];
     this.tabProjection.clear();
     const target = this.getSurface(request);
-    await this.closePaneEditors(members.filter((managed) => managed !== target));
+    // Unbound members may be in the Panel; retirement must not wait for their editor binding.
+    await this.closePaneEditors(
+      members.filter((managed) => {
+        const shouldClose = managed !== target && managed.tab !== undefined;
+        return shouldClose;
+      }),
+    );
 
     const wasMember = target !== undefined && members.includes(target);
     if (wasMember) {
@@ -103,7 +109,7 @@ export class PaneTerminalSurfaceManager
         const lastColumn: vscode.ViewColumn = requests.length;
         const isMisplaced = targetIndex !== -1 && managed.tab?.group.viewColumn !== targetColumn;
         const isInSurplusGroup = managed.tab !== undefined && managed.tab.group.viewColumn > lastColumn;
-        const isRetiredMember = targetIndex === -1 && this.tabProjection.has(managed);
+        const isRetiredMember = targetIndex === -1 && this.tabProjection.has(managed) && managed.tab !== undefined;
         const shouldClose = isMisplaced || isInSurplusGroup || isRetiredMember;
         return shouldClose;
       });
