@@ -13,7 +13,7 @@ import type {
   RenameTabRequest,
 } from "../../src/modules/sessions/management";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
-import type { PaneTerminalClosing, PaneTerminalOpening } from "../../src/modules/pane-editors";
+import type { PaneEditorNavigation, PaneTerminalClosing, PaneTerminalOpening } from "../../src/modules/pane-editors";
 import type {
   ActiveSessionProjectionSource,
   PaneEditorPresenceSource,
@@ -33,6 +33,10 @@ import { SpaceTreeItem, VsCodeSpacesView } from "../../src/views/sidebar/spaces/
 
 const sessionId = "session-current";
 let sequence = 0;
+
+const unusedPaneEditorNavigation: PaneEditorNavigation = {
+  navigateToPane: () => Promise.reject(new Error("unexpected navigation in this fixture")),
+};
 
 type ProjectionListener = (state: ActiveSessionProjectionState) => void;
 
@@ -314,6 +318,7 @@ async function withNavigation(
         onDidChangePaneEditorPresence: () => ({ dispose: () => undefined }),
       },
       paneTerminalOpening: { openPane: () => undefined },
+      paneEditorNavigation: unusedPaneEditorNavigation,
       paneClosing,
       creation,
       management,
@@ -355,6 +360,7 @@ async function withNavigation(
 type NavigationDependencies = Readonly<{
   sessionProjection: ActiveSessionProjectionSource;
   paneTerminalOpening: PaneTerminalOpening;
+  paneEditorNavigation: PaneEditorNavigation;
   paneClosing: PaneTerminalClosing;
   paneEditorPresence: PaneEditorPresenceSource;
   creation: ActiveSessionCreation;
@@ -366,7 +372,7 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
   const panes = new VsCodePanesView(
     navigationContext,
     navigationContext,
-    dependencies.paneTerminalOpening,
+    dependencies.paneEditorNavigation,
     dependencies.management,
   );
   const spaces = new VsCodeSpacesView(navigationContext, navigationContext);
@@ -387,7 +393,7 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
   const createPane = new CreatePaneFeature(navigationContext, dependencies.creation, dependencies.paneTerminalOpening);
   const rename = new RenameFeature(navigationContext, dependencies.management);
   const close = new CloseFeature(navigationContext, dependencies.management, dependencies.paneClosing);
-  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneTerminalOpening);
+  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneEditorNavigation);
 
   return {
     dispose() {

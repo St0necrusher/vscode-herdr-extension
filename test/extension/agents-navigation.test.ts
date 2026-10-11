@@ -5,7 +5,7 @@ import type { ActiveSessionProjectionState } from "../../src/modules/sessions/ac
 import type { ActiveSessionCreation } from "../../src/modules/sessions/creation";
 import type { ActiveSessionManagement } from "../../src/modules/sessions/management";
 import type { HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
-import type { PaneTerminalClosing, PaneTerminalOpening } from "../../src/modules/pane-editors";
+import type { PaneEditorNavigation, PaneTerminalClosing, PaneTerminalOpening } from "../../src/modules/pane-editors";
 import type { PaneEditorPresence } from "../../src/modules/pane-editors/paneEditorPresence";
 import type {
   ActiveSessionProjectionSource,
@@ -436,6 +436,7 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
     navigation = createNavigation({
       sessionProjection: projection,
       paneTerminalOpening: manager,
+      paneEditorNavigation: manager,
       paneEditorPresence: manager,
       paneClosing: manager,
       creation: { createSpace: unused, createPane: unused, splitPane: unused, runCommand: unused },
@@ -479,6 +480,7 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
 type NavigationDependencies = Readonly<{
   sessionProjection: ActiveSessionProjectionSource;
   paneTerminalOpening: PaneTerminalOpening;
+  paneEditorNavigation: PaneEditorNavigation;
   paneClosing: PaneTerminalClosing;
   paneEditorPresence: PaneEditorPresenceSource;
   creation: ActiveSessionCreation;
@@ -490,7 +492,7 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
   const panes = new VsCodePanesView(
     navigationContext,
     navigationContext,
-    dependencies.paneTerminalOpening,
+    dependencies.paneEditorNavigation,
     dependencies.management,
   );
   const spaces = new VsCodeSpacesView(navigationContext, navigationContext);
@@ -511,7 +513,7 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
   const createPane = new CreatePaneFeature(navigationContext, dependencies.creation, dependencies.paneTerminalOpening);
   const rename = new RenameFeature(navigationContext, dependencies.management);
   const close = new CloseFeature(navigationContext, dependencies.management, dependencies.paneClosing);
-  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneTerminalOpening);
+  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneEditorNavigation);
 
   return {
     dispose() {
