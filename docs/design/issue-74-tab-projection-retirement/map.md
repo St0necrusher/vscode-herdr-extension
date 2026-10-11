@@ -1,6 +1,6 @@
 # Map: #74 Navigation click retires the Tab Projection
 
-- stage: implementation
+- stage: tests
 
 ```mermaid
 flowchart TD
