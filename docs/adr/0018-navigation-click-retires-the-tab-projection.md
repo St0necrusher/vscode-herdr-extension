@@ -10,6 +10,8 @@ Membership comes from what the click did, not from where an editor stands now:
 
 When the clicked Pane is itself in the Tab Projection, the other members close first. The clicked Pane Editor stays where it is if its group still holds something else or no other group is left. Otherwise it is recreated in the active remaining group, so the user sees only that Pane. After that it belongs to the user.
 
+A Pane Editor the user moved out of the editor grid into the Panel stays open: retirement closes only the members that stand in the grid. A Tab click leaves such a Pane Editor in the Tab Projection, so a later navigation click closes it once it is back in the grid; a Pane or Agent click lets it go at once.
+
 Focusing a Pane Editor directly in the editor area, or selecting a Space or a Session, does not retire the Tab Projection.
 
 ## Considered Options
@@ -22,4 +24,5 @@ Focusing a Pane Editor directly in the editor area, or selecting a Space or a Se
 ## Consequences
 
 - A recreated Pane Editor loses its VS Code-side scrollback, as in ADR 0017. The Pane in Herdr is untouched.
+- A click on the Pane of a member that sits in the Panel still fails, because the click waits for an editor tab that this Pane Editor no longer has; this is the orphaned Pane Editor case of #73.
 - The Tab Projection lives only in memory. After Reload Window, the next navigation click closes nothing.
