@@ -1,6 +1,6 @@
 # Issue #74: a navigation click retires the Tab Projection
 
-Status: **approved by the owner (2026-10-10); readiness answers from `answers/astra-arch-74-1.md` recorded below; I1 confirmed by the owner (window-wide)**.
+Status: **approved by the owner (2026-10-10); readiness answers from `answers/astra-arch-74-1.md` recorded below; I1 confirmed by the owner (window-wide); I7 decided by the owner (2026-10-11, answer 10)**.
 
 Requirements: issue #74, ADR 0018, `CONTEXT.md` (Tab Projection), `map.md` in this directory. Builds on ADR 0017 and `docs/design/issue-19-tab-layout-projection/architecture.md`.
 
@@ -83,6 +83,7 @@ test/extension/tab-layout.test.ts                       changed  two Tab-switch 
 7. **Failure and membership.** Pane navigation clears membership first, so a former member that fails to close becomes an ordinary editor; the next click does not retry it (I3). Tab retirement removes members only by a successful close.
 8. **Overlapping clicks.** #19's exclusion stands: no queue, no cancellation; only settled sequential clicks are promised (I5). No disposal guards beyond existing rules.
 9. **Scrollback.** S2/S4 recreation loses VS Code-side scrollback and reconnects; the Herdr Pane is untouched (I6, ADR 0018).
+10. **Members outside the editor grid (I7, decided by the owner 2026-10-11, final review).** Retirement closes only members that have an editor tab; a member the user moved into the Panel stays open there. The Tab path leaves such a member in the set, so a later navigation click closes it once it is back in the grid; the Pane/Agent path drops it with the rest of the set (answer 7). Clicking that member itself still waits for its binding and times out (#73).
 
 ## Verification plan (preliminary, `testing-scenarios`)
 
