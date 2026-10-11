@@ -13,6 +13,7 @@ import type {
 } from "../../src/modules/workspace-context/source";
 import { NavigationContextModel } from "../../src/modules/workspace-context/NavigationContextModel";
 import { CloseFeature } from "../../src/features/close/CloseFeature";
+import { OpenTabFeature } from "../../src/features/open-tab/OpenTabFeature";
 import { CreatePaneFeature } from "../../src/features/create-pane/CreatePaneFeature";
 import { CreateSpaceFeature } from "../../src/features/create-space/CreateSpaceFeature";
 import { RenameFeature } from "../../src/features/rename/RenameFeature";
@@ -175,7 +176,20 @@ const snapshot: HerdrSessionSnapshot = {
       tokens: {},
     },
   ],
-  layouts: [],
+  layouts: [
+    {
+      spaceId: "space-a",
+      herdrTabId: "tab-a2",
+      zoomed: false,
+      area: { x: 0, y: 0, width: 80, height: 24 },
+      focusedPaneId: "pane-a3",
+      panes: [
+        { paneId: "pane-a2", focused: false, rectangle: { x: 0, y: 0, width: 40, height: 24 } },
+        { paneId: "pane-a3", focused: true, rectangle: { x: 40, y: 0, width: 40, height: 24 } },
+      ],
+      splits: [{ id: "split-a2", direction: "right", ratio: 0.5, rectangle: { x: 0, y: 0, width: 80, height: 24 } }],
+    },
+  ],
 };
 
 interface FakeTreeView {
@@ -187,6 +201,7 @@ interface FakeTreeView {
 interface NavigationHarness {
   readonly prefix: string;
   readonly manager: PaneTerminalSurfaceManager;
+  openTab(tabId: string): Promise<void>;
   readonly providers: ReadonlyMap<string, vscode.TreeDataProvider<vscode.TreeItem>>;
   readonly views: ReadonlyMap<string, FakeTreeView>;
   readonly decorations: vscode.FileDecorationProvider;
@@ -269,6 +284,38 @@ suite("Agent navigation and Visible Pane Editors", () => {
       for (const row of markedRows) {
         assert.equal(await harness.decorations.provideFileDecoration(rowUri(row), harness.token), undefined);
       }
+    });
+  });
+
+  test("an Agent navigation click retires the Tab Projection before opening its Pane", async () => {
+    await withNavigationHarness(async (harness) => {
+      await harness.openTab("tab-a2");
+      await waitForPaneTab("Pane\u00a0A2");
+      await waitForPaneTab("Pane\u00a0A3");
+      await waitForFocusedPane(harness, "pane-a3");
+      assert.equal(paneTabs("Pane\u00a0A2").length, 1);
+      assert.equal(paneTabs("Pane\u00a0A3").length, 1);
+      const projectedTerminals = createdTerminals(harness);
+      assert.equal(projectedTerminals.length, 2);
+
+      await vscode.commands.executeCommand(`${harness.prefix}herdr.openAgentPane`, "pane-b");
+      const paneB = await waitForPaneTab("Pane\u00a0B");
+      const agentNavigationSettled = (): boolean => {
+        const targetPaneIsActive = paneB.group.activeTab === paneB.tab;
+        const projectedPaneEditorsAreClosed = projectedTerminals.every(
+          (terminal) => !vscode.window.terminals.includes(terminal),
+        );
+        const navigationHasSettled = targetPaneIsActive && projectedPaneEditorsAreClosed;
+        return navigationHasSettled;
+      };
+      await waitFor(
+        () => (agentNavigationSettled() ? true : undefined),
+        "the projected Pane Editors to close before Agent B's Pane opens",
+      );
+      assert.equal(paneTabs("Pane\u00a0A2").length, 0);
+      assert.equal(paneTabs("Pane\u00a0A3").length, 0);
+      assert.equal(createdTerminals(harness).length, 1);
+      await waitForFocusedPane(harness, "pane-b");
     });
   });
 
@@ -461,6 +508,16 @@ async function withNavigationHarness(run: (harness: NavigationHarness) => Promis
       decorationChanges,
       token: tokenSource.token,
       initialTerminals: new Set(vscode.window.terminals),
+      openTab: async (tabId) => {
+        const tabNavigation = new NavigationContextModel(projection, manager);
+        const openTabFeature = new OpenTabFeature(tabNavigation, manager);
+        try {
+          await vscode.commands.executeCommand(`${prefix}herdr.openTab`, tabId);
+        } finally {
+          openTabFeature.dispose();
+          tabNavigation.dispose();
+        }
+      },
     });
   } finally {
     decorationSubscription?.dispose();

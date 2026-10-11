@@ -10,13 +10,19 @@ import {
   paneTerminalOpenRequest,
 } from "../../src/modules/pane-editors";
 import { NavigationContextModel } from "../../src/modules/workspace-context";
+import type { PaneEditorPresence } from "../../src/modules/pane-editors/paneEditorPresence";
 import type { HerdrSessionSnapshot, PaneClientFactory } from "../../src/api/herdr";
 import { layoutCases, tab12, tab13, type EditorGroupShape, type LayoutCase } from "./tabLayoutFixtures.test";
 
 interface LayoutHarness {
   openTab(tabId?: string): Promise<void>;
+  navigateToPane(paneId: string): Promise<void>;
   openPane(paneId: string, column: number): Promise<vscode.Terminal>;
   expectClosed(...terminals: vscode.Terminal[]): void;
+  expectClosedAfterMove(...terminals: vscode.Terminal[]): void;
+  expectInPanel(...terminals: vscode.Terminal[]): void;
+  getOwnedTerminal(paneId: string): vscode.Terminal;
+  getPaneEditorPresence(): PaneEditorPresence;
 }
 
 let sequence = 0;
@@ -197,7 +203,7 @@ suite("Tab layout projection", () => {
     });
   });
 
-  test("switches from real Tab 13 to Tab 12 while retaining the other Tab's Pane Editors behind it", async () => {
+  test("a Tab navigation click retires the previous Tab Projection", async () => {
     await withLayout(
       tab13,
       async (harness) => {
@@ -205,6 +211,7 @@ suite("Tab layout projection", () => {
         assert.deepEqual(groupTabs(), [["p6D"], ["p6E"]]);
         const d = paneTerminal("p6D");
         const e = paneTerminal("p6E");
+        harness.expectClosed(d, e);
         await harness.openTab("w3:t4Z");
         assert.deepEqual(await editorGroupShape(), {
           orientation: 0,
@@ -213,9 +220,9 @@ suite("Tab layout projection", () => {
             { orientation: 1, groups: ["p6A", "p6B"] },
           ],
         });
-        assert.deepEqual(groupTabs(), [["p6D", "p69"], ["p6E", "p6C"], ["p6A"], ["p6B"]]);
-        assert.strictEqual(paneTerminal("p6D"), d);
-        assert.strictEqual(paneTerminal("p6E"), e);
+        assert.deepEqual(groupTabs(), [["p69"], ["p6C"], ["p6A"], ["p6B"]]);
+        assert.equal(vscode.window.terminals.includes(d), false);
+        assert.equal(vscode.window.terminals.includes(e), false);
         assert.equal(vscode.window.tabGroups.activeTabGroup.viewColumn, vscode.ViewColumn.Three);
         assert.equal(vscode.window.tabGroups.activeTabGroup.activeTab?.label, "p6A");
       },
@@ -223,46 +230,344 @@ suite("Tab layout projection", () => {
     );
   });
 
-  test("returns to real Tab 12 by recreating surplus Pane Editors closed before projecting Tab 13", async () => {
+  test("a Tab navigation click retires a larger Tab Projection before opening Tab 13", async () => {
     await withLayout(
       tab12,
       async (harness) => {
         await harness.openTab("w3:t4Z");
-        const first = paneTerminal("p69");
-        const second = paneTerminal("p6C");
-        const third = paneTerminal("p6A");
-        const fourth = paneTerminal("p6B");
-        harness.expectClosed(third, fourth);
+        const tab12Terminals = ["p69", "p6C", "p6A", "p6B"].map(paneTerminal);
+        harness.expectClosed(...tab12Terminals);
         await harness.openTab("w3:t40");
         assert.deepEqual(await editorGroupShape(), { orientation: 1, groups: ["p6D", "p6E"] });
-        assert.deepEqual(groupTabs(), [
-          ["p69", "p6D"],
-          ["p6C", "p6E"],
-        ]);
-        const d = paneTerminal("p6D");
-        const e = paneTerminal("p6E");
-        await harness.openTab("w3:t4Z");
-        assert.deepEqual(await editorGroupShape(), {
-          orientation: 0,
-          groups: [
-            { orientation: 1, groups: ["p69", "p6C"] },
-            { orientation: 1, groups: ["p6A", "p6B"] },
-          ],
-        });
-        assert.deepEqual(groupTabs(), [["p69", "p6D"], ["p6C", "p6E"], ["p6A"], ["p6B"]]);
-        assert.strictEqual(paneTerminal("p69"), first);
-        assert.strictEqual(paneTerminal("p6C"), second);
-        assert.notStrictEqual(paneTerminal("p6A"), third);
-        assert.notStrictEqual(paneTerminal("p6B"), fourth);
-        assert.strictEqual(paneTerminal("p6D"), d);
-        assert.strictEqual(paneTerminal("p6E"), e);
-        assert.equal(vscode.window.tabGroups.activeTabGroup.viewColumn, vscode.ViewColumn.Three);
-        assert.equal(vscode.window.tabGroups.activeTabGroup.activeTab?.label, "p6A");
+        assert.deepEqual(groupTabs(), [["p6D"], ["p6E"]]);
+        assert.equal(vscode.window.tabGroups.activeTabGroup.activeTab?.label, tab13.layout.focusedPaneId);
       },
       [tab13],
     );
   });
+
+  test("a Pane navigation click retires the Tab Projection before opening another Pane", async () => {
+    await withLayout(
+      tab13,
+      async (harness) => {
+        const file = await openTab13WithFile(harness);
+        const d = paneTerminal("p6D");
+        const e = paneTerminal("p6E");
+        harness.expectClosed(d, e);
+        await harness.navigateToPane("p69");
+        assert.deepEqual(groupTabs(), [["file.txt", "p69"]]);
+        assert.equal(vscode.window.terminals.includes(d), false);
+        assert.equal(vscode.window.terminals.includes(e), false);
+        assert.equal(file.isClosed, false);
+      },
+      [tab12],
+    );
+  });
+
+  test("clicking a projected Pane Editor with a file in its group keeps its identity", async () => {
+    await withLayout(
+      tab13,
+      async (harness) => {
+        await openTab13WithFile(harness);
+        const d = paneTerminal("p6D");
+        const e = paneTerminal("p6E");
+        harness.expectClosed(e);
+        await harness.navigateToPane("p6D");
+        assert.deepEqual(groupTabs(), [["file.txt", "p6D"]]);
+        assert.strictEqual(paneTerminal("p6D"), d);
+        assert.equal(vscode.window.terminals.includes(e), false);
+      },
+      [tab12],
+    );
+  });
+
+  test("clicking a lone projected Pane Editor recreates it in the remaining file group", async () => {
+    await withLayout(
+      tab13,
+      async (harness) => {
+        await openTab13WithFile(harness);
+        const d = paneTerminal("p6D");
+        const e = paneTerminal("p6E");
+        harness.expectClosed(d, e);
+        await harness.navigateToPane("p6E");
+        assert.deepEqual(groupTabs(), [["file.txt", "p6E"]]);
+        assert.notStrictEqual(paneTerminal("p6E"), e);
+        assert.equal(vscode.window.terminals.includes(d), false);
+        assert.equal(vscode.window.terminals.includes(e), false);
+      },
+      [tab12],
+    );
+  });
+
+  test("clicking a projected Pane Editor in the only group keeps its identity", async () => {
+    await withLayout(tab13, async (harness) => {
+      await harness.openTab("w3:t40");
+      const d = paneTerminal("p6D");
+      const e = paneTerminal("p6E");
+      harness.expectClosed(d);
+      await harness.navigateToPane("p6E");
+      assert.deepEqual(groupTabs(), [["p6E"]]);
+      assert.strictEqual(paneTerminal("p6E"), e);
+      assert.equal(vscode.window.terminals.includes(d), false);
+    });
+  });
+
+  test("clicking a projected Pane Editor beside a file recreates it in that file group", async () => {
+    await withLayout(tab13, async (harness) => {
+      await harness.openTab("w3:t40");
+      const d = paneTerminal("p6D");
+      const e = paneTerminal("p6E");
+      await vscode.commands.executeCommand("workbench.action.focusFirstEditorGroup");
+      await vscode.commands.executeCommand("workbench.action.newGroupLeft");
+      await waitForEditorGroups(() => (vscode.window.tabGroups.all.length === 3 ? true : undefined));
+      const file = await openDocument("file.txt", 1);
+      await waitForGroupTabs([["file.txt"], ["p6D"], ["p6E"]]);
+      assert.deepEqual(groupTabs(), [["file.txt"], ["p6D"], ["p6E"]]);
+      harness.expectClosed(d, e);
+      await harness.navigateToPane("p6D");
+      assert.deepEqual(groupTabs(), [["file.txt", "p6D"]]);
+      assert.notStrictEqual(paneTerminal("p6D"), d);
+      assert.equal(vscode.window.terminals.includes(d), false);
+      assert.equal(vscode.window.terminals.includes(e), false);
+      assert.equal(file.isClosed, false);
+    });
+  });
+
+  test("clicking a hidden but bound Pane Editor reveals it instead of recreating it", async () => {
+    await withLayout(tab13, async (harness) => {
+      await harness.openTab("w3:t40");
+      const d = paneTerminal("p6D");
+      const e = paneTerminal("p6E");
+      const file = await openDocument("file.txt", 1);
+      assert.deepEqual(groupTabs(), [["p6D", "file.txt"], ["p6E"]]);
+      harness.expectClosed(e);
+      await harness.navigateToPane("p6D");
+      assert.deepEqual(groupTabs(), [["p6D", "file.txt"]]);
+      assert.strictEqual(paneTerminal("p6D"), d);
+      assert.equal(vscode.window.tabGroups.activeTabGroup.activeTab?.label, "p6D");
+      assert.equal(vscode.window.terminals.includes(e), false);
+      assert.equal(file.isClosed, false);
+    });
+  });
+
+  test("a Pane Editor already in place survives a later Pane navigation click", async () => {
+    await withLayout(
+      tab13,
+      async (harness) => {
+        const d = await harness.openPane("p6D", 1);
+        await harness.openTab("w3:t40");
+        assert.strictEqual(paneTerminal("p6D"), d);
+        const e = paneTerminal("p6E");
+        harness.expectClosed(e);
+        await harness.navigateToPane("p69");
+        assert.deepEqual(groupTabs(), [["p6D", "p69"]]);
+        assert.strictEqual(paneTerminal("p6D"), d);
+        assert.equal(vscode.window.terminals.includes(d), true);
+        assert.equal(vscode.window.terminals.includes(e), false);
+      },
+      [tab12],
+    );
+  });
+
+  test("a repeated Tab click keeps its Tab Projection until a Pane navigation click", async () => {
+    await withLayout(
+      tab13,
+      async (harness) => {
+        await openTab13WithFile(harness);
+        const d = paneTerminal("p6D");
+        const e = paneTerminal("p6E");
+        await harness.openTab("w3:t40");
+        assert.strictEqual(paneTerminal("p6D"), d);
+        assert.strictEqual(paneTerminal("p6E"), e);
+        harness.expectClosed(d, e);
+        await harness.navigateToPane("p69");
+        assert.deepEqual(groupTabs(), [["file.txt", "p69"]]);
+        assert.equal(vscode.window.terminals.includes(d), false);
+        assert.equal(vscode.window.terminals.includes(e), false);
+      },
+      [tab12],
+    );
+  });
+
+  test("plain Pane opening leaves the Tab Projection for the following navigation click", async () => {
+    await withLayout(
+      tab13,
+      async (harness) => {
+        const file = await openTab13WithFile(harness);
+        const d = paneTerminal("p6D");
+        const e = paneTerminal("p6E");
+        const ordinary = await harness.openPane("p69", 1);
+        assert.strictEqual(paneTerminal("p6D"), d);
+        assert.strictEqual(paneTerminal("p6E"), e);
+        assert.strictEqual(paneTerminal("p69"), ordinary);
+        assert.equal(vscode.window.terminals.includes(d), true);
+        assert.equal(vscode.window.terminals.includes(e), true);
+        harness.expectClosed(d, e);
+        await harness.navigateToPane("p6C");
+        assert.deepEqual(groupTabs(), [["file.txt", "p69", "p6C"]]);
+        assert.equal(vscode.window.terminals.includes(d), false);
+        assert.equal(vscode.window.terminals.includes(e), false);
+        assert.strictEqual(paneTerminal("p69"), ordinary);
+        assert.equal(file.isClosed, false);
+      },
+      [tab12],
+    );
+  });
+
+  test("Tab navigation leaves a Panel Pane Editor open and retires it after it returns to the grid", async () => {
+    await withLayout(
+      tab13,
+      async (harness) => {
+        await harness.openTab("w3:t40");
+        const d = paneTerminal("p6D");
+        const e = paneTerminal("p6E");
+        await movePaneEditorToPanel("p6E");
+        assert.deepEqual(groupTabs(), [["p6D"]]);
+        assert.equal(vscode.window.terminals.includes(e), true);
+        harness.expectInPanel(e);
+        harness.expectClosed(d);
+        await harness.openTab("w3:t4Z");
+        assert.deepEqual(groupTabs(), [["p69"], ["p6C"], ["p6A"], ["p6B"]]);
+        assert.equal(vscode.window.terminals.includes(e), true);
+        const tab12Terminals = ["p69", "p6C", "p6A", "p6B"].map(paneTerminal);
+        await movePaneEditorBackToEditor(e, "p6E");
+        harness.expectClosed(e, ...tab12Terminals);
+        await harness.navigateToPane("p6D");
+        assert.deepEqual(groupTabs(), [["p6D"]]);
+        assert.equal(vscode.window.terminals.includes(e), false);
+      },
+      [tab12],
+    );
+  });
+
+  test("Pane navigation leaves a Panel Pane Editor open and relinquishes it after it returns to the grid", async () => {
+    await withLayout(
+      tab13,
+      async (harness) => {
+        await harness.openTab("w3:t40");
+        const d = paneTerminal("p6D");
+        const e = paneTerminal("p6E");
+        await movePaneEditorToPanel("p6E");
+        assert.deepEqual(groupTabs(), [["p6D"]]);
+        assert.equal(vscode.window.terminals.includes(e), true);
+        harness.expectInPanel(e);
+        harness.expectClosed(d);
+        await harness.navigateToPane("p69");
+        assert.deepEqual(groupTabs(), [["p69"]]);
+        assert.equal(vscode.window.terminals.includes(d), false);
+        assert.equal(vscode.window.terminals.includes(e), true);
+        await movePaneEditorBackToEditor(e, "p6E");
+        await harness.navigateToPane("p6C");
+        assert.ok(groupTabs().flat().includes("p6E"), "the returned ordinary Pane Editor stays in the grid");
+        assert.ok(groupTabs().flat().includes("p69"), "the ordinarily opened Pane Editor stays in the grid");
+        assert.strictEqual(paneTerminal("p6E"), e);
+        assert.equal(vscode.window.terminals.includes(e), true);
+      },
+      [tab12],
+    );
+  });
+
+  test("a dragged Tab Projection Pane Editor still closes on navigation", async () => {
+    await withLayout(
+      tab13,
+      async (harness) => {
+        await openTab13WithFile(harness);
+        const d = paneTerminal("p6D");
+        const e = harness.getOwnedTerminal("p6E");
+        await vscode.commands.executeCommand("workbench.action.focusLastEditorGroup");
+        await vscode.commands.executeCommand("workbench.action.moveEditorToPreviousGroup");
+        await waitForPaneEditorRebind(harness, "p6E", [["file.txt", "p6D", "p6E"]]);
+        assert.deepEqual(groupTabs(), [["file.txt", "p6D", "p6E"]]);
+        assert.strictEqual(paneTerminal("p6E"), e);
+        assert.equal(vscode.window.terminals.includes(e), true);
+        harness.expectClosed(d);
+        harness.expectClosedAfterMove(e);
+        await harness.navigateToPane("p69");
+        assert.deepEqual(groupTabs(), [["file.txt", "p69"]]);
+        assert.equal(vscode.window.terminals.includes(d), false);
+      },
+      [tab12],
+    );
+  });
+
+  test("clicking a projected Pane Editor that shared a group keeps its identity after the other closes", async () => {
+    await withLayout(tab13, async (harness) => {
+      await harness.openTab("w3:t40");
+      const d = paneTerminal("p6D");
+      const e = harness.getOwnedTerminal("p6E");
+      await vscode.commands.executeCommand("workbench.action.focusLastEditorGroup");
+      await vscode.commands.executeCommand("workbench.action.moveEditorToPreviousGroup");
+      await waitForPaneEditorRebind(harness, "p6E", [["p6D", "p6E"]]);
+      assert.deepEqual(groupTabs(), [["p6D", "p6E"]]);
+      harness.expectClosedAfterMove(e);
+      await harness.navigateToPane("p6D");
+      assert.deepEqual(groupTabs(), [["p6D"]]);
+      assert.strictEqual(paneTerminal("p6D"), d);
+    });
+  });
 });
+
+async function openTab13WithFile(harness: LayoutHarness): Promise<vscode.TextDocument> {
+  await setGroups(2);
+  const file = await openDocument("file.txt", 1);
+  await harness.openTab("w3:t40");
+  assert.deepEqual(groupTabs(), [["file.txt", "p6D"], ["p6E"]]);
+  return file;
+}
+
+async function waitForGroupTabs(expected: readonly (readonly string[])[]): Promise<void> {
+  await waitForEditorGroups(() => {
+    const actual = groupTabs();
+    return JSON.stringify(actual) === JSON.stringify(expected) ? true : undefined;
+  });
+}
+
+async function waitForPaneEditorRebind(
+  harness: LayoutHarness,
+  paneId: string,
+  expectedTabs: readonly (readonly string[])[],
+): Promise<void> {
+  // The #73 group-move cycle settles the expected tab labels before restoring Pane Editor presence.
+  await waitForEditorGroups(() => {
+    const layoutIsSettled = JSON.stringify(groupTabs()) === JSON.stringify(expectedTabs);
+    const movedPaneEditorIsVisible = harness
+      .getPaneEditorPresence()
+      .visible.some((reference) => reference.paneId === paneId);
+    const rebindCycleIsSettled = layoutIsSettled && movedPaneEditorIsVisible;
+    return rebindCycleIsSettled ? true : undefined;
+  });
+}
+
+async function movePaneEditorToPanel(paneId: string): Promise<void> {
+  await vscode.commands.executeCommand("workbench.action.focusLastEditorGroup");
+  assert.equal(vscode.window.tabGroups.activeTabGroup.activeTab?.label, paneId);
+  await vscode.commands.executeCommand("workbench.action.terminal.moveToTerminalPanel");
+  await waitForEditorGroups(() => {
+    const editorTabRemains = orderedGroups().some((group) => group.tabs.some((tab) => tab.label === paneId));
+    const oneEditorGroupRemains = vscode.window.tabGroups.all.length === 1;
+    const hasMovedToPanel = !editorTabRemains && oneEditorGroupRemains;
+    return hasMovedToPanel ? true : undefined;
+  });
+}
+
+async function movePaneEditorBackToEditor(terminal: vscode.Terminal, paneId: string): Promise<void> {
+  terminal.show();
+  await vscode.commands.executeCommand("workbench.action.terminal.moveToEditor");
+  await waitForEditorGroups(() => {
+    const isTargetPaneEditorTab = (tab: vscode.Tab): boolean => {
+      const hasPaneLabel = tab.label === paneId;
+      const isTerminalInput = tab.input instanceof vscode.TabInputTerminal;
+      const matchesTargetPaneEditor = hasPaneLabel && isTerminalInput;
+      return matchesTargetPaneEditor;
+    };
+    const hasPaneEditorTab = orderedGroups()
+      .flatMap((group) => group.tabs)
+      .some(isTargetPaneEditorTab);
+    return hasPaneEditorTab ? true : undefined;
+  });
+  assert.equal(vscode.window.terminals.includes(terminal), true);
+  assert.strictEqual(paneTerminal(paneId), terminal);
+}
 
 function layoutCase(name: string): LayoutCase {
   const fixture = layoutCases.find((candidate) => candidate.name === name);
@@ -371,6 +676,8 @@ async function withLayout(
   const ownedTerminals = new Map<vscode.Terminal, string>();
   const closed = new Set<vscode.Terminal>();
   const expectedClosed = new Set<vscode.Terminal>();
+  const expectedClosedAfterMove = new Set<vscode.Terminal>();
+  const expectedInPanel = new Set<vscode.Terminal>();
   const closeSubscription = vscode.window.onDidCloseTerminal((terminal) => closed.add(terminal));
   const manager = new PaneTerminalSurfaceManager(
     selection,
@@ -407,28 +714,45 @@ async function withLayout(
     };
     feature = new OpenTabFeature(navigation, manager);
     vscode.commands.registerCommand = original;
-    await run({
-      expectClosed: (...terminals) => terminals.forEach((terminal) => expectedClosed.add(terminal)),
-      openTab: async (tabId = fixture.layout.herdrTabId) => {
-        const target = fixtures.find((candidate) => candidate.layout.herdrTabId === tabId);
-        assert.ok(target);
-        await vscode.commands.executeCommand(prefix + "herdr.openTab", tabId);
-        assert.deepEqual(errors, [], "projection reports no errors");
-        const livePaneIds = [...ownedTerminals.entries()]
-          .filter(([terminal]) => !expectedClosed.has(terminal))
-          .map(([, paneId]) => paneId);
-        assert.equal(new Set(livePaneIds).size, livePaneIds.length, "exactly one live Terminal per open Pane");
-        await waitForPaneTitles(livePaneIds);
+    const assertNavigationPostconditions = async (activePaneIds: readonly string[]): Promise<void> => {
+      assert.deepEqual(errors, [], "projection reports no errors");
+      const liveTerminals = [...ownedTerminals.entries()].filter(([terminal]) => !expectedClosed.has(terminal));
+      const livePaneIds = liveTerminals.map(([, paneId]) => paneId);
+      assert.equal(new Set(livePaneIds).size, livePaneIds.length, "exactly one live Terminal per open Pane");
+      const hasEditorTab = (paneId: string): boolean =>
+        orderedGroups().some((group) => group.tabs.some((tab) => tab.label === paneId));
+      const editorPaneIds = liveTerminals
+        .filter(([terminal, paneId]) => {
+          const terminalIsNotDeclaredInPanel = !expectedInPanel.has(terminal);
+          const terminalHasReturnedToEditor = hasEditorTab(paneId);
+          const shouldCheckEditorTitle = terminalIsNotDeclaredInPanel || terminalHasReturnedToEditor;
+          return shouldCheckEditorTitle;
+        })
+        .map(([, paneId]) => paneId);
+      await waitForPaneTitles(editorPaneIds);
+      await waitForEditorGroups(() => {
         const tabs = orderedGroups().flatMap((group) => group.tabs);
-        livePaneIds.forEach((paneId) => {
-          assert.equal(tabs.filter((tab) => tab.label === paneId).length, 1, `Pane ${paneId} appears once`);
-        });
-        target.layout.panes.forEach(({ paneId }) => {
-          const matches = tabs.filter((tab) => tab.label === paneId);
-          assert.equal(matches.length, 1, `Pane ${paneId} appears once`);
-          assert.equal(matches[0]?.isActive, true, `Pane ${paneId} is its cell's active tab`);
-        });
-        ownedTerminals.forEach((paneId, terminal) => {
+        const activeTabIds = new Set(tabs.filter((tab) => tab.isActive).map((tab) => tab.label));
+        const requestedPanesAreActive = activePaneIds.every((paneId) => activeTabIds.has(paneId));
+        return requestedPanesAreActive ? true : undefined;
+      });
+      const tabs = orderedGroups().flatMap((group) => group.tabs);
+      editorPaneIds.forEach((paneId) => {
+        assert.equal(tabs.filter((tab) => tab.label === paneId).length, 1, `Pane ${paneId} appears once`);
+      });
+      activePaneIds.forEach((paneId) => {
+        const matches = tabs.filter((tab) => tab.label === paneId);
+        assert.equal(matches.length, 1, `Pane ${paneId} appears once`);
+        assert.equal(matches[0]?.isActive, true, `Pane ${paneId} is its cell's active tab`);
+      });
+      ownedTerminals.forEach((paneId, terminal) => {
+        const isExpectedClosedAfterMove = expectedClosedAfterMove.has(terminal);
+        if (isExpectedClosedAfterMove) {
+          // VS Code omits onDidCloseTerminal and retains moved Terminals after closing their tabs (C10).
+          const paneEditorTabRemains = hasEditorTab(paneId);
+          assert.equal(paneEditorTabRemains, false, `Pane ${paneId} editor tab closes`);
+          assert.equal(live.get(paneId), 0, `Pane ${paneId} client stops`);
+        } else {
           const shouldBeClosed = expectedClosed.has(terminal);
           assert.equal(closed.has(terminal), shouldBeClosed, `only expected displaced Pane Editor ${paneId} closes`);
           assert.equal(
@@ -436,11 +760,40 @@ async function withLayout(
             !shouldBeClosed,
             "only retained Terminals stay open",
           );
-        });
-
-        maximum.forEach((count, paneId) =>
-          assert.ok(count <= 1, `Pane ${paneId} had ${count} simultaneously live clients`),
-        );
+        }
+      });
+      maximum.forEach((count, paneId) =>
+        assert.ok(count <= 1, `Pane ${paneId} had ${count} simultaneously live clients`),
+      );
+    };
+    await run({
+      expectClosed: (...terminals) => terminals.forEach((terminal) => expectedClosed.add(terminal)),
+      expectClosedAfterMove: (...terminals) =>
+        terminals.forEach((terminal) => {
+          expectedClosed.add(terminal);
+          expectedClosedAfterMove.add(terminal);
+        }),
+      expectInPanel: (...terminals) => terminals.forEach((terminal) => expectedInPanel.add(terminal)),
+      getOwnedTerminal: (paneId) => {
+        const matchingTerminals = [...ownedTerminals.entries()]
+          .filter(([, ownedPaneId]) => ownedPaneId === paneId)
+          .map(([terminal]) => terminal);
+        const terminal = matchingTerminals[matchingTerminals.length - 1];
+        assert.ok(terminal, `Harness owns a Terminal for Pane ${paneId}`);
+        return terminal;
+      },
+      getPaneEditorPresence: () => manager.getPaneEditorPresence(),
+      openTab: async (tabId = fixture.layout.herdrTabId) => {
+        const target = fixtures.find((candidate) => candidate.layout.herdrTabId === tabId);
+        assert.ok(target);
+        await vscode.commands.executeCommand(prefix + "herdr.openTab", tabId);
+        await assertNavigationPostconditions(target.layout.panes.map(({ paneId }) => paneId));
+      },
+      navigateToPane: async (paneId) => {
+        const pane = snapshot.panes.find((candidate) => candidate.id === paneId);
+        assert.ok(pane, `Session snapshot contains Pane ${paneId}`);
+        await manager.navigateToPane(paneTerminalOpenRequest(sessionId, pane, paneId));
+        await assertNavigationPostconditions([paneId]);
       },
       openPane: async (paneId, column) => {
         // A real pinned document activates even a column beyond VS Code's eight named focus commands.
