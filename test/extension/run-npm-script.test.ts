@@ -4,7 +4,12 @@ import type { ActiveSessionProjectionState } from "../../src/modules/sessions/ac
 import type { ActiveSessionCreation, CreatePaneRequest, RunCommandRequest } from "../../src/modules/sessions/creation";
 import type { ActiveSessionManagement } from "../../src/modules/sessions/management";
 import type { HerdrPane, HerdrSessionSnapshot, HerdrSpace, HerdrTab } from "../../src/api/herdr/shared/types";
-import type { PaneTerminalClosing, PaneTerminalOpenRequest, PaneTerminalOpening } from "../../src/modules/pane-editors";
+import type {
+  PaneEditorNavigation,
+  PaneTerminalClosing,
+  PaneTerminalOpenRequest,
+  PaneTerminalOpening,
+} from "../../src/modules/pane-editors";
 import type {
   ActiveSessionProjectionSource,
   PaneEditorPresenceSource,
@@ -24,6 +29,10 @@ import { VisiblePaneEditorDecorationProvider } from "../../src/views/sidebar/sha
 
 const sessionId = "session-current";
 let sequence = 0;
+
+const unusedPaneEditorNavigation: PaneEditorNavigation = {
+  navigateToPane: () => Promise.reject(new Error("unexpected navigation in this fixture")),
+};
 
 type ProjectionListener = (state: ActiveSessionProjectionState) => void;
 
@@ -149,6 +158,7 @@ async function withNavigation(
         onDidChangePaneEditorPresence: () => ({ dispose: () => undefined }),
       },
       paneTerminalOpening: { openPane: (request) => openRequests.push(request) },
+      paneEditorNavigation: unusedPaneEditorNavigation,
       paneClosing: {
         closePanes: (closedSessionId, paneIds) => {
           closeRequests.push(`Pane Editors ${closedSessionId} ${paneIds.join(",")}`);
@@ -181,6 +191,7 @@ async function withNavigation(
 type NavigationDependencies = Readonly<{
   sessionProjection: ActiveSessionProjectionSource;
   paneTerminalOpening: PaneTerminalOpening;
+  paneEditorNavigation: PaneEditorNavigation;
   paneClosing: PaneTerminalClosing;
   paneEditorPresence: PaneEditorPresenceSource;
   creation: ActiveSessionCreation;
@@ -192,7 +203,7 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
   const panes = new VsCodePanesView(
     navigationContext,
     navigationContext,
-    dependencies.paneTerminalOpening,
+    dependencies.paneEditorNavigation,
     dependencies.management,
   );
   const spaces = new VsCodeSpacesView(navigationContext, navigationContext);
@@ -213,7 +224,7 @@ function createNavigation(dependencies: NavigationDependencies): vscode.Disposab
   const createPane = new CreatePaneFeature(navigationContext, dependencies.creation, dependencies.paneTerminalOpening);
   const rename = new RenameFeature(navigationContext, dependencies.management);
   const close = new CloseFeature(navigationContext, dependencies.management, dependencies.paneClosing);
-  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneTerminalOpening);
+  const revealPane = new RevealPaneFeature(navigationContext, navigationContext, dependencies.paneEditorNavigation);
 
   return {
     dispose() {

@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import { VsCodePanesView } from "../../src/views/sidebar/panes/VsCodePanesView";
+import type { PaneEditorNavigation } from "@modules/pane-editors";
 import type { NavigationContextSource, NavigationContextState } from "@modules/workspace-context";
 import type { HerdrPane, HerdrSessionSnapshot } from "../../src/api/herdr/shared/types";
 
@@ -118,6 +119,12 @@ async function withPanesView(
   let provider: vscode.TreeDataProvider<vscode.TreeItem> | undefined;
   let view: VsCodePanesView | undefined;
   const mockTreeView = testTreeView<vscode.TreeItem>();
+  const paneEditorNavigation: PaneEditorNavigation = {
+    navigateToPane: (request) => {
+      requests.push(request);
+      return Promise.resolve();
+    },
+  };
 
   vscode.commands.registerCommand = (...args: Parameters<typeof originalRegisterCommand>) =>
     originalRegisterCommand(prefix + args[0], args[1], args[2]);
@@ -136,11 +143,7 @@ async function withPanesView(
         getFocusedEditorPaneId: () => undefined,
         onDidChangeFocusedEditorPaneId: () => ({ dispose: () => undefined }),
       },
-      {
-        openPane: (request) => {
-          requests.push(request);
-        },
-      },
+      paneEditorNavigation,
       {
         renamePane: () => Promise.reject(new Error("not used")),
         renameTab: () => Promise.reject(new Error("not used")),
